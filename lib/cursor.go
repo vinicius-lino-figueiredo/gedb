@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/vinicius-lino-figueiredo/nedb"
+	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
 )
 
 // Cursor implements nedb.Cursor.
@@ -52,7 +53,7 @@ func (c *Cursor) Exec(ctx context.Context, target any) error {
 		return c.storedErr
 	}
 	if target == nil {
-		return &ErrTargetNil{}
+		return &errs.ErrTargetNil{}
 	}
 	// TODO: Implement cursor deserialization
 	panic("unimplemented")
