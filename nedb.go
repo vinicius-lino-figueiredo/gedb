@@ -86,3 +86,10 @@ type EnsureIndexOptions struct {
 	Sparse      bool
 	ExpireAfter time.Duration
 }
+
+type Executor interface {
+	Bufferize()
+	Push(ctx context.Context, task func(context.Context), forceQueuing bool) error
+	ProcessBuffer()
+	ResetBuffer()
+}
