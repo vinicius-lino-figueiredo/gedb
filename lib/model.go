@@ -56,3 +56,19 @@ func getDotValueList(v list, fieldParts ...string) (any, error) {
 	return v[i], nil
 
 }
+
+// Get dot values for either a bunch of fields or just one.
+func getDotValues(obj any, fields []string) (any, error) {
+	if len(fields) <= 1 {
+		return getDotValueSplit(obj, fields...)
+	}
+	key := make(doc)
+	var err error
+	for _, field := range fields {
+		key[field], err = getDotValueSplit(obj, field)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return key, nil
+}
