@@ -5,3 +5,7 @@ package errs
 type ErrTargetNil struct{}
 
 func (e *ErrTargetNil) Error() string { return "target interface is nil" }
+
+type ErrBufferReset struct{}
+
+func (e ErrBufferReset) Error() string { return "executor buffer was reset" }

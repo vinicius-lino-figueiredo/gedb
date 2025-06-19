@@ -93,3 +93,31 @@ type Executor interface {
 	ProcessBuffer()
 	ResetBuffer()
 }
+
+type Index interface {
+	GetAll() []Document
+	GetBetweenBounds(ctx context.Context, query any) ([]Document, error)
+	GetMatching(value ...any) []Document
+	Insert(ctx context.Context, docs ...Document) error
+	Remove(ctx context.Context, docs ...Document) error
+	Reset(ctx context.Context, newData ...Document) error
+	RevertMultipleUpdates(ctx context.Context, pairs ...Update) error
+	RevertUpdate(ctx context.Context, oldDoc Document, newDoc Document) error
+	Update(ctx context.Context, oldDoc Document, newDoc Document) error
+	UpdateMultipleDocs(ctx context.Context, pairs ...Update) error
+}
+
+type IndexOptions struct {
+	FieldName string
+	Unique    bool
+	Sparse    bool
+}
+
+type Update struct {
+	OldDoc Document
+	NewDoc Document
+}
+
+type Document interface {
+	ID() [16]byte
+}

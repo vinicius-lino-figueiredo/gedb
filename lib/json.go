@@ -11,7 +11,7 @@ func marshalAny(buf *bytes.Buffer, value any) error {
 	var b []byte
 	var err error
 	switch v := value.(type) {
-	case doc:
+	case Document:
 		err = v.marshalJSON(buf)
 		if err != nil {
 			return err

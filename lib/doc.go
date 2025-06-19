@@ -4,9 +4,27 @@ import (
 	"bytes"
 )
 
-type doc map[string]any
+type Document map[string]any
 
-func (d doc) MarshalJSON() ([]byte, error) {
+// ID implements nedb.Document
+func (d Document) ID() [16]byte {
+	i := d["_id"]
+	var id [16]byte
+	if s, ok := i.(string); ok {
+		for n, b := range []byte(s) {
+			id[n] = b
+		}
+		return id
+	}
+	id, _ = i.([16]byte)
+	return id
+}
+
+func (d Document) Compare(other any) (int, bool) {
+	return compareThingsFunc(nil)(d, other), true
+}
+
+func (d Document) MarshalJSON() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	err := d.marshalJSON(buf)
 	if err != nil {
@@ -15,7 +33,7 @@ func (d doc) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (d doc) marshalJSON(buf *bytes.Buffer) error {
+func (d Document) marshalJSON(buf *bytes.Buffer) error {
 	buf.WriteRune('{')
 	var i bool
 	for key, value := range d {
