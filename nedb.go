@@ -49,13 +49,13 @@ type Cursor interface {
 	Close()
 }
 
-type DataStoreOptions struct {
+type DatastoreOptions struct {
 	Filename              string
 	TimestampData         bool
 	InMemoryOnly          bool
 	Autoload              bool
-	serializer            Serializer
-	deserializer          Deserializer
+	Serializer            Serializer
+	Deserializer          Deserializer
 	CorruptAlertThreshold float64
 	Compare               func(any, any) int
 	FileMode              os.FileMode
