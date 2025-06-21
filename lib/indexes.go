@@ -232,7 +232,7 @@ func (i *index) RevertMultipleUpdates(ctx context.Context, pairs ...nedb.Update)
 
 func (i *index) GetMatching(value ...any) []nedb.Document {
 	res := []nedb.Document{}
-	_res := make(map[[16]byte][]nedb.Document)
+	_res := make(map[string][]nedb.Document)
 	for _, v := range value {
 		found := i.tree.Search(v)
 		if len(found) == 0 {

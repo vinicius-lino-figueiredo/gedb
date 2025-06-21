@@ -7,17 +7,12 @@ import (
 type Document map[string]any
 
 // ID implements nedb.Document
-func (d Document) ID() [16]byte {
+func (d Document) ID() string {
 	i := d["_id"]
-	var id [16]byte
 	if s, ok := i.(string); ok {
-		for n, b := range []byte(s) {
-			id[n] = b
-		}
-		return id
+		return s
 	}
-	id, _ = i.([16]byte)
-	return id
+	return ""
 }
 
 func (d Document) Compare(other any) (int, bool) {

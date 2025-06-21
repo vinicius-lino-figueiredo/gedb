@@ -60,7 +60,7 @@ func (c *Cursor) Exec(ctx context.Context, target any) error {
 }
 
 // ID implements nedb.Cursor.
-func (c *Cursor) ID() [16]byte {
+func (c *Cursor) ID() string {
 	// TODO: Implement cursor ID getter
 	panic("unimplemented")
 }

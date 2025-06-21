@@ -39,7 +39,7 @@ type Nedb interface {
 }
 
 type Cursor interface {
-	ID() [16]byte
+	ID() string
 	Projection(query any) Cursor
 	Exec(ctx context.Context, target any) error
 	Sort(query any) Cursor
@@ -119,5 +119,5 @@ type Update struct {
 }
 
 type Document interface {
-	ID() [16]byte
+	ID() string
 }
