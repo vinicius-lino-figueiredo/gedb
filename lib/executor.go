@@ -58,6 +58,14 @@ func (e *Executor) Push(ctx context.Context, task func(context.Context), forceQu
 	return nil
 }
 
+// GoPush implements nedb.Executor.
+func (e *Executor) GoPush(ctx context.Context, task func(context.Context), forceQueuing bool) error {
+	task = func(ctx context.Context) {
+		go task(ctx)
+	}
+	return e.Push(ctx, task, forceQueuing)
+}
+
 // ProcessBuffer implements nedb.Executor.
 func (e *Executor) ProcessBuffer() {
 	<-e.bufferExec

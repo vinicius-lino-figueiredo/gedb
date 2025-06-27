@@ -1,15 +1,129 @@
 package lib
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"maps"
 	"math/big"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/mitchellh/mapstructure"
 )
 
+func isNumber(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch v.(type) {
+	case int64, float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func is[T comparable](v any, c T) bool {
+	if v == nil {
+		return false
+	}
+	if vt, ok := v.(T); ok {
+		return vt == c
+	}
+	return false
+}
+
+func checkKey(k string, v any) error {
+	if strings.HasPrefix(k, "$") && !(k == "$$date" && isNumber(v)) && !(k == "$$deleted" && is(v, true)) && k != "$$indexCreated" && k != "$$indexRemoved" {
+		return errors.New("field names cannot start with the $ character")
+	}
+	if strings.ContainsRune(k, '.') {
+		return errors.New("field names cannot contain a '.'")
+	}
+	return nil
+}
+
+func serialize(obj any) ([]byte, error) {
+	if doc, err := asDoc(obj); err != nil {
+		for k, v := range doc {
+			if err := checkKey(k, v); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return json.Marshal(obj)
+}
+
+type defaultSerializer struct{}
+
+func (ds defaultSerializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	return serialize(obj)
+}
+
+func deserialize(data []byte, v any) error {
+	if v == nil {
+		return errors.New("nil target")
+	}
+	doc := make(Document)
+	if err := doc.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	for k, v := range doc {
+		if k == "$$date" {
+			if i, ok := v.(int64); ok {
+				doc[k] = time.Unix(i, 0)
+			}
+		}
+		if d, ok := v.(Document); ok && d["$$date"] != nil {
+			doc[k] = d["date"]
+		}
+	}
+	if p, ok := v.(*Document); ok {
+		*p = doc
+		return nil
+	}
+
+	m := doc.asMap()
+
+	return mapstructure.Decode(&m, v)
+
+}
+
+type defaultDeserializer struct{}
+
+func (dd defaultDeserializer) Deserialize(ctx context.Context, data []byte, v any) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	return deserialize(data, v)
+}
+
+//	const serialize = obj => {
+//	  return JSON.stringify(obj, function (k, v) {
+//	    checkKey(k, v)
+//
+//	    if (v === undefined) return undefined
+//	    if (v === null) return null
+//
+//	    // Hackish way of checking if object is Date (this way it works between execution contexts in node-webkit).
+//	    // We can't use value directly because for dates it is already string in this function (date.toJSON was already called), so we use this
+//	    if (typeof this[k].getTime === 'function') return { $$date: this[k].getTime() }
+//
+//	    return v
+//	  })
+//	}
+//
 // Number represents a JSON number
 type Number interface {
 	float32 | float64 |

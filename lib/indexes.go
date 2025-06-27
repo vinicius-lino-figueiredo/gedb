@@ -22,6 +22,21 @@ type index struct {
 	treeOptions bst.Options
 }
 
+// FieldName implements nedb.Index.
+func (i *index) FieldName() string {
+	return i.fieldName
+}
+
+// Sparse implements nedb.Index.
+func (i *index) Sparse() bool {
+	return i.sparse
+}
+
+// Unique implements nedb.Index.
+func (i *index) Unique() bool {
+	return i.unique
+}
+
 func NewIndex(options nedb.IndexOptions) nedb.Index {
 	treeOptions := bst.Options{
 		Unique:      options.Unique,
@@ -245,8 +260,10 @@ func (i *index) GetMatching(value ...any) []nedb.Document {
 		}
 		_res[id] = foundDocs
 	}
-	for _, v := range _res {
-		res = append(res, v...)
+	keys := slices.Collect(maps.Keys(_res))
+	slices.Sort(keys)
+	for _, _id := range keys {
+		res = append(res, _res[_id]...)
 	}
 	return res
 }

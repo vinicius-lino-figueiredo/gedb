@@ -2,6 +2,7 @@ package nedb
 
 import (
 	"context"
+	"io"
 	"os"
 	"time"
 )
@@ -66,8 +67,18 @@ type Serializer interface {
 	Serialize(context.Context, any) ([]byte, error)
 }
 
+type SerializeFunc func(context.Context, any) ([]byte, error)
+
+func (s SerializeFunc) Serialize(ctx context.Context, v any) ([]byte, error) { return s(ctx, v) }
+
 type Deserializer interface {
-	Deserialize(context.Context, any, []byte) error
+	Deserialize(context.Context, []byte, any) error
+}
+
+type DeserializeFunc func(context.Context, []byte, any) error
+
+func (s DeserializeFunc) Deserialize(ctx context.Context, b []byte, v any) error {
+	return s(ctx, b, v)
 }
 
 type UpdateOptions struct {
@@ -90,6 +101,7 @@ type EnsureIndexOptions struct {
 type Executor interface {
 	Bufferize()
 	Push(ctx context.Context, task func(context.Context), forceQueuing bool) error
+	GoPush(ctx context.Context, task func(context.Context), forceQueuing bool) error
 	ProcessBuffer()
 	ResetBuffer()
 }
@@ -105,6 +117,10 @@ type Index interface {
 	RevertUpdate(ctx context.Context, oldDoc Document, newDoc Document) error
 	Update(ctx context.Context, oldDoc Document, newDoc Document) error
 	UpdateMultipleDocs(ctx context.Context, pairs ...Update) error
+
+	FieldName() string
+	Unique() bool
+	Sparse() bool
 }
 
 type IndexOptions struct {
@@ -120,4 +136,34 @@ type Update struct {
 
 type Document interface {
 	ID() string
+}
+
+type PersistenceOptions struct {
+	Filename              string
+	InMemoryOnly          bool
+	CorruptAlertThreshold float64
+	FileMode              os.FileMode
+	DirMode               os.FileMode
+	Serializer            Serializer
+	Deserializer          Deserializer
+	Storage               Storage
+}
+
+type IndexDTO struct {
+	IndexCreated IndexCreated `json:"$$indexCreated" mapstructure:"$$indexCreated"`
+}
+type IndexCreated struct {
+	FieldName string `json:"fieldName" mapstructure:"fieldName"`
+	Unique    bool   `json:"unique" mapstructure:"unique"`
+	Sparse    bool   `json:"sparse" mapstructure:"sparse"`
+}
+
+type Storage interface {
+	AppendFile(string, os.FileMode, []byte) (int, error)
+	Exists(string) (bool, error)
+	EnsureParentDirectoryExists(string, os.FileMode) error
+	EnsureDatafileIntegrity(string, os.FileMode) error
+	CrashSafeWriteFileLines(string, [][]byte, os.FileMode, os.FileMode) error
+	ReadFileStream(string, os.FileMode) (io.ReadCloser, error)
+	Remove(string) error
 }

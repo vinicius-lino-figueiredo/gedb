@@ -765,7 +765,8 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 
 		s.Equal([]nedb.Document{}, idx.GetMatching())
 		s.Equal([]nedb.Document{doc2}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc2, doc4, doc5}, idx.GetMatching("bloup", "yes"))
+		res := idx.GetMatching("bloup", "yes")
+		s.Equal([]nedb.Document{doc2, doc4, doc5}, res)
 		s.Equal([]nedb.Document{}, idx.GetMatching("nope", "no"))
 	})
 
