@@ -20,7 +20,7 @@ type Nedb interface {
 
 	GetAllData(ctx context.Context) (Cursor, error)
 
-	EnsureIndexAsync(ctx context.Context, options EnsureIndexOptions) error
+	EnsureIndex(ctx context.Context, options EnsureIndexOptions) error
 
 	RemoveIndex(ctx context.Context, fieldNames []string) error
 
