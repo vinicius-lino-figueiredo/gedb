@@ -24,7 +24,7 @@ type Nedb interface {
 
 	RemoveIndex(ctx context.Context, fieldNames []string) error
 
-	Insert(ctx context.Context, newDocs []any)
+	Insert(ctx context.Context, newDocs []any) error
 
 	Count(ctx context.Context, query any) (int64, error)
 
