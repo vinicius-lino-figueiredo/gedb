@@ -7,7 +7,7 @@ import (
 // NewMutex creates a new instance of Mutex.
 func NewMutex() *Mutex {
 	return &Mutex{
-		unlock: make(chan struct{}),
+		unlock: make(chan struct{}, 1),
 	}
 }
 
