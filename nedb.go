@@ -167,3 +167,13 @@ type Storage interface {
 	ReadFileStream(string, os.FileMode) (io.ReadCloser, error)
 	Remove(string) error
 }
+
+type Persistence interface {
+	DropDatabase(ctx context.Context) error
+	LoadDatabase(ctx context.Context) ([]Document, map[string]IndexDTO, error)
+	PersistNewState(ctx context.Context, newDocs ...Document) error
+	SetCorruptAlertThreshold(v float64)
+	TreadRawStream(ctx context.Context, rawStream io.Reader) ([]Document, map[string]IndexDTO, error)
+	WaitCompaction(ctx context.Context) error
+	PersistCachedDatabase(ctx context.Context, allData []Document, indexes map[string]IndexDTO) error
+}
