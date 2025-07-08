@@ -350,7 +350,7 @@ func (s *PersistenceTestSuite) TestListenEvent() {
 		close(done)
 	}()
 	// Persistence.compactDatafile is deprecated and was not added
-	s.NoError(p.persistCachedDatabase(ctx, nil, nil))
+	s.NoError(p.PersistCachedDatabase(ctx, nil, nil))
 	<-done
 }
 
@@ -453,7 +453,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		allData := []nedb.Document{
 			Document{"_id": id1, "hello": "earth"},
 		}
-		s.NoError(p.persistCachedDatabase(ctx, allData, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, allData, nil))
 	})
 
 	s.Run("LoadData", func() {
@@ -672,7 +672,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoError(os.WriteFile(testDb+"~", []byte("something"), 0666))
 		s.FileExists(testDb + "~")
 
-		s.NoError(p.persistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.NoError(err)
 
@@ -719,7 +719,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 		s.NoError(os.WriteFile(testDb+"~", []byte("bloup"), 0666))
 		s.FileExists(testDb + "~")
-		s.NoError(p.persistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.NoError(err)
 		s.FileExists(testDb)
@@ -746,7 +746,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoFileExists(testDb)
 		s.FileExists(testDb + "~")
 
-		s.NoError(p.persistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.FileExists(testDb)
 		s.NoFileExists(testDb + "~")
@@ -972,7 +972,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			s.NoError(p.PersistNewState(ctx, removed...))
 			s.NoError(p.PersistNewState(ctx, Document{"_id": uuid.New().String(), "hello": "world"}))
 			for range N * 2 {
-				if err = p.persistCachedDatabase(ctx, docs, nil); err != nil {
+				if err = p.PersistCachedDatabase(ctx, docs, nil); err != nil {
 					break
 				}
 			}
@@ -1054,7 +1054,7 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 			Document{"_id": uuid.New().String(), "hello": "world"},
 			Document{"_id": uuid.New().String(), "hello": "world"},
 		}
-		s.NoError(p.persistCachedDatabase(ctx, docs, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, docs, nil))
 		s.NoError(p.DropDatabase(ctx))
 		s.NoError(p.PersistNewState(ctx, Document{"_id": uuid.New().String(), "hi": "world"}))
 		docs, _, err := p.LoadDatabase(ctx)

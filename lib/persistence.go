@@ -252,7 +252,7 @@ func (p *persistence) LoadDatabase(ctx context.Context) ([]nedb.Document, map[st
 	// await this.db.persistence.persistCachedDatabaseAsync()
 	// this.db.executor.processBuffer()
 
-	if err = p.persistCachedDatabase(ctx, newDocs, newIdxs); err != nil {
+	if err = p.PersistCachedDatabase(ctx, newDocs, newIdxs); err != nil {
 		return nil, nil, err
 	}
 
@@ -278,7 +278,7 @@ func (p *persistence) DropDatabase(ctx context.Context) error {
 	return nil
 }
 
-func (p *persistence) persistCachedDatabase(ctx context.Context, allData []nedb.Document, indexes map[string]nedb.IndexDTO) error {
+func (p *persistence) PersistCachedDatabase(ctx context.Context, allData []nedb.Document, indexes map[string]nedb.IndexDTO) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
