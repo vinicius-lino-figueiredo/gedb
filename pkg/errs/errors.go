@@ -23,7 +23,7 @@ type ErrCorruptFiles struct {
 }
 
 func (e ErrCorruptFiles) Error() string {
-	return fmt.Sprintf("%f%% of the data file is corrupt, more than given corruptAlertThreshold (%f%%). Cautiously refusing to start NeDB to prevent dataloss.", math.Floor(100*e.CorruptionRate), math.Floor(100*e.CorruptAlertThreshold))
+	return fmt.Sprintf("%f%% of the data file is corrupt, more than given corruptAlertThreshold (%f%%). Cautiously refusing to start GeDB to prevent dataloss.", math.Floor(100*e.CorruptionRate), math.Floor(100*e.CorruptAlertThreshold))
 }
 
 type ErrFlushToStorage struct {

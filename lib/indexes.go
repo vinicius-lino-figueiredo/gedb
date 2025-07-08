@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/vinicius-lino-figueiredo/bst"
-	"github.com/vinicius-lino-figueiredo/nedb"
+	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
 type index struct {
@@ -22,22 +22,22 @@ type index struct {
 	treeOptions bst.Options
 }
 
-// FieldName implements nedb.Index.
+// FieldName implements gedb.Index.
 func (i *index) FieldName() string {
 	return i.fieldName
 }
 
-// Sparse implements nedb.Index.
+// Sparse implements gedb.Index.
 func (i *index) Sparse() bool {
 	return i.sparse
 }
 
-// Unique implements nedb.Index.
+// Unique implements gedb.Index.
 func (i *index) Unique() bool {
 	return i.unique
 }
 
-func NewIndex(options nedb.IndexOptions) nedb.Index {
+func NewIndex(options gedb.IndexOptions) gedb.Index {
 	treeOptions := bst.Options{
 		Unique:      options.Unique,
 		CompareKeys: compareThingsFunc(nil),
@@ -52,7 +52,7 @@ func NewIndex(options nedb.IndexOptions) nedb.Index {
 	}
 }
 
-func (i *index) Reset(ctx context.Context, newData ...nedb.Document) error {
+func (i *index) Reset(ctx context.Context, newData ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -62,7 +62,7 @@ func (i *index) Reset(ctx context.Context, newData ...nedb.Document) error {
 	return i.Insert(ctx, newData...)
 }
 
-func (i *index) Insert(ctx context.Context, docs ...nedb.Document) error {
+func (i *index) Insert(ctx context.Context, docs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -71,7 +71,7 @@ func (i *index) Insert(ctx context.Context, docs ...nedb.Document) error {
 
 	type kv struct {
 		key  any
-		docs []nedb.Document
+		docs []gedb.Document
 	}
 
 	keys := make(map[uint64]kv, len(docs))
@@ -79,7 +79,7 @@ func (i *index) Insert(ctx context.Context, docs ...nedb.Document) error {
 	var err error
 	var key any
 	var h uint64
-	var ds []nedb.Document
+	var ds []gedb.Document
 	var b []byte
 	var hasher hash.Hash64
 DocInsertion:
@@ -132,7 +132,7 @@ DocInsertion:
 	return nil
 }
 
-func (i *index) Remove(ctx context.Context, docs ...nedb.Document) error {
+func (i *index) Remove(ctx context.Context, docs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -165,7 +165,7 @@ func (i *index) Remove(ctx context.Context, docs ...nedb.Document) error {
 	return nil
 }
 
-func (i *index) Update(ctx context.Context, oldDoc, newDoc nedb.Document) error {
+func (i *index) Update(ctx context.Context, oldDoc, newDoc gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -184,7 +184,7 @@ func (i *index) Update(ctx context.Context, oldDoc, newDoc nedb.Document) error 
 	return nil
 }
 
-func (i *index) UpdateMultipleDocs(ctx context.Context, pairs ...nedb.Update) error {
+func (i *index) UpdateMultipleDocs(ctx context.Context, pairs ...gedb.Update) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -227,36 +227,36 @@ Loop:
 	return err
 }
 
-func (i *index) RevertUpdate(ctx context.Context, oldDoc, newDoc nedb.Document) error {
+func (i *index) RevertUpdate(ctx context.Context, oldDoc, newDoc gedb.Document) error {
 	return i.Update(ctx, newDoc, oldDoc)
 }
 
-func (i *index) RevertMultipleUpdates(ctx context.Context, pairs ...nedb.Update) error {
+func (i *index) RevertMultipleUpdates(ctx context.Context, pairs ...gedb.Update) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
-	revert := make([]nedb.Update, len(pairs))
+	revert := make([]gedb.Update, len(pairs))
 	for n, pair := range pairs {
-		revert[n] = nedb.Update{OldDoc: pair.NewDoc, NewDoc: pair.OldDoc}
+		revert[n] = gedb.Update{OldDoc: pair.NewDoc, NewDoc: pair.OldDoc}
 	}
 	return i.UpdateMultipleDocs(ctx, revert...)
 }
 
-func (i *index) GetMatching(value ...any) []nedb.Document {
-	res := []nedb.Document{}
-	_res := make(map[string][]nedb.Document)
+func (i *index) GetMatching(value ...any) []gedb.Document {
+	res := []gedb.Document{}
+	_res := make(map[string][]gedb.Document)
 	for _, v := range value {
 		found := i.tree.Search(v)
 		if len(found) == 0 {
 			continue
 		}
-		id := found[0].(nedb.Document).ID()
-		foundDocs := make([]nedb.Document, len(found))
+		id := found[0].(gedb.Document).ID()
+		foundDocs := make([]gedb.Document, len(found))
 		for n, d := range found {
-			foundDocs[n] = d.(nedb.Document)
+			foundDocs[n] = d.(gedb.Document)
 		}
 		_res[id] = foundDocs
 	}
@@ -268,7 +268,7 @@ func (i *index) GetMatching(value ...any) []nedb.Document {
 	return res
 }
 
-func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]nedb.Document, error) {
+func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Document, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -279,15 +279,15 @@ func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]nedb.Documen
 		return nil, err
 	}
 	found := i.tree.BetweenBounds(d, nil, nil)
-	res := make([]nedb.Document, len(found))
+	res := make([]gedb.Document, len(found))
 	for n, f := range found {
-		res[n] = f.(nedb.Document)
+		res[n] = f.(gedb.Document)
 	}
 	return res, nil
 }
 
-func (i *index) GetAll() []nedb.Document {
-	var res []nedb.Document
+func (i *index) GetAll() []gedb.Document {
+	var res []gedb.Document
 	i.tree.ExecuteOnEveryNode(func(bst *bst.BinarySearchTree) {
 		for _, data := range bst.Data() {
 			res = append(res, data.(Document))

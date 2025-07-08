@@ -1,4 +1,4 @@
-module github.com/vinicius-lino-figueiredo/nedb
+module github.com/vinicius-lino-figueiredo/gedb
 
 go 1.24.3
 

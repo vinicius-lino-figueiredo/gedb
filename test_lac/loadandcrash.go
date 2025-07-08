@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/vinicius-lino-figueiredo/nedb"
-	"github.com/vinicius-lino-figueiredo/nedb/lib"
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb"
+	"github.com/vinicius-lino-figueiredo/gedb/lib"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 func main() {
-	per, err := lib.NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/lac.db", Storage: fakeStorage{}})
+	per, err := lib.NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/lac.db", Storage: fakeStorage{}})
 	if err != nil {
 		log.Fatal(err)
 	}

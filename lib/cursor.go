@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/vinicius-lino-figueiredo/nedb"
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
-// Cursor implements nedb.Cursor.
+// Cursor implements gedb.Cursor.
 type Cursor struct {
 	data       []any
 	index      int64
@@ -42,7 +42,7 @@ type cursorOptions struct {
 	projection any
 }
 
-// Exec implements nedb.Cursor.
+// Exec implements gedb.Cursor.
 func (c *Cursor) Exec(ctx context.Context, target any) error {
 	select {
 	case <-ctx.Done():
@@ -59,43 +59,43 @@ func (c *Cursor) Exec(ctx context.Context, target any) error {
 	panic("unimplemented")
 }
 
-// ID implements nedb.Cursor.
+// ID implements gedb.Cursor.
 func (c *Cursor) ID() string {
 	// TODO: Implement cursor ID getter
 	panic("unimplemented")
 }
 
-// Limit implements nedb.Cursor.
-func (c *Cursor) Limit(n int64) nedb.Cursor {
+// Limit implements gedb.Cursor.
+func (c *Cursor) Limit(n int64) gedb.Cursor {
 	c.limit = n
 	return c
 }
 
-// Projection implements nedb.Cursor.
-func (c *Cursor) Projection(query any) nedb.Cursor {
+// Projection implements gedb.Cursor.
+func (c *Cursor) Projection(query any) gedb.Cursor {
 	c.projection = query
 	return c
 }
 
-// Skip implements nedb.Cursor.
-func (c *Cursor) Skip(n int64) nedb.Cursor {
+// Skip implements gedb.Cursor.
+func (c *Cursor) Skip(n int64) gedb.Cursor {
 	c.skip = n
 	return c
 }
 
-// Sort implements nedb.Cursor.
-func (c *Cursor) Sort(query any) nedb.Cursor {
+// Sort implements gedb.Cursor.
+func (c *Cursor) Sort(query any) gedb.Cursor {
 	c.sort = query
 	return c
 }
 
-// Close implements nedb.Cursor.
+// Close implements gedb.Cursor.
 func (c *Cursor) Close() {
 	// TODO: Implement cursor Close function
 	panic("unimplemented")
 }
 
-// Next implements nedb.Cursor.
+// Next implements gedb.Cursor.
 func (c *Cursor) Next(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
@@ -111,4 +111,4 @@ func (c *Cursor) Next(ctx context.Context) bool {
 	return true
 }
 
-var _ nedb.Cursor = (*Cursor)(nil)
+var _ gedb.Cursor = (*Cursor)(nil)

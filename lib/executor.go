@@ -6,10 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/vinicius-lino-figueiredo/nedb"
+	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
-// Executor implements nedb.Executor.
+// Executor implements gedb.Executor.
 type Executor struct {
 	mux        sync.Mutex
 	ready      atomic.Bool
@@ -18,8 +18,8 @@ type Executor struct {
 	cancelExec chan struct{}
 }
 
-// NewExecutor creates a new instance of nedb.Executor.
-func NewExecutor() nedb.Executor {
+// NewExecutor creates a new instance of gedb.Executor.
+func NewExecutor() gedb.Executor {
 	e := Executor{
 		bufferExec: make(chan struct{}, 1),
 		singleExec: make(chan struct{}),
@@ -29,12 +29,12 @@ func NewExecutor() nedb.Executor {
 	return &e
 }
 
-// Bufferize implements nedb.Executor.
+// Bufferize implements gedb.Executor.
 func (e *Executor) Bufferize() {
 	e.ready.Store(false)
 }
 
-// Push implements nedb.Executor.
+// Push implements gedb.Executor.
 func (e *Executor) Push(ctx context.Context, task func(context.Context), forceQueuing bool) error {
 	var execCh chan struct{}
 	if forceQueuing || e.ready.Load() {
@@ -58,7 +58,7 @@ func (e *Executor) Push(ctx context.Context, task func(context.Context), forceQu
 	return nil
 }
 
-// GoPush implements nedb.Executor.
+// GoPush implements gedb.Executor.
 func (e *Executor) GoPush(ctx context.Context, task func(context.Context), forceQueuing bool) error {
 	task = func(ctx context.Context) {
 		go task(ctx)
@@ -66,13 +66,13 @@ func (e *Executor) GoPush(ctx context.Context, task func(context.Context), force
 	return e.Push(ctx, task, forceQueuing)
 }
 
-// ProcessBuffer implements nedb.Executor.
+// ProcessBuffer implements gedb.Executor.
 func (e *Executor) ProcessBuffer() {
 	<-e.bufferExec
 	e.ready.Store(true)
 }
 
-// ResetBuffer implements nedb.Executor.
+// ResetBuffer implements gedb.Executor.
 func (e *Executor) ResetBuffer() {
 	e.mux.Lock()
 	defer e.mux.Unlock()

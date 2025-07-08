@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 type DefaultStorage struct{}

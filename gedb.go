@@ -1,4 +1,4 @@
-package nedb
+package gedb
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type Nedb interface {
+type Gedb interface {
 	LoadDatabase(ctx context.Context) error
 
 	DropDatabase(ctx context.Context) error

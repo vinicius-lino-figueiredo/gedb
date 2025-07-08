@@ -17,8 +17,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/vinicius-lino-figueiredo/nedb"
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 // I don't like this approach, but go test uses package dir as path, and I want
@@ -71,7 +71,7 @@ func (s *PersistenceTestSuite) SetupTest() {
 		s.FailNow("could not ensure datafile integrity", err)
 	}
 
-	per, err := NewPersistence(nedb.PersistenceOptions{Filename: testDb})
+	per, err := NewPersistence(gedb.PersistenceOptions{Filename: testDb})
 	s.NoError(err)
 
 	s.Equal(testDb, per.filename)
@@ -94,7 +94,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 3)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -116,7 +116,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "nested": Document{"today": now}}, treatedData[1])
@@ -137,7 +137,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -159,7 +159,7 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 	s.NoError(err)
 	_ = treatedData
 
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "nested": Document{"today": now}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -180,7 +180,7 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 
 	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.NoError(err)
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[0])
@@ -201,7 +201,7 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
@@ -222,9 +222,9 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 	treatedData, indexes, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	s.Len(indexes, 1)
-	s.Equal(nedb.IndexDTO{IndexCreated: nedb.IndexCreated{FieldName: "test", Unique: true}}, indexes["test"])
+	s.Equal(gedb.IndexDTO{IndexCreated: gedb.IndexCreated{FieldName: "test", Unique: true}}, indexes["test"])
 
-	slices.SortFunc(treatedData, func(a, b nedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
@@ -236,7 +236,7 @@ func (s *PersistenceTestSuite) TestCompactOnLoad() {
 
 	id1 := uuid.New()
 
-	docs := []nedb.Document{
+	docs := []gedb.Document{
 		Document{"_id": id1, "a": 2, "createdAt": now, "updatedAt": now},
 		Document{"_id": uuid.New().String(), "a": 4, "createdAt": now, "updatedAt": now},
 		Document{"_id": id1, "a": 2, "$$deleted": true},
@@ -283,7 +283,7 @@ func (s *PersistenceTestSuite) TestCompactOnLoad() {
 func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	d1 := Document{"_id": uuid.New().String(), "a": 1}
 	d2 := Document{"_id": uuid.New().String(), "a": 2}
-	d := [][]nedb.Document{
+	d := [][]gedb.Document{
 		{d1},
 		{d1, d2},
 	}
@@ -310,7 +310,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
 
 	var err error
-	p, err = NewPersistence(nedb.PersistenceOptions{Filename: corruptTestFileName, CorruptAlertThreshold: -1}) // defaults to 0.1 when negative
+	p, err = NewPersistence(gedb.PersistenceOptions{Filename: corruptTestFileName, CorruptAlertThreshold: -1}) // defaults to 0.1 when negative
 	s.NoError(err)
 
 	ctx := context.Background()
@@ -322,7 +322,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.Equal(4, e.DataLength)
 
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
-	p, err = NewPersistence(nedb.PersistenceOptions{Filename: corruptTestFileName, CorruptAlertThreshold: 1})
+	p, err = NewPersistence(gedb.PersistenceOptions{Filename: corruptTestFileName, CorruptAlertThreshold: 1})
 	s.NoError(err)
 
 	ctx = context.Background()
@@ -330,7 +330,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.NoError(err, e)
 
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
-	p, err = NewPersistence(nedb.PersistenceOptions{Filename: corruptTestFileName})
+	p, err = NewPersistence(gedb.PersistenceOptions{Filename: corruptTestFileName})
 	s.NoError(err)
 
 	ctx = context.Background()
@@ -359,14 +359,14 @@ func (s *PersistenceTestSuite) TestSetializers() {
 	//	  const se = function (s) { return 'before_' + s + '_after' }
 	//	  const bd = function (s) { return s.substring(7, s.length - 6) }
 	//
-	se := nedb.SerializeFunc(func(ctx context.Context, v any) ([]byte, error) {
+	se := gedb.SerializeFunc(func(ctx context.Context, v any) ([]byte, error) {
 		s, err := (defaultSerializer{}).Serialize(ctx, v)
 		if err != nil {
 			return nil, err
 		}
 		return []byte("before_" + string(s) + "_after"), nil
 	})
-	de := nedb.DeserializeFunc(func(ctx context.Context, b []byte, v any) error {
+	de := gedb.DeserializeFunc(func(ctx context.Context, b []byte, v any) error {
 		return (defaultDeserializer{}).Deserialize(ctx, b[7:len(b)-6], v)
 	})
 
@@ -379,7 +379,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		s.NoError(os.WriteFile(hookTestFilename, []byte("Some content"), 0666))
 
-		_, err := NewPersistence(nedb.PersistenceOptions{
+		_, err := NewPersistence(gedb.PersistenceOptions{
 			Filename:   hookTestFilename,
 			Serializer: se,
 		})
@@ -389,7 +389,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.NoError(err)
 		s.Equal("Some content", string(b)) // Data file left untouched
 
-		_, err = NewPersistence(nedb.PersistenceOptions{
+		_, err = NewPersistence(gedb.PersistenceOptions{
 			Filename:     hookTestFilename,
 			Deserializer: de,
 		})
@@ -399,7 +399,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.NoError(err)
 		s.Equal("Some content", string(b)) // Data file left untouched
 
-		_, err = NewPersistence(nedb.PersistenceOptions{
+		_, err = NewPersistence(gedb.PersistenceOptions{
 			Filename:     hookTestFilename,
 			Serializer:   se,
 			Deserializer: de,
@@ -415,7 +415,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		const hookTestFilename = "../workspace/hookTest.db"
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
-		p, err = NewPersistence(nedb.PersistenceOptions{
+		p, err = NewPersistence(gedb.PersistenceOptions{
 			Filename:     hookTestFilename,
 			Serializer:   se,
 			Deserializer: de,
@@ -435,7 +435,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		data := bytes.Split(_data, []byte("\n"))
 
 		var doc0, doc1 Document
-		var idx nedb.IndexDTO
+		var idx gedb.IndexDTO
 
 		s.Len(data, 4)
 
@@ -448,9 +448,9 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.Equal("earth", doc1["hello"])
 
 		s.NoError(de(ctx, data[2], &idx))
-		s.Equal(nedb.IndexDTO{IndexCreated: nedb.IndexCreated{FieldName: "idefix"}}, idx)
+		s.Equal(gedb.IndexDTO{IndexCreated: gedb.IndexCreated{FieldName: "idefix"}}, idx)
 
-		allData := []nedb.Document{
+		allData := []gedb.Document{
 			Document{"_id": id1, "hello": "earth"},
 		}
 		s.NoError(p.PersistCachedDatabase(ctx, allData, nil))
@@ -460,7 +460,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		const hookTestFilename = "../workspace/hookTest.db"
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
-		p, err = NewPersistence(nedb.PersistenceOptions{
+		p, err = NewPersistence(gedb.PersistenceOptions{
 			Filename:     hookTestFilename,
 			Serializer:   se,
 			Deserializer: de,
@@ -480,7 +480,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.Len(data, 6)
 
 		// Everything is deserialized correctly, including deletes and indexes
-		p, err = NewPersistence(nedb.PersistenceOptions{
+		p, err = NewPersistence(gedb.PersistenceOptions{
 			Filename:     hookTestFilename,
 			Serializer:   se,
 			Deserializer: de,
@@ -497,19 +497,19 @@ func (s *PersistenceTestSuite) TestSetializers() {
 func (s *PersistenceTestSuite) TestPreventDataloss() {
 	// Creating a datastore with in memory as true and a bad filename wont cause an error
 	s.Run("InMemoryBadFilenameNoError", func() {
-		_, err := NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/bad.db~", InMemoryOnly: true})
+		_, err := NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/bad.db~", InMemoryOnly: true})
 		s.NoError(err)
 	})
 
 	// Creating a persistent datastore with a bad filename will cause an error
 	s.Run("PersistentBadFilenameError", func() {
-		_, err := NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/bad.db~"})
+		_, err := NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/bad.db~"})
 		s.Error(err)
 	})
 
 	// If no file stat, ensureDatafileIntegrity creates an empty datafile
 	s.Run("CreateEmptyFileIfNoFileStat", func() {
-		p, err := NewPersistence(nedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
+		p, err := NewPersistence(gedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
 		s.NoError(err)
 
 		fileExists, err := s.storage.Exists("../workspace/it.db")
@@ -539,7 +539,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 	// If only datafile stat, ensureDatafileIntegrity will use it
 	s.Run("UseDatafileIfExists", func() {
-		p, err := NewPersistence(nedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
+		p, err := NewPersistence(gedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
 		s.NoError(err)
 
 		fileExists, err := s.storage.Exists("../workspace/it.db")
@@ -570,7 +570,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 	// If temp datafile stat and datafile doesnt, ensureDatafileIntegrity will use it (cannot happen except upon first use)
 	s.Run("UseTempDatafileIfExistsUponFirstUse", func() {
-		p, err := NewPersistence(nedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
+		p, err := NewPersistence(gedb.PersistenceOptions{InMemoryOnly: false, Filename: "../workspace/it.db"})
 		s.NoError(err)
 
 		fileExists, err := s.storage.Exists("../workspace/it.db")
@@ -607,7 +607,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 	// rename wasn't, but there is in any case no guarantee that the data in
 	// the temp file is whole so we have to discard the whole file
 	s.Run("UseDatafileIfBothExist", func() {
-		p, err := NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/it.db"})
+		p, err := NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/it.db"})
 		s.NoError(err)
 
 		fileExists, err := s.storage.Exists("../workspace/it.db")
@@ -672,7 +672,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoError(os.WriteFile(testDb+"~", []byte("something"), 0666))
 		s.FileExists(testDb + "~")
 
-		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []gedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.NoError(err)
 
@@ -719,7 +719,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 		s.NoError(os.WriteFile(testDb+"~", []byte("bloup"), 0666))
 		s.FileExists(testDb + "~")
-		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []gedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.NoError(err)
 		s.FileExists(testDb)
@@ -746,7 +746,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoFileExists(testDb)
 		s.FileExists(testDb + "~")
 
-		s.NoError(p.PersistCachedDatabase(ctx, []nedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
+		s.NoError(p.PersistCachedDatabase(ctx, []gedb.Document{Document{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
 		s.FileExists(testDb)
 		s.NoFileExists(testDb + "~")
@@ -772,7 +772,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			s.NoError(os.Remove(dbFile + "~"))
 		}
 
-		p, err := NewPersistence(nedb.PersistenceOptions{Filename: dbFile})
+		p, err := NewPersistence(gedb.PersistenceOptions{Filename: dbFile})
 		s.NoError(err)
 
 		ctx := context.Background()
@@ -792,7 +792,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoError(s.storage.EnsureFileDoesntExist(dbFile))
 		s.NoError(s.storage.EnsureFileDoesntExist(dbFile + "~"))
 
-		p, err := NewPersistence(nedb.PersistenceOptions{Filename: dbFile})
+		p, err := NewPersistence(gedb.PersistenceOptions{Filename: dbFile})
 		s.NoError(err)
 
 		ctx := context.Background()
@@ -808,19 +808,19 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		docs, _, err = p.LoadDatabase(ctx)
 		s.NoError(err)
 		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a nedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a nedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
+		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
+		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
 
 		s.FileExists(dbFile)
 		s.NoFileExists(dbFile + "~")
 
-		p2, err := NewPersistence(nedb.PersistenceOptions{Filename: dbFile})
+		p2, err := NewPersistence(gedb.PersistenceOptions{Filename: dbFile})
 		s.NoError(err)
 		docs, _, err = p2.LoadDatabase(ctx)
 		s.NoError(err)
 		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a nedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a nedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
+		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
+		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
 
 		s.FileExists(dbFile)
 		s.NoFileExists(dbFile + "~")
@@ -876,7 +876,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			s.NoError(err)
 			s.Len(f, 5000)
 
-			per, err := NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/lac.db"})
+			per, err := NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/lac.db"})
 			s.NoError(err)
 
 			ctx := context.Background()
@@ -889,7 +889,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			s.NoError(err)
 			s.Len(f, datafileLength)
 
-			slices.SortFunc(docs, func(a, b nedb.Document) int {
+			slices.SortFunc(docs, func(a, b gedb.Document) int {
 				idA, idB := a.ID(), b.ID()
 				if len(idA) != len(idB) {
 					return cmp.Compare(len(idA), len(idB))
@@ -960,12 +960,12 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			for _, fh := range filehandles {
 				fh.Close()
 			}
-			p, err := NewPersistence(nedb.PersistenceOptions{Filename: "../workspace/openfds.db"})
+			p, err := NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/openfds.db"})
 			s.NoError(err)
 			docs, _, err := p.LoadDatabase(ctx)
 			s.NoError(err)
 
-			removed := make([]nedb.Document, len(docs))
+			removed := make([]gedb.Document, len(docs))
 			for n, doc := range docs {
 				removed[n] = Document{"_id": doc.ID()}
 			}
@@ -1049,7 +1049,7 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 	s.Run("ReseBuffer", func() {
 		ctx := context.Background()
 		s.NoError(p.DropDatabase(ctx))
-		docs := []nedb.Document{
+		docs := []gedb.Document{
 			Document{"_id": uuid.New().String(), "hello": "world"},
 			Document{"_id": uuid.New().String(), "hello": "world"},
 			Document{"_id": uuid.New().String(), "hello": "world"},

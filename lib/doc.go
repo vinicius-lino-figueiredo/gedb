@@ -10,7 +10,7 @@ import (
 
 type Document map[string]any
 
-// ID implements nedb.Document
+// ID implements gedb.Document
 func (d Document) ID() string {
 	i := d["_id"]
 	if s, ok := i.(string); ok {

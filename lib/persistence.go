@@ -12,9 +12,9 @@ import (
 
 	"github.com/dolmen-go/contextio"
 	"github.com/mitchellh/mapstructure"
-	"github.com/vinicius-lino-figueiredo/nedb"
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/ctxsync"
-	"github.com/vinicius-lino-figueiredo/nedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 const (
@@ -28,13 +28,13 @@ type persistence struct {
 	corruptAlertThreshold float64
 	fileMode              os.FileMode
 	dirMode               os.FileMode
-	serializer            nedb.Serializer
-	deserializer          nedb.Deserializer
+	serializer            gedb.Serializer
+	deserializer          gedb.Deserializer
 	broadcaster           *ctxsync.Cond
-	storage               nedb.Storage
+	storage               gedb.Storage
 }
 
-func NewPersistence(options nedb.PersistenceOptions) (*persistence, error) {
+func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 
 	inMemoryOnly := options.InMemoryOnly
 	filename := options.Filename
@@ -92,7 +92,7 @@ func (p *persistence) SetCorruptAlertThreshold(v float64) {
 	p.corruptAlertThreshold = v
 }
 
-func (p *persistence) PersistNewState(ctx context.Context, newDocs ...nedb.Document) error {
+func (p *persistence) PersistNewState(ctx context.Context, newDocs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -126,15 +126,15 @@ func (p *persistence) PersistNewState(ctx context.Context, newDocs ...nedb.Docum
 	return err
 }
 
-func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) ([]nedb.Document, map[string]nedb.IndexDTO, error) {
+func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	default:
 	}
-	dataByID := make(map[string]nedb.Document)
+	dataByID := make(map[string]gedb.Document)
 
-	indexes := make(map[string]nedb.IndexDTO)
+	indexes := make(map[string]gedb.IndexDTO)
 
 	corruptItems := 0
 
@@ -163,7 +163,7 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 				dataByID[doc.ID()] = doc
 			}
 		} else if doc.Contains("$$indexCreated") && doc.Get("$$indexCreated", "fieldName") != nil {
-			ni := new(nedb.IndexDTO)
+			ni := new(gedb.IndexDTO)
 			if err := mapstructure.Decode(doc, ni); err != nil {
 				corruptItems++
 			} else {
@@ -192,7 +192,7 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 	return data, indexes, nil
 }
 
-func (p *persistence) LoadDatabase(ctx context.Context) ([]nedb.Document, map[string]nedb.IndexDTO, error) {
+func (p *persistence) LoadDatabase(ctx context.Context) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -278,7 +278,7 @@ func (p *persistence) DropDatabase(ctx context.Context) error {
 	return nil
 }
 
-func (p *persistence) PersistCachedDatabase(ctx context.Context, allData []nedb.Document, indexes map[string]nedb.IndexDTO) error {
+func (p *persistence) PersistCachedDatabase(ctx context.Context, allData []gedb.Document, indexes map[string]gedb.IndexDTO) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

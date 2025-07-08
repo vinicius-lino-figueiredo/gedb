@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/bst"
-	"github.com/vinicius-lino-figueiredo/nedb"
+	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
 type IndexesTestSuite struct {
@@ -19,7 +19,7 @@ type IndexesTestSuite struct {
 func (s *IndexesTestSuite) TestInsertion() {
 	// Can insert pointers to documents in the index correctly when they have the field
 	s.Run("Pointers", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -44,7 +44,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Can insert pointers to documents in the index correctly when they have compound fields
 	s.Run("PointersCompound", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf,tg"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf,tg"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello", "tg": "world"}
 		doc2 := Document{"a": 8, "tf": "hello", "tg": "bloup"}
 		doc3 := Document{"a": 2, "tf": "bloup", "tg": "bloup"}
@@ -68,7 +68,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Inserting twice for the same fieldName in a unique index will result in an error thrown
 	s.Run("InsertionFieldNameTwice", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 
 		ctx := context.Background()
@@ -80,7 +80,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Inserting twice for a fieldName the docs dont have with a unique index results in an error thrown
 	s.Run("InsertTwiceNonUnique", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "nope", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "nope", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 5, "tf": "world"}
 
@@ -93,7 +93,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Inserting twice for a fieldName the docs dont have with a unique and sparse index will not throw, since the docs will be non indexed
 	s.Run("InsertTwiceSparse", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "nope", Unique: true, Sparse: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "nope", Unique: true, Sparse: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 5, "tf": "world"}
 
@@ -106,7 +106,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Inserting twice for the same compound fieldName in a unique index will result in an error thrown
 	s.Run("InsertTwiceSameCompound", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf,tg", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf,tg", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello", "tg": "world"}
 
 		ctx := context.Background()
@@ -118,7 +118,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Inserting twice for a compound fieldName the docs dont have with a unique and sparse index will not throw, since the docs will be non indexed
 	s.Run("InsertTwiceCompoundSparse", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "nope,nopeNope", Unique: true, Sparse: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "nope,nopeNope", Unique: true, Sparse: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 5, "tf": "world"}
 
@@ -131,7 +131,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Works with dot notation
 	s.Run("DotNotation", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf.nested"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf.nested"}).(*index)
 		doc1 := Document{"a": 5, "tf": Document{"nested": "hello"}}
 		doc2 := Document{"a": 8, "tf": Document{"nested": "world", "additional": true}}
 		doc3 := Document{"a": 2, "tf": Document{"nested": "bloup", "age": 42}}
@@ -155,7 +155,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// Can insert an array of documents
 	s.Run("ArrayOfDoc", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -171,7 +171,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	// When inserting an array of elements, if an error is thrown all inserts need to be rolled back
 	s.Run("ArrayRollback", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc2b := Document{"a": 84, "tf": "world"}
@@ -194,7 +194,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("OneEntryPerElement", func() {
 			obj := Document{"tf": list{"aa", "bb"}, "really": "yeah"}
 			obj2 := Document{"tf": "normal", "yes": "indeed"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
 			ctx := context.Background()
 
@@ -210,7 +210,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		// Inserts one entry per array element in the index, type-checked
 		s.Run("OneEntryPerElementTypeChecked", func() {
 			obj := Document{"tf": list{"42", int64(42), time.Unix(42, 0), int64(42)}, "really": "yeah"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
 			ctx := context.Background()
 
@@ -224,7 +224,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("OnePerUniqueElement", func() {
 			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
 			obj2 := Document{"tf": list{"cc", "yy", "cc"}, "yes": "indeed"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
 
@@ -240,7 +240,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("UniqueHeldAcrossDocuments", func() {
 			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
 			obj2 := Document{"tf": list{"cc", "aa", "cc"}, "yes": "indeed"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
 
@@ -255,21 +255,21 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("RemoveIndexAtAllUniqueElements", func() {
 			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
 			obj2 := Document{"tf": list{"cc", "aa", "cc"}, "yes": "indeed"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
 			ctx := context.Background()
 
 			s.NoError(idx.Insert(ctx, obj))
 			s.NoError(idx.Insert(ctx, obj2))
 			s.Len(idx.GetMatching("aa"), 2)
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d nedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d nedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
 			s.Len(idx.GetMatching("cc"), 1)
 
 			s.NoError(idx.Remove(ctx, obj2))
 			s.Len(idx.GetMatching("aa"), 1)
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d nedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
-			s.Equal(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d nedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
+			s.Equal(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
 			s.Len(idx.GetMatching("cc"), 0)
 		})
 
@@ -277,7 +277,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("RollBackAllOnConstraintViolated", func() {
 			obj := Document{"tf": list{"aa", "bb"}, "really": "yeah"}
 			obj2 := Document{"tf": list{"cc", "dd", "aa", "ee"}, "yes": "indeed"}
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
 
@@ -302,7 +302,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 	s.Run("CompoundIndexes", func() {
 		// Supports field names separated by commas
 		s.Run("SupportFieldNameSeparatedByComma", func() {
-			idx := NewIndex(nedb.IndexOptions{FieldName: "tf,tf2"}).(*index)
+			idx := NewIndex(gedb.IndexOptions{FieldName: "tf,tf2"}).(*index)
 			doc1 := Document{"a": 5, "tf": "hello", "tf2": int64(7)}
 			doc2 := Document{"a": 8, "tf": "hello", "tf2": int64(6)}
 			doc3 := Document{"a": 2, "tf": "bloup", "tf2": int64(3)}
@@ -330,7 +330,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 func (s *IndexesTestSuite) TestRemoval() {
 	// Can remove pointers from the index, even when multiple documents have the same key
 	s.Run("PointersMultipleDocsSameKey", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -356,7 +356,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 	// If we have a sparse index, removing a non indexed doc has no effect
 	s.Run("SparseIndexNonIndexedDoc", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "nope", Sparse: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "nope", Sparse: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 5, "tf": "world"}
 
@@ -372,7 +372,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 	// Works with dot notation
 	s.Run("DotNotation", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf.nested"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf.nested"}).(*index)
 		doc1 := Document{"a": 5, "tf": Document{"nested": "hello"}}
 		doc2 := Document{"a": 8, "tf": Document{"nested": "world", "additional": true}}
 		doc3 := Document{"a": 2, "tf": Document{"nested": "bloup", "age": 42}}
@@ -398,7 +398,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 	// Can remove an array of documents
 	s.Run("ArrayOfDocuments", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -417,7 +417,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 func (s *IndexesTestSuite) TestUpdate() {
 	s.Run("UpdateChangedOrUnchangedKey", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -444,7 +444,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 	// If a simple update violates a unique constraint, changes are rolled back and an error thrown
 	s.Run("RollbackAndError", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -473,7 +473,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 	// Can update an array of documents
 	s.Run("ArrayOfDocuments", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -488,7 +488,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc3))
 		s.Equal(3, idx.tree.GetNumberOfKeys())
 
-		s.NoError(idx.UpdateMultipleDocs(ctx, []nedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...))
+		s.NoError(idx.UpdateMultipleDocs(ctx, []gedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...))
 
 		s.Equal(3, idx.tree.GetNumberOfKeys())
 		s.Len(idx.GetMatching("world"), 1)
@@ -501,7 +501,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 	// If a unique constraint is violated during an array-update, all changes are rolled back and an error thrown
 	s.Run("RollbackArrayUpdate", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -517,7 +517,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.Equal(3, idx.tree.GetNumberOfKeys())
 
 		e := &bst.ErrViolated{}
-		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []nedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
+		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []gedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
 		s.Equal(3, idx.tree.GetNumberOfKeys())
 		s.Len(idx.GetMatching("hello"), 1)
@@ -529,7 +529,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 		// Don't know why this is repeated in the original code, but added just in case
 		e = &bst.ErrViolated{}
-		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []nedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
+		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []gedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
 		s.Equal(3, idx.tree.GetNumberOfKeys())
 		s.Len(idx.GetMatching("hello"), 1)
@@ -542,7 +542,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 	// If an update doesnt change a document, the unique constraint is not violated
 	s.Run("NoChangeNoError", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -563,14 +563,14 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 	// Can revert simple and batch updates
 	s.Run("ReverSimpleAndBatch", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
 		doc1b := Document{"a": 23, "tf": "world"}
 		doc2b := Document{"a": 1, "tf": "changed"}
 		doc3b := Document{"a": 44, "tf": "bloup"}
-		batchUpdate := []nedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {
+		batchUpdate := []gedb.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {
 			OldDoc: doc3,
 			NewDoc: doc3b,
 		}}
@@ -629,7 +629,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 
 	// Get matching documents
 	s.Run("AllOrEmptyArray", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -642,14 +642,14 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(idx.Insert(ctx, doc3))
 		s.NoError(idx.Insert(ctx, doc4))
 
-		s.Equal([]nedb.Document{doc3}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc2, doc4}, idx.GetMatching("world"))
-		s.Equal([]nedb.Document{}, idx.GetMatching("nope"))
+		s.Equal([]gedb.Document{doc3}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{doc2, doc4}, idx.GetMatching("world"))
+		s.Equal([]gedb.Document{}, idx.GetMatching("nope"))
 	})
 
 	// Can get all documents for a given key in a unique index
 	s.Run("AllForGivenKeyUnique", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -660,14 +660,14 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal([]nedb.Document{doc3}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc2}, idx.GetMatching("world"))
-		s.Equal([]nedb.Document{}, idx.GetMatching("nope"))
+		s.Equal([]gedb.Document{doc3}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{doc2}, idx.GetMatching("world"))
+		s.Equal([]gedb.Document{}, idx.GetMatching("nope"))
 	})
 
 	// Can get all documents for which a field is nil
 	s.Run("GetAllForNilField", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 2, "nottf": "bloup"}
 		doc3 := Document{"a": 8, "tf": "world"}
@@ -679,19 +679,19 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal([]nedb.Document{}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc1}, idx.GetMatching("hello"))
-		s.Equal([]nedb.Document{doc3}, idx.GetMatching("world"))
-		s.Equal([]nedb.Document{}, idx.GetMatching("yes"))
-		s.Equal([]nedb.Document{doc2}, idx.GetMatching(nil))
+		s.Equal([]gedb.Document{}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{doc1}, idx.GetMatching("hello"))
+		s.Equal([]gedb.Document{doc3}, idx.GetMatching("world"))
+		s.Equal([]gedb.Document{}, idx.GetMatching("yes"))
+		s.Equal([]gedb.Document{doc2}, idx.GetMatching(nil))
 
 		s.NoError(idx.Insert(ctx, doc4))
 
-		s.Equal([]nedb.Document{}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc1}, idx.GetMatching("hello"))
-		s.Equal([]nedb.Document{doc3}, idx.GetMatching("world"))
-		s.Equal([]nedb.Document{}, idx.GetMatching("yes"))
-		s.Equal([]nedb.Document{doc2, doc4}, idx.GetMatching(nil))
+		s.Equal([]gedb.Document{}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{doc1}, idx.GetMatching("hello"))
+		s.Equal([]gedb.Document{doc3}, idx.GetMatching("world"))
+		s.Equal([]gedb.Document{}, idx.GetMatching("yes"))
+		s.Equal([]gedb.Document{doc2, doc4}, idx.GetMatching(nil))
 	})
 
 	// NOTE: Go doesn't have "undefined", so undefined and null are treated
@@ -720,7 +720,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 
 	// Can get all documents for a given key in a sparse index, but not unindexed docs (= field undefined)
 	s.Run("AllDocsForKeySparseButNotUnindexedDocs", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf", Sparse: true}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Sparse: true}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 2, "nottf": "bloup"}
 		doc3 := Document{"a": 8, "tf": "world"}
@@ -733,11 +733,11 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(idx.Insert(ctx, doc3))
 		s.NoError(idx.Insert(ctx, doc4))
 
-		s.Equal([]nedb.Document{}, idx.GetMatching("bloup"))
-		s.Equal([]nedb.Document{doc1}, idx.GetMatching("hello"))
-		s.Equal([]nedb.Document{doc3}, idx.GetMatching("world"))
-		s.Equal([]nedb.Document{}, idx.GetMatching("yes"))
-		s.Equal([]nedb.Document{}, idx.GetMatching(nil))
+		s.Equal([]gedb.Document{}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{doc1}, idx.GetMatching("hello"))
+		s.Equal([]gedb.Document{doc3}, idx.GetMatching("world"))
+		s.Equal([]gedb.Document{}, idx.GetMatching("yes"))
+		s.Equal([]gedb.Document{}, idx.GetMatching(nil))
 	})
 
 	// Can get all documents whose key is in an array of keys
@@ -746,9 +746,9 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		// array version of getMatching relies on the _id property being
 		// set, otherwise we have to use a quadratic algorithm or a
 		// fingerprinting algorithm, both solutions too complicated and
-		// slow given that live nedb indexes documents with _id always
+		// slow given that live gedb indexes documents with _id always
 		// set
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello", "_id": "1"}
 		doc2 := Document{"a": 2, "tf": "bloup", "_id": "2"}
 		doc3 := Document{"a": 8, "tf": "world", "_id": "3"}
@@ -763,16 +763,18 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(idx.Insert(ctx, doc4))
 		s.NoError(idx.Insert(ctx, doc5))
 
-		s.Equal([]nedb.Document{}, idx.GetMatching())
-		s.Equal([]nedb.Document{doc2}, idx.GetMatching("bloup"))
+		s.Equal([]gedb.Document{}, idx.GetMatching())
+		s.Equal([]gedb.Document{doc2}, idx.GetMatching("bloup"))
 		res := idx.GetMatching("bloup", "yes")
-		s.Equal([]nedb.Document{doc2, doc4, doc5}, res)
-		s.Equal([]nedb.Document{}, idx.GetMatching("nope", "no"))
+		s.Equal([]gedb.Document{doc2, doc4, doc5}, res)
+		s.Equal([]gedb.Document{}, idx.GetMatching("nope", "no"))
+		s.Equal([]gedb.Document{doc2, doc4, doc5}, res)
+		s.Equal([]gedb.Document{}, idx.GetMatching("nope", "no"))
 	})
 
 	// Can get all documents whose key is between certain bounds
 	s.Run("AllDocsWithKeyInCertainBounds", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "a"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "a"}).(*index)
 		doc1 := Document{"a": int64(5), "tf": "hello"}
 		doc2 := Document{"a": int64(2), "tf": "bloup"}
 		doc3 := Document{"a": int64(8), "tf": "world"}
@@ -789,20 +791,20 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 
 		d, err := idx.GetBetweenBounds(ctx, Document{"$lt": int64(10), "$gte": int64(5)})
 		s.NoError(err)
-		s.Equal([]nedb.Document{doc1, doc4, doc3}, d)
+		s.Equal([]gedb.Document{doc1, doc4, doc3}, d)
 		d, err = idx.GetBetweenBounds(ctx, Document{"$lte": int64(8)})
 		s.NoError(err)
-		s.Equal([]nedb.Document{doc2, doc1, doc4, doc3}, d)
+		s.Equal([]gedb.Document{doc2, doc1, doc4, doc3}, d)
 		d, err = idx.GetBetweenBounds(ctx, Document{"$gt": int64(7)})
 		s.NoError(err)
-		s.Equal([]nedb.Document{doc3, doc5}, d)
+		s.Equal([]gedb.Document{doc3, doc5}, d)
 	})
 } // ==== End of 'Get matching documents' ==== //
 
 func (s *IndexesTestSuite) TestResetting() {
 	// Can reset an index without any new data, the index will be empty afterwards
 	s.Run("ResetIndexWithoutData", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -827,7 +829,7 @@ func (s *IndexesTestSuite) TestResetting() {
 
 	// Can reset an index and initialize it with one document
 	s.Run("ResetAndInitialize", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
@@ -854,11 +856,11 @@ func (s *IndexesTestSuite) TestResetting() {
 
 	// Can reset an index and initialize it with an array of documents
 	s.Run("ResetWithMultipleDocs", func() {
-		idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+		idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 		doc1 := Document{"a": 5, "tf": "hello"}
 		doc2 := Document{"a": 8, "tf": "world"}
 		doc3 := Document{"a": 2, "tf": "bloup"}
-		newDocs := []nedb.Document{Document{"a": 555, "tf": "new"}, Document{"a": 666, "tf": "again"}}
+		newDocs := []gedb.Document{Document{"a": 555, "tf": "new"}, Document{"a": 666, "tf": "again"}}
 
 		ctx := context.Background()
 
@@ -884,7 +886,7 @@ func (s *IndexesTestSuite) TestResetting() {
 
 // Get all elements in the index
 func (s *IndexesTestSuite) TestGetAll() {
-	idx := NewIndex(nedb.IndexOptions{FieldName: "tf"}).(*index)
+	idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 	doc1 := Document{"a": 5, "tf": "hello"}
 	doc2 := Document{"a": 8, "tf": "world"}
 	doc3 := Document{"a": 2, "tf": "bloup"}
@@ -895,7 +897,7 @@ func (s *IndexesTestSuite) TestGetAll() {
 	s.NoError(idx.Insert(ctx, doc2))
 	s.NoError(idx.Insert(ctx, doc3))
 
-	s.Equal([]nedb.Document{Document{"a": 2, "tf": "bloup"}, Document{"a": 5, "tf": "hello"}, Document{"a": 8, "tf": "world"}}, idx.GetAll())
+	s.Equal([]gedb.Document{Document{"a": 2, "tf": "bloup"}, Document{"a": 5, "tf": "hello"}, Document{"a": 8, "tf": "world"}}, idx.GetAll())
 }
 
 func TestIndexesTestSuite(t *testing.T) {
