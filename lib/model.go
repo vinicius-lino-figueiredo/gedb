@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"math/big"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
 func isNumber(v any) bool {
@@ -74,7 +74,7 @@ func deserialize(data []byte, v any) error {
 		return errors.New("nil target")
 	}
 	doc := make(Document)
-	if err := doc.UnmarshalJSON(data); err != nil {
+	if err := json.Unmarshal(data, &doc); err != nil {
 		return err
 	}
 	for k, v := range doc {
@@ -83,8 +83,8 @@ func deserialize(data []byte, v any) error {
 				doc[k] = time.Unix(i, 0)
 			}
 		}
-		if d, ok := v.(Document); ok && d["$$date"] != nil {
-			doc[k] = d["date"]
+		if d, ok := v.(gedb.Document); ok && d.Get("$$date") != nil {
+			doc[k] = d.Get("date")
 		}
 	}
 	if p, ok := v.(*Document); ok {
@@ -92,10 +92,22 @@ func deserialize(data []byte, v any) error {
 		return nil
 	}
 
-	m := doc.asMap()
+	m := asMap(doc)
 
 	return mapstructure.Decode(&m, v)
 
+}
+
+func asMap(doc gedb.Document) map[string]any {
+	res := make(map[string]any)
+	for k, v := range doc.Iter() {
+		v2, ok := v.(gedb.Document)
+		if ok {
+			v = asMap(v2)
+		}
+		res[k] = v
+	}
+	return res
 }
 
 type defaultDeserializer struct{}
@@ -236,9 +248,9 @@ func compareThings(a, b any, _compareStrings func(a, b string) int) int {
 	}
 
 	// Arrays
-	if a, ok := a.(list); ok {
-		if b, ok := b.(list); ok {
-			return a.compare(b, compareStrings)
+	if a, ok := a.([]any); ok {
+		if b, ok := b.([]any); ok {
+			return compareArray(a, b)
 		}
 		return -1
 	}
@@ -247,25 +259,53 @@ func compareThings(a, b any, _compareStrings func(a, b string) int) int {
 	}
 
 	// Objects
-	da := a.(Document)
-	db := b.(Document)
+	da := a.(gedb.Document)
+	db := b.(gedb.Document)
 
-	aKeys := slices.Collect(maps.Keys(da))
-	bKeys := slices.Collect(maps.Keys(db))
+	aKeys := slices.Collect(da.Keys())
+	bKeys := slices.Collect(db.Keys())
 	slices.Sort(aKeys)
 	slices.Sort(bKeys)
 
 	var comp int
 	for i := range min(len(aKeys), len(bKeys)) {
-		comp = compareThings(da[aKeys[i]], db[bKeys[i]], compareStrings)
+		comp = compareThings(da.Get(aKeys[i]), db.Get(bKeys[i]), compareStrings)
 
 		if comp != 0 {
 			return comp
 		}
 	}
 
-	return compareNSB(newBig(int64(len(da))), newBig(int64(len(db))))
+	return compareNSB(newBig(int64(da.Len())), newBig(int64(db.Len())))
 }
+
+func compareArray(a, b []any) int {
+	minLength := min(len(a), len(b))
+
+	var comp int
+	for i := range minLength {
+		comp = compareThings(a[i], b[i], nil)
+
+		if comp != 0 {
+			return comp
+		}
+	}
+
+	// Common section was identical, longest one wins
+	return compareNSB(newBig(int64(len(a))), newBig(int64(len(b))))
+}
+
+// const compareArrays = (a, b) => {
+//   const minLength = Math.min(a.length, b.length)
+//   for (let i = 0; i < minLength; i += 1) {
+//     const comp = compareThings(a[i], b[i])
+//
+//     if (comp !== 0) return comp
+//   }
+//
+//   // Common section was identical, longest one wins
+//   return compareNSB(a.length, b.length)
+// }
 
 func compareThingsFunc(compareStrings func(a, b string) int) func(a, b any) int {
 	return func(a, b any) int {
@@ -289,7 +329,7 @@ func getDotValue(object any, fields ...string) (any, error) {
 			switch v := curr.(type) {
 			case Document:
 				curr = v[nestedField]
-			case list:
+			case []any:
 				curr, err = getDotValueList(v, fields[n:]...)
 				if err != nil {
 					return nil, err
@@ -300,11 +340,11 @@ func getDotValue(object any, fields ...string) (any, error) {
 	return curr, nil
 }
 
-func getDotValueList(v list, fieldParts ...string) (any, error) {
+func getDotValueList(v []any, fieldParts ...string) (any, error) {
 
 	i, err := strconv.Atoi(fieldParts[0])
 	if err != nil {
-		m := make(list, len(v))
+		m := make([]any, len(v))
 		for n, el := range v {
 			m[n], err = getDotValue(el, fieldParts...)
 			if err != nil {

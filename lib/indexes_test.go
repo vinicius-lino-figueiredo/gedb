@@ -38,8 +38,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// The nodes contain pointers to the actual documents
 		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(idx.tree.Search("world")[0].(Document)).Pointer())
-		idx.tree.Search("bloup")[0].(Document)["a"] = 42
-		s.Equal(42, doc3["a"])
+		idx.tree.Search("bloup")[0].(gedb.Document).Set("a", 42)
+		s.Equal(42, doc3.Get("a"))
 	})
 
 	// Can insert pointers to documents in the index correctly when they have compound fields
@@ -62,8 +62,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// The nodes contain pointers to the actual documents
 		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(idx.tree.Search(Document{"tf": "hello", "tg": "bloup"})[0].(Document)).Pointer())
-		idx.tree.Search(Document{"tf": "bloup", "tg": "bloup"})[0].(Document)["a"] = 42
-		s.Equal(42, doc3["a"])
+		idx.tree.Search(Document{"tf": "bloup", "tg": "bloup"})[0].(gedb.Document).Set("a", 42)
+		s.Equal(42, doc3.Get("a"))
 	})
 
 	// Inserting twice for the same fieldName in a unique index will result in an error thrown
@@ -149,8 +149,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Equal([]any{doc3}, idx.tree.Search("bloup"))
 
 		// The nodes contain pointers to the actual documents
-		idx.tree.Search("bloup")[0].(Document)["a"] = 42
-		s.Equal(42, doc3["a"])
+		idx.tree.Search("bloup")[0].(gedb.Document).Set("a", 42)
+		s.Equal(42, doc3.Get("a"))
 	})
 
 	// Can insert an array of documents
@@ -192,7 +192,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 	s.Run("ArrayFields", func() {
 		// Inserts one entry per array element in the index
 		s.Run("OneEntryPerElement", func() {
-			obj := Document{"tf": list{"aa", "bb"}, "really": "yeah"}
+			obj := Document{"tf": []any{"aa", "bb"}, "really": "yeah"}
 			obj2 := Document{"tf": "normal", "yes": "indeed"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
@@ -209,7 +209,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// Inserts one entry per array element in the index, type-checked
 		s.Run("OneEntryPerElementTypeChecked", func() {
-			obj := Document{"tf": list{"42", int64(42), time.Unix(42, 0), int64(42)}, "really": "yeah"}
+			obj := Document{"tf": []any{"42", int64(42), time.Unix(42, 0), int64(42)}, "really": "yeah"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
 			ctx := context.Background()
@@ -222,8 +222,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// Inserts one entry per unique array element in the index, the unique constraint only holds across documents
 		s.Run("OnePerUniqueElement", func() {
-			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
-			obj2 := Document{"tf": list{"cc", "yy", "cc"}, "yes": "indeed"}
+			obj := Document{"tf": []any{"aa", "aa"}, "really": "yeah"}
+			obj2 := Document{"tf": []any{"cc", "yy", "cc"}, "yes": "indeed"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
@@ -238,8 +238,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		//  The unique constraint holds across documents
 		s.Run("UniqueHeldAcrossDocuments", func() {
-			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
-			obj2 := Document{"tf": list{"cc", "aa", "cc"}, "yes": "indeed"}
+			obj := Document{"tf": []any{"aa", "aa"}, "really": "yeah"}
+			obj2 := Document{"tf": []any{"cc", "aa", "cc"}, "yes": "indeed"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
@@ -253,8 +253,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// When removing a document, remove it from the index at all unique array elements
 		s.Run("RemoveIndexAtAllUniqueElements", func() {
-			obj := Document{"tf": list{"aa", "aa"}, "really": "yeah"}
-			obj2 := Document{"tf": list{"cc", "aa", "cc"}, "yes": "indeed"}
+			obj := Document{"tf": []any{"aa", "aa"}, "really": "yeah"}
+			obj2 := Document{"tf": []any{"cc", "aa", "cc"}, "yes": "indeed"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf"}).(*index)
 
 			ctx := context.Background()
@@ -275,8 +275,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// If a unique constraint is violated when inserting an array key, roll back all inserts before the key', function () {
 		s.Run("RollBackAllOnConstraintViolated", func() {
-			obj := Document{"tf": list{"aa", "bb"}, "really": "yeah"}
-			obj2 := Document{"tf": list{"cc", "dd", "aa", "ee"}, "yes": "indeed"}
+			obj := Document{"tf": []any{"aa", "bb"}, "really": "yeah"}
+			obj2 := Document{"tf": []any{"cc", "dd", "aa", "ee"}, "yes": "indeed"}
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf", Unique: true}).(*index)
 
 			ctx := context.Background()
@@ -321,8 +321,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 			// The nodes contain pointers to the actual documents
 			s.Equal(doc2, idx.tree.Search(Document{"tf": "hello", "tf2": int64(6)})[0])
-			idx.tree.Search(Document{"tf": "bloup", "tf2": int64(3)})[0].(Document)["a"] = 42
-			s.Equal(42, doc3["a"])
+			idx.tree.Search(Document{"tf": "bloup", "tf2": int64(3)})[0].(gedb.Document).Set("a", 42)
+			s.Equal(42, doc3.Get("a"))
 		})
 	})
 } // ==== End of 'Insertion' ==== //
@@ -376,7 +376,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 		doc1 := Document{"a": 5, "tf": Document{"nested": "hello"}}
 		doc2 := Document{"a": 8, "tf": Document{"nested": "world", "additional": true}}
 		doc3 := Document{"a": 2, "tf": Document{"nested": "bloup", "age": 42}}
-		doc4 := Document{"a": 2, "tf": Document{"nested": "world", "fruits": list{"apple", "carrot"}}}
+		doc4 := Document{"a": 2, "tf": Document{"nested": "world", "fruits": []any{"apple", "carrot"}}}
 
 		ctx := context.Background()
 
@@ -851,7 +851,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.Len(idx.GetMatching("hello"), 0)
 		s.Len(idx.GetMatching("world"), 0)
 		s.Len(idx.GetMatching("bloup"), 0)
-		s.Equal(555, idx.GetMatching("new")[0].(Document)["a"])
+		s.Equal(555, idx.GetMatching("new")[0].Get("a"))
 	})
 
 	// Can reset an index and initialize it with an array of documents
@@ -878,8 +878,8 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.Len(idx.GetMatching("hello"), 0)
 		s.Len(idx.GetMatching("world"), 0)
 		s.Len(idx.GetMatching("bloup"), 0)
-		s.Equal(555, idx.GetMatching("new")[0].(Document)["a"])
-		s.Equal(666, idx.GetMatching("again")[0].(Document)["a"])
+		s.Equal(555, idx.GetMatching("new")[0].Get("a"))
+		s.Equal(666, idx.GetMatching("again")[0].Get("a"))
 
 	})
 } // ==== End of 'Resetting' ==== //

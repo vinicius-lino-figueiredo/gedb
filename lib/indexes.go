@@ -89,14 +89,14 @@ DocInsertion:
 			return err
 		}
 
-		oKey, isObj := key.(Document)
-		if i.sparse && (key == nil || (isObj && !slices.ContainsFunc(slices.Collect(maps.Values(oKey)), func(el any) bool { return el != nil }))) {
+		oKey, isObj := key.(gedb.Document)
+		if i.sparse && (key == nil || (isObj && !slices.ContainsFunc(slices.Collect(oKey.Values()), func(el any) bool { return el != nil }))) {
 			return nil
 		}
 
-		l, ok := key.(list)
+		l, ok := key.([]any)
 		if !ok {
-			l = list{key}
+			l = []any{key}
 		}
 
 		slices.SortFunc(l, compareThingsFunc(nil))
@@ -151,7 +151,7 @@ func (i *index) Remove(ctx context.Context, docs ...gedb.Document) error {
 			return nil
 		}
 
-		if l, ok := key.(list); ok {
+		if l, ok := key.([]any); ok {
 			uniq := slices.Clone(l)
 			slices.SortFunc(uniq, compareThingsFunc(nil))
 			uniq = slices.Compact(uniq)
@@ -290,7 +290,7 @@ func (i *index) GetAll() []gedb.Document {
 	var res []gedb.Document
 	i.tree.ExecuteOnEveryNode(func(bst *bst.BinarySearchTree) {
 		for _, data := range bst.Data() {
-			res = append(res, data.(Document))
+			res = append(res, data.(gedb.Document))
 		}
 	})
 	return res

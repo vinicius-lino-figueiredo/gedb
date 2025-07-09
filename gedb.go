@@ -3,6 +3,7 @@ package gedb
 import (
 	"context"
 	"io"
+	"iter"
 	"os"
 	"time"
 )
@@ -134,8 +135,30 @@ type Update struct {
 	NewDoc Document
 }
 
+// Document represents a record in the persistence layer, used internally to
+// carry raw data from persistence to a user-defined type via a cursor. It's
+// not returned directly by the Datastore. Document is read by one goroutine at
+// a time and doesn't need to be concurrency safe.
 type Document interface {
+	// ID returns the document ID, if any, or an empty string.
 	ID() string
+	// D returns the subdocument for the given key, if any.
+	D(string) Document
+	// Get returns the value under the given key, or nil if unset.
+	Get(string) any
+	// Set sets the value under the given key.
+	Set(string, any)
+	// Iter returns an unordered sequence of key-value pairs in the
+	// document.
+	Iter() iter.Seq2[string, any]
+	// Keys returns an unordered sequence of keys in the document.
+	Keys() iter.Seq[string]
+	// Values returns an unordered sequence of values in the document.
+	Values() iter.Seq[any]
+	// Has reports whether a value is set under the given key.
+	Has(string) bool
+	// Len returns the number of set fields in the document.
+	Len() int
 }
 
 type PersistenceOptions struct {

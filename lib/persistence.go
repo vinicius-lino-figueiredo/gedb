@@ -156,23 +156,25 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 			dataLength++
 			continue
 		}
-		if doc.Contains("_id") {
-			if doc.CompareKey("$$deleted", true) == 0 {
+		if doc.Has("_id") {
+			if compareThings(doc.Get("$$deleted"), true, nil) == 0 {
 				delete(dataByID, doc.ID())
 			} else {
 				dataByID[doc.ID()] = doc
 			}
-		} else if doc.Contains("$$indexCreated") && doc.Get("$$indexCreated", "fieldName") != nil {
-			ni := new(gedb.IndexDTO)
-			if err := mapstructure.Decode(doc, ni); err != nil {
-				corruptItems++
-			} else {
-				indexes[ni.IndexCreated.FieldName] = *ni
-			}
+		} else {
+			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
+				ni := new(gedb.IndexDTO)
+				if err := mapstructure.Decode(doc, ni); err != nil {
+					corruptItems++
+				} else {
+					indexes[ni.IndexCreated.FieldName] = *ni
+				}
 
-		} else if doc["$$indexRemoved"] != nil {
-			if s, ok := doc["$$indexRemoved"].(string); ok {
-				delete(indexes, s)
+			} else if doc["$$indexRemoved"] != nil {
+				if s, ok := doc["$$indexRemoved"].(string); ok {
+					delete(indexes, s)
+				}
 			}
 		}
 		dataLength++

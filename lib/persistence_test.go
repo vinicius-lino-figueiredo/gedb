@@ -82,7 +82,7 @@ func (s *PersistenceTestSuite) SetupTest() {
 // Every line represents a document (with stream)
 func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
 	rawData3, err3 := serialize(Document{"_id": "3", "nested": Document{"today": now}})
 	s.NoError(err1)
@@ -96,7 +96,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 3)
-	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
+	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
 	s.Equal(Document{"_id": "3", "nested": Document{"today": now}}, treatedData[2])
 }
@@ -108,7 +108,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	ctx := context.Background()
 
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "3", "nested": Document{"today": now}})
 	s.NoError(err1)
 	s.NoError(err2)
@@ -118,7 +118,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
-	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
+	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "nested": Document{"today": now}}, treatedData[1])
 }
 
@@ -126,7 +126,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	now := (time.Time{}).Unix()
 
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
 	rawData3, err3 := serialize(Document{"nested": Document{"today": now}})
 	s.NoError(err1)
@@ -139,7 +139,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
-	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
+	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
 }
 
@@ -147,7 +147,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 func (s *PersistenceTestSuite) TestRepeatedID() {
 	now := (time.Time{}).Unix()
 
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
 	rawData3, err3 := serialize(Document{"_id": "1", "nested": Document{"today": now}})
 	s.NoError(err1)
@@ -168,7 +168,7 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 // If a doc contains $$deleted: true, that means we need to remove it from the data (with stream)
 func (s *PersistenceTestSuite) TestDeleteDoc() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
 	rawData3, err3 := serialize(Document{"_id": "1", "$$deleted": true})
 	rawData4, err4 := serialize(Document{"_id": "3", "today": now})
@@ -187,10 +187,10 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
 }
 
-// If a doc contains $$deleted: true, no error is thrown if the doc wasnt in the list before (with stream)
+// If a doc contains $$deleted: true, no error is thrown if the doc wasnt in the []any before (with stream)
 func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"_id": "2", "$$deleted": true})
 	rawData3, err3 := serialize(Document{"_id": "3", "today": now})
 	s.NoError(err1)
@@ -203,14 +203,14 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
-	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
+	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
 }
 
 // If a doc contains $$indexCreated, no error is thrown during treatRawData and we can get the index options (with stream)
 func (s *PersistenceTestSuite) TestIndexCreated() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": list{1, 5, 12}})
+	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
 	rawData2, err2 := serialize(Document{"$$indexCreated": Document{"fieldName": "test", "unique": true}})
 	rawData3, err3 := serialize(Document{"_id": "3", "today": now})
 	s.NoError(err1)
@@ -226,7 +226,7 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.Len(treatedData, 2)
-	s.Equal(Document{"_id": "1", "a": int64(2), "ages": list{int64(1), int64(5), int64(12)}}, treatedData[0])
+	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
 }
 
@@ -341,7 +341,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.Equal(4, e.DataLength)
 }
 
-// Can listen to compaction events
+// Can []anyen to compaction events
 func (s *PersistenceTestSuite) TestListenEvent() {
 	done := make(chan struct{})
 	ctx := context.Background()
@@ -487,8 +487,8 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		})
 		docs, indexes, err := p.LoadDatabase(ctx)
 		s.Len(docs, 1)
-		s.Equal("earth", docs[0].(Document)["hello"])
-		s.Equal(_id, docs[0].(Document)["_id"])
+		s.Equal("earth", docs[0].Get("hello"))
+		s.Equal(_id, docs[0].Get("_id"))
 		s.Len(indexes, 1) // Original is one, but we're not using datastore
 		s.Contains(indexes, "idefix")
 	})
@@ -645,7 +645,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.NoError(err)
 
 		s.Len(docs, 1)
-		s.Equal("world", docs[0].(Document)["hello"])
+		s.Equal("world", docs[0].Get("hello"))
 
 		s.FileExists("../workspace/it.db")
 		s.NoFileExists("../workspace/it.db~")
@@ -808,8 +808,8 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		docs, _, err = p.LoadDatabase(ctx)
 		s.NoError(err)
 		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
+		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
+		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
 
 		s.FileExists(dbFile)
 		s.NoFileExists(dbFile + "~")
@@ -819,8 +819,8 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		docs, _, err = p2.LoadDatabase(ctx)
 		s.NoError(err)
 		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].(Document)["a"])
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].(Document)["a"])
+		s.Equal("hello", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
+		s.Equal("world", docs[slices.IndexFunc(docs, func(a gedb.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
 
 		s.FileExists(dbFile)
 		s.NoFileExists(dbFile + "~")
