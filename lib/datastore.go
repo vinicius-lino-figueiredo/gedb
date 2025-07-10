@@ -25,6 +25,7 @@ type Datastore struct {
 	executor              *ctxsync.Mutex
 	persistence           gedb.Persistence
 	indexes               map[string]gedb.Index
+	ttlIndexes            map[string]time.Time
 	indexFactory          func(gedb.IndexOptions) gedb.Index
 }
 
@@ -67,7 +68,15 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 
 // CompactDatafile implements gedb.GEDB.
 func (d *Datastore) CompactDatafile(ctx context.Context) error {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return err
+	}
+	defer d.executor.Unlock()
+
+	allData := d.indexes["_id"].GetAll()
+	indexDTOs := d.getIndexDTOs()
+
+	return d.persistence.PersistCachedDatabase(ctx, allData, indexDTOs)
 }
 
 // Count implements gedb.GEDB.
@@ -77,7 +86,16 @@ func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 
 // DropDatabase implements gedb.GEDB.
 func (d *Datastore) DropDatabase(ctx context.Context) error {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return err
+	}
+	defer d.executor.Unlock()
+	ctx = context.WithoutCancel(ctx) // should complete this task
+	// d.StopAutocompaction not added for now
+	IDIdx := d.indexFactory(gedb.IndexOptions{FieldName: "_id"})
+	d.indexes = map[string]gedb.Index{"_id": IDIdx}
+	d.ttlIndexes = make(map[string]time.Time)
+	return d.persistence.DropDatabase(ctx)
 }
 
 // EnsureIndex implements gedb.GEDB.
@@ -98,6 +116,20 @@ func (d *Datastore) FindOne(ctx context.Context, query any, projection any) (ged
 // GetAllData implements gedb.GEDB.
 func (d *Datastore) GetAllData(ctx context.Context) (gedb.Cursor, error) {
 	panic("unimplemented") // TODO: implement
+}
+
+func (d *Datastore) getIndexDTOs() map[string]gedb.IndexDTO {
+	indexDTOs := make(map[string]gedb.IndexDTO, len(d.indexes))
+	for indexName, idx := range d.indexes {
+		indexDTOs[indexName] = gedb.IndexDTO{
+			IndexCreated: gedb.IndexCreated{
+				FieldName: idx.FieldName(),
+				Unique:    idx.Unique(),
+				Sparse:    idx.Sparse(),
+			},
+		}
+	}
+	return indexDTOs
 }
 
 // Insert implements gedb.GEDB.
@@ -131,18 +163,9 @@ func (d *Datastore) LoadDatabase(ctx context.Context) error {
 		return err
 	}
 
-	i := make(map[string]gedb.IndexDTO, len(d.indexes))
-	for indexName, idx := range d.indexes {
-		i[indexName] = gedb.IndexDTO{
-			IndexCreated: gedb.IndexCreated{
-				FieldName: idx.FieldName(),
-				Unique:    idx.Unique(),
-				Sparse:    idx.Sparse(),
-			},
-		}
-	}
+	indexDTOs := d.getIndexDTOs()
 
-	return d.persistence.PersistCachedDatabase(ctx, docs, i)
+	return d.persistence.PersistCachedDatabase(ctx, docs, indexDTOs)
 }
 
 // Remove implements gedb.GEDB.
