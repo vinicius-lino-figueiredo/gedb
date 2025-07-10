@@ -95,6 +95,9 @@ type DatastoreOptions struct {
 	Compare               func(any, any) int
 	FileMode              os.FileMode
 	DirMode               os.FileMode
+	Persistence           Persistence
+	Storage               Storage
+	IndexFactory          func(IndexOptions) Index
 }
 
 type Serializer interface {
@@ -161,6 +164,7 @@ type IndexOptions struct {
 	FieldName string
 	Unique    bool
 	Sparse    bool
+	DTO       IndexDTO
 }
 
 type Update struct {
