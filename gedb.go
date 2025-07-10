@@ -46,9 +46,10 @@ type GEDB interface {
 	// RemoveIndex deletes an existing index by field name(s).
 	RemoveIndex(ctx context.Context, fieldNames []string) error
 
-	// Insert adds one or more documents to the database. Documents must be
-	// structs or maps.
-	Insert(ctx context.Context, newDocs ...any) error
+	// Insert adds one or more documents to the database and returns the
+	// stored versions, including generated metadata like IDs. Documents
+	// must be structs or maps.
+	Insert(ctx context.Context, newDocs ...any) ([]Document, error)
 
 	// Count returns the number of documents matching the given query.
 	Count(ctx context.Context, query any) (int64, error)

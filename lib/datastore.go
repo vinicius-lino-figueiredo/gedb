@@ -133,7 +133,7 @@ func (d *Datastore) getIndexDTOs() map[string]gedb.IndexDTO {
 }
 
 // Insert implements gedb.GEDB.
-func (d *Datastore) Insert(ctx context.Context, newDocs ...any) error {
+func (d *Datastore) Insert(ctx context.Context, newDocs ...any) ([]gedb.Document, error) {
 	panic("unimplemented") // TODO: implement
 }
 
