@@ -8,36 +8,69 @@ import (
 	"time"
 )
 
-type Gedb interface {
+// GEDB defines the main interface for interacting with the embedded database,
+// modeled after the NeDB (Node.js) API. It provides basic persistence,
+// indexing, and query functionality with context-aware operations.
+//
+// All data is stored locally on disk, and operations are safe to use
+// concurrently from multiple goroutines.
+type GEDB interface {
+	// LoadDatabase initializes or loads the database file, preparing it for
+	// further operations. Must be called before using other methods except
+	// for in-memory-only databases.
 	LoadDatabase(ctx context.Context) error
 
+	// DropDatabase permanently deletes all data and removes the database
+	// file, if any.
 	DropDatabase(ctx context.Context) error
 
+	// CompactDatafile rewrites the data file to remove duplicates caused by
+	// append-only file format. Useful to reduce file size.
 	CompactDatafile(ctx context.Context) error
 
+	// SetAutocompactionInterval enables periodic compaction of the data
+	// file. The interval defines how often compaction runs.
 	SetAutocompactionInterval(interval time.Duration)
 
+	// StopAutocompaction disables any ongoing or scheduled auto-compaction
+	// routines.
 	StopAutocompaction()
 
+	// GetAllData returns a cursor over all documents in the datastore.
 	GetAllData(ctx context.Context) (Cursor, error)
 
+	// EnsureIndex creates an index on one or more fields to improve query
+	// performance. If the index already exists, this is a no-op.
 	EnsureIndex(ctx context.Context, options EnsureIndexOptions) error
 
+	// RemoveIndex deletes an existing index by field name(s).
 	RemoveIndex(ctx context.Context, fieldNames []string) error
 
-	Insert(ctx context.Context, newDocs []any) error
+	// Insert adds one or more documents to the database. Documents must be
+	// structs or maps.
+	Insert(ctx context.Context, newDocs ...any) error
 
+	// Count returns the number of documents matching the given query.
 	Count(ctx context.Context, query any) (int64, error)
 
+	// Find returns a cursor over all documents matching the query. A
+	// projection can be used to control which fields are returned.
 	Find(ctx context.Context, query any, projection any) (Cursor, error)
 
-	FindOne(ctx context.Context, query any, projectio any) (Cursor, error)
+	// FindOne returns a cursor over the first document matching the query.
+	FindOne(ctx context.Context, query any, projection any) (Cursor, error)
 
+	// Update modifies documents that match the query using the updateQuery.
+	// Returns the number of documents updated.
 	Update(ctx context.Context, query any, updateQuery any, options UpdateOptions) (int64, error)
 
+	// Remove deletes documents matching the query. Returns the number of
+	// documents removed.
 	Remove(ctx context.Context, query any, options RemoveOptions) (int64, error)
 
-	Compacted(ctx context.Context) error
+	// WaitCompaction blocks until the ongoing compaction process (if any)
+	// completes.
+	WaitCompaction(ctx context.Context) error
 }
 
 type Cursor interface {
