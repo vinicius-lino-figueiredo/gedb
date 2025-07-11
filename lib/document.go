@@ -4,12 +4,70 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"reflect"
+	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
 // Document implements gedb.Document
 type Document map[string]any
+
+// NewDocument returns a new instance of gedb.Document.
+func NewDocument(v any) (gedb.Document, error) {
+	if v == nil {
+		return nil, nil
+	}
+
+	d, err := evaluate(v)
+	if err != nil {
+		return nil, err
+	}
+
+	if doc, ok := d.(gedb.Document); ok {
+		return doc, nil
+	}
+
+	return nil, fmt.Errorf("expected type struct or map, got %T", v)
+}
+
+func evaluate(v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	val := reflect.ValueOf(&v).Elem().Elem()
+	typ := val.Type()
+	res := make(Document)
+	if typ.Kind() == reflect.Map {
+		if typ.Key().Kind() != reflect.String {
+			return nil, fmt.Errorf("invalid map key type")
+		}
+		for _, key := range val.MapKeys() {
+			m, err := evaluate(val.MapIndex(key).Interface())
+			if err != nil {
+				return nil, err
+			}
+			res[key.String()] = m
+		}
+		return res, nil
+	}
+	if typ.Kind() == reflect.Struct {
+		if val.Type() == reflect.TypeFor[time.Time]() {
+			return val.Interface(), nil
+		}
+		for numField := range val.NumField() {
+			field := val.Field(numField)
+			name := typ.Field(numField).Name
+			fieldValue, err := evaluate(field.Interface())
+			if err != nil {
+				return nil, err
+			}
+			res[name] = fieldValue
+		}
+		return res, nil
+	}
+	return v, nil
+}
 
 // ID implements gedb.Document
 func (d Document) ID() string {

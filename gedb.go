@@ -99,6 +99,7 @@ type DatastoreOptions struct {
 	Persistence           Persistence
 	Storage               Storage
 	IndexFactory          func(IndexOptions) Index
+	DocumentFactory       func(any) (Document, error)
 }
 
 type Serializer interface {
