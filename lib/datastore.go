@@ -414,16 +414,6 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...gedb.Document) err
 	return nil
 }
 
-// SetAutocompactionInterval implements gedb.GEDB.
-func (d *Datastore) SetAutocompactionInterval(interval time.Duration) {
-	panic("unimplemented") // TODO: implement
-}
-
-// StopAutocompaction implements gedb.GEDB.
-func (d *Datastore) StopAutocompaction() {
-	panic("unimplemented") // TODO: implement
-}
-
 // Update implements gedb.GEDB.
 func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options gedb.UpdateOptions) (int64, error) {
 	panic("unimplemented") // TODO: implement

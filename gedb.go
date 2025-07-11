@@ -28,14 +28,6 @@ type GEDB interface {
 	// append-only file format. Useful to reduce file size.
 	CompactDatafile(ctx context.Context) error
 
-	// SetAutocompactionInterval enables periodic compaction of the data
-	// file. The interval defines how often compaction runs.
-	SetAutocompactionInterval(interval time.Duration)
-
-	// StopAutocompaction disables any ongoing or scheduled auto-compaction
-	// routines.
-	StopAutocompaction()
-
 	// GetAllData returns a cursor over all documents in the datastore.
 	GetAllData(ctx context.Context) (Cursor, error)
 
