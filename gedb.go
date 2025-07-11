@@ -163,10 +163,11 @@ type Index interface {
 }
 
 type IndexOptions struct {
-	FieldName string
-	Unique    bool
-	Sparse    bool
-	DTO       IndexDTO
+	FieldName   string
+	Unique      bool
+	Sparse      bool
+	ExpireAfter time.Duration
+	DTO         IndexDTO
 }
 
 type Update struct {

@@ -31,7 +31,7 @@ type Datastore struct {
 	executor              *ctxsync.Mutex
 	persistence           gedb.Persistence
 	indexes               map[string]gedb.Index
-	ttlIndexes            map[string]time.Time
+	ttlIndexes            map[string]time.Duration
 	indexFactory          func(gedb.IndexOptions) gedb.Index
 	documentFactory       func(any) (gedb.Document, error)
 }
@@ -183,13 +183,66 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	// d.StopAutocompaction not added for now
 	IDIdx := d.indexFactory(gedb.IndexOptions{FieldName: "_id"})
 	d.indexes = map[string]gedb.Index{"_id": IDIdx}
-	d.ttlIndexes = make(map[string]time.Time)
+	d.ttlIndexes = make(map[string]time.Duration)
 	return d.persistence.DropDatabase(ctx)
 }
 
 // EnsureIndex implements gedb.GEDB.
 func (d *Datastore) EnsureIndex(ctx context.Context, options gedb.EnsureIndexOptions) error {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return err
+	}
+	defer d.executor.Unlock()
+	if len(options.FieldNames) == 0 || slices.Contains(options.FieldNames, "") {
+		return fmt.Errorf("cannot create an index without a fieldName")
+	}
+
+	_fields := slices.Clone(options.FieldNames)
+	slices.Sort(_fields)
+
+	containsComma := func(s string) bool {
+		return strings.ContainsRune(s, ',')
+	}
+	if slices.ContainsFunc(_fields, containsComma) {
+		return errors.New("Cannot use comma in index fieldName")
+	}
+
+	_options := gedb.IndexOptions{
+		FieldName:   strings.Join(_fields, ","),
+		Unique:      options.Unique,
+		Sparse:      options.Sparse,
+		ExpireAfter: options.ExpireAfter,
+	}
+
+	if _, exists := d.indexes[_options.FieldName]; exists {
+		return nil
+	}
+
+	d.indexes[_options.FieldName] = d.indexFactory(_options)
+	if options.ExpireAfter > 0 {
+		d.ttlIndexes[_options.FieldName] = options.ExpireAfter
+	}
+
+	data := d.getAllData()
+	if err := d.indexes[_options.FieldName].Insert(ctx, data...); err != nil {
+		delete(d.indexes, _options.FieldName)
+		return err
+	}
+
+	dto := gedb.IndexDTO{
+		IndexCreated: gedb.IndexCreated{
+			FieldName: _options.FieldName,
+			Unique:    _options.Unique,
+			Sparse:    _options.Sparse,
+		},
+	}
+
+	idxDoc, err := d.documentFactory(dto)
+	if err != nil {
+		return err
+	}
+
+	return d.persistence.PersistNewState(ctx, idxDoc)
 }
 
 // Find implements gedb.GEDB.
@@ -205,6 +258,10 @@ func (d *Datastore) FindOne(ctx context.Context, query any, projection any) (ged
 // GetAllData implements gedb.GEDB.
 func (d *Datastore) GetAllData(ctx context.Context) (gedb.Cursor, error) {
 	panic("unimplemented") // TODO: implement
+}
+
+func (d *Datastore) getAllData() []gedb.Document {
+	return d.indexes["_id"].GetAll()
 }
 
 func (d *Datastore) getIndexDTOs() map[string]gedb.IndexDTO {
