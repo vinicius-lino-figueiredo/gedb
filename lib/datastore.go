@@ -431,5 +431,5 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 
 // WaitCompaction implements gedb.GEDB.
 func (d *Datastore) WaitCompaction(ctx context.Context) error {
-	panic("unimplemented") // TODO: implement
+	return d.persistence.WaitCompaction(ctx)
 }
