@@ -49,6 +49,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 			Serializer:            options.Serializer,
 			Deserializer:          options.Deserializer,
 			Storage:               options.Storage,
+			Decoder:               options.Decoder,
 		}
 		options.Persistence, err = NewPersistence(persistenceOptions)
 		if err != nil {

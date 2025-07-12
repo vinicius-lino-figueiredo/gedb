@@ -92,6 +92,7 @@ type DatastoreOptions struct {
 	Storage               Storage
 	IndexFactory          func(IndexOptions) Index
 	DocumentFactory       func(any) (Document, error)
+	Decoder               Decoder
 }
 
 type Serializer interface {
@@ -155,11 +156,12 @@ type Index interface {
 }
 
 type IndexOptions struct {
-	FieldName   string
-	Unique      bool
-	Sparse      bool
-	ExpireAfter time.Duration
-	DTO         IndexDTO
+	FieldName       string
+	Unique          bool
+	Sparse          bool
+	ExpireAfter     time.Duration
+	DocumentFactory func(any) (Document, error)
+	DTO             IndexDTO
 }
 
 type Update struct {
@@ -202,6 +204,7 @@ type PersistenceOptions struct {
 	Serializer            Serializer
 	Deserializer          Deserializer
 	Storage               Storage
+	Decoder               Decoder
 }
 
 type IndexDTO struct {
@@ -231,4 +234,8 @@ type Persistence interface {
 	TreadRawStream(ctx context.Context, rawStream io.Reader) ([]Document, map[string]IndexDTO, error)
 	WaitCompaction(ctx context.Context) error
 	PersistCachedDatabase(ctx context.Context, allData []Document, indexes map[string]IndexDTO) error
+}
+
+type Decoder interface {
+	Decode(any, any) error
 }

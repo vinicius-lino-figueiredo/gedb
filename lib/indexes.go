@@ -14,12 +14,13 @@ import (
 )
 
 type index struct {
-	fieldName   string
-	_fields     []string
-	unique      bool
-	sparse      bool
-	tree        *bst.BinarySearchTree
-	treeOptions bst.Options
+	fieldName       string
+	_fields         []string
+	unique          bool
+	sparse          bool
+	tree            *bst.BinarySearchTree
+	treeOptions     bst.Options
+	documentFactory func(any) (gedb.Document, error)
 }
 
 // FieldName implements gedb.Index.
@@ -42,13 +43,17 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 		Unique:      options.Unique,
 		CompareKeys: compareThingsFunc(nil),
 	}
+	if options.DocumentFactory == nil {
+		options.DocumentFactory = NewDocument
+	}
 	return &index{
-		fieldName:   options.FieldName,
-		_fields:     strings.Split(options.FieldName, ","),
-		unique:      options.Unique,
-		sparse:      options.Sparse,
-		treeOptions: treeOptions,
-		tree:        bst.NewBinarySearchTree(treeOptions),
+		fieldName:       options.FieldName,
+		_fields:         strings.Split(options.FieldName, ","),
+		unique:          options.Unique,
+		sparse:          options.Sparse,
+		treeOptions:     treeOptions,
+		tree:            bst.NewBinarySearchTree(treeOptions),
+		documentFactory: options.DocumentFactory,
 	}
 }
 
@@ -274,11 +279,11 @@ func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Documen
 		return nil, ctx.Err()
 	default:
 	}
-	d, err := asDoc(query)
+	d, err := i.documentFactory(query)
 	if err != nil {
 		return nil, err
 	}
-	found := i.tree.BetweenBounds(d, nil, nil)
+	found := i.tree.BetweenBounds(Map(d), nil, nil)
 	res := make([]gedb.Document, len(found))
 	for n, f := range found {
 		res[n] = f.(gedb.Document)

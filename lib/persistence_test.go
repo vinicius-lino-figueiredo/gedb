@@ -47,11 +47,12 @@ func (ts testStorage) EnsureFileDoesntExist(filename string) error {
 // including this function are not being added.
 type PersistenceTestSuite struct {
 	suite.Suite
-	storage testStorage
+	storage    testStorage
+	serializer gedb.Serializer
 }
 
 func (s *PersistenceTestSuite) SetupTest() {
-
+	s.serializer = NewSerializer()
 	if err := s.storage.EnsureParentDirectoryExists(testDb, DefaultDirMode); err != nil {
 		s.FailNow("could not ensure parent directory", err)
 	}
@@ -82,15 +83,14 @@ func (s *PersistenceTestSuite) SetupTest() {
 // Every line represents a document (with stream)
 func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
-	rawData3, err3 := serialize(Document{"_id": "3", "nested": Document{"today": now}})
+	ctx := context.Background()
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "2", "hello": "world"})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"_id": "3", "nested": Document{"today": now}})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-
-	ctx := context.Background()
 
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
@@ -108,8 +108,8 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	ctx := context.Background()
 
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "3", "nested": Document{"today": now}})
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "3", "nested": Document{"today": now}})
 	s.NoError(err1)
 	s.NoError(err2)
 	rawData := []byte(string(rawData1) + "\n" + "garbage" + "\n" + string(rawData2))
@@ -125,15 +125,15 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 // Well formatted lines that have no _id are not included in the data (with stream)
 func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	now := (time.Time{}).Unix()
+	ctx := context.Background()
 
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
-	rawData3, err3 := serialize(Document{"nested": Document{"today": now}})
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "2", "hello": "world"})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"nested": Document{"today": now}})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
@@ -146,15 +146,15 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 // If two lines concern the same doc (= same _id), the last one is the good version (with stream)
 func (s *PersistenceTestSuite) TestRepeatedID() {
 	now := (time.Time{}).Unix()
+	ctx := context.Background()
 
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
-	rawData3, err3 := serialize(Document{"_id": "1", "nested": Document{"today": now}})
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "2", "hello": "world"})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"_id": "1", "nested": Document{"today": now}})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	_ = treatedData
@@ -168,17 +168,17 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 // If a doc contains $$deleted: true, that means we need to remove it from the data (with stream)
 func (s *PersistenceTestSuite) TestDeleteDoc() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "2", "hello": "world"})
-	rawData3, err3 := serialize(Document{"_id": "1", "$$deleted": true})
-	rawData4, err4 := serialize(Document{"_id": "3", "today": now})
+	ctx := context.Background()
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "2", "hello": "world"})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"_id": "1", "$$deleted": true})
+	rawData4, err4 := s.serializer.Serialize(ctx, Document{"_id": "3", "today": now})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	s.NoError(err4)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3) + "\n" + string(rawData4))
 
-	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
 	s.NoError(err)
@@ -190,15 +190,15 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 // If a doc contains $$deleted: true, no error is thrown if the doc wasnt in the []any before (with stream)
 func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"_id": "2", "$$deleted": true})
-	rawData3, err3 := serialize(Document{"_id": "3", "today": now})
+	ctx := context.Background()
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"_id": "2", "$$deleted": true})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"_id": "3", "today": now})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	ctx := context.Background()
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
@@ -210,15 +210,15 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 // If a doc contains $$indexCreated, no error is thrown during treatRawData and we can get the index options (with stream)
 func (s *PersistenceTestSuite) TestIndexCreated() {
 	now := (time.Time{}).Unix()
-	rawData1, err1 := serialize(Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
-	rawData2, err2 := serialize(Document{"$$indexCreated": Document{"fieldName": "test", "unique": true}})
-	rawData3, err3 := serialize(Document{"_id": "3", "today": now})
+	ctx := context.Background()
+	rawData1, err1 := s.serializer.Serialize(ctx, Document{"_id": "1", "a": 2, "ages": []any{1, 5, 12}})
+	rawData2, err2 := s.serializer.Serialize(ctx, Document{"$$indexCreated": Document{"fieldName": "test", "unique": true}})
+	rawData3, err3 := s.serializer.Serialize(ctx, Document{"_id": "3", "today": now})
 	s.NoError(err1)
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	ctx := context.Background()
 	treatedData, indexes, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	s.Len(indexes, 1)
@@ -360,14 +360,14 @@ func (s *PersistenceTestSuite) TestSetializers() {
 	//	  const bd = function (s) { return s.substring(7, s.length - 6) }
 	//
 	se := gedb.SerializeFunc(func(ctx context.Context, v any) ([]byte, error) {
-		s, err := (defaultSerializer{}).Serialize(ctx, v)
+		s, err := s.serializer.Serialize(ctx, v)
 		if err != nil {
 			return nil, err
 		}
 		return []byte("before_" + string(s) + "_after"), nil
 	})
 	de := gedb.DeserializeFunc(func(ctx context.Context, b []byte, v any) error {
-		return (defaultDeserializer{}).Deserialize(ctx, b[7:len(b)-6], v)
+		return NewDeserializer(NewDecoder()).Deserialize(ctx, b[7:len(b)-6], v)
 	})
 
 	// Declare only one hook will not cause an error

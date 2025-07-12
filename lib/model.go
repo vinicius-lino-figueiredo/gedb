@@ -1,17 +1,13 @@
 package lib
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/mitchellh/mapstructure"
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
@@ -47,63 +43,15 @@ func checkKey(k string, v any) error {
 	return nil
 }
 
-func serialize(obj any) ([]byte, error) {
-	if doc, err := asDoc(obj); err != nil {
-		for k, v := range doc {
-			if err := checkKey(k, v); err != nil {
-				return nil, err
-			}
+func Map(d gedb.Document) map[string]any {
+	m := make(Document, d.Len())
+	for k, v := range d.Iter() {
+		if doc, ok := v.(gedb.Document); ok {
+			v = Map(doc)
 		}
+		m[k] = v
 	}
-	return json.Marshal(obj)
-}
-
-type defaultSerializer struct{}
-
-func (ds defaultSerializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-	return serialize(obj)
-}
-
-func deserialize(data []byte, v any) error {
-	if v == nil {
-		return errors.New("nil target")
-	}
-	doc := make(Document)
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return err
-	}
-	for k, v := range doc {
-		if k == "$$date" {
-			if i, ok := v.(int64); ok {
-				doc[k] = time.Unix(i, 0)
-			}
-		}
-		if d, ok := v.(gedb.Document); ok && d.Get("$$date") != nil {
-			doc[k] = d.Get("date")
-		}
-	}
-	if p, ok := v.(*Document); ok {
-		*p = doc
-		return nil
-	}
-
-	m := asMap(doc)
-
-	// FIXME: Temporary, decoder should be an interfce
-	cfg := &mapstructure.DecoderConfig{
-		Result:  v,
-		TagName: "gedb",
-	}
-	dec, err := mapstructure.NewDecoder(cfg)
-	if err != nil {
-		return err
-	}
-	return dec.Decode(m)
+	return m
 }
 
 func asMap(doc gedb.Document) map[string]any {
@@ -116,17 +64,6 @@ func asMap(doc gedb.Document) map[string]any {
 		res[k] = v
 	}
 	return res
-}
-
-type defaultDeserializer struct{}
-
-func (dd defaultDeserializer) Deserialize(ctx context.Context, data []byte, v any) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-	return deserialize(data, v)
 }
 
 //	const serialize = obj => {
@@ -382,13 +319,4 @@ func getDotValues(obj any, fields []string) (any, error) {
 		}
 	}
 	return key, nil
-}
-
-func asDoc(v any) (Document, error) {
-	var d Document
-	err := mapstructure.Decode(v, &d)
-	if err != nil {
-		return nil, err
-	}
-	return d, nil
 }

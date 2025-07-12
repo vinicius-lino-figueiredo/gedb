@@ -11,7 +11,6 @@ import (
 	"slices"
 
 	"github.com/dolmen-go/contextio"
-	"github.com/mitchellh/mapstructure"
 	"github.com/vinicius-lino-figueiredo/gedb"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
@@ -32,6 +31,7 @@ type persistence struct {
 	deserializer          gedb.Deserializer
 	broadcaster           *ctxsync.Cond
 	storage               gedb.Storage
+	decoder               gedb.Decoder
 }
 
 func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
@@ -62,12 +62,17 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 
 	serializer := options.Serializer
 	if serializer == nil {
-		serializer = defaultSerializer{}
+		serializer = NewSerializer()
+	}
+
+	decoder := options.Decoder
+	if decoder == nil {
+		decoder = NewDecoder()
 	}
 
 	deserializer := options.Deserializer
 	if deserializer == nil {
-		deserializer = defaultDeserializer{}
+		deserializer = NewDeserializer(decoder)
 	}
 
 	storage := options.Storage
@@ -85,6 +90,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		deserializer:          deserializer,
 		broadcaster:           ctxsync.NewCond(),
 		storage:               storage,
+		decoder:               decoder,
 	}, nil
 }
 
@@ -165,21 +171,12 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 		} else {
 			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
 				ni := new(gedb.IndexDTO)
-				// FIXME: Temporary, decoder should be an interfce
-				cfg := &mapstructure.DecoderConfig{
-					Result:  ni,
-					TagName: "gedb",
-				}
-				dec, err := mapstructure.NewDecoder(cfg)
+				err := p.decoder.Decode(doc, ni)
 				if err != nil {
 					corruptItems++
 					continue
 				}
-				if err := dec.Decode(doc); err != nil {
-					corruptItems++
-				} else {
-					indexes[ni.IndexCreated.FieldName] = *ni
-				}
+				indexes[ni.IndexCreated.FieldName] = *ni
 
 			} else if doc["$$indexRemoved"] != nil {
 				if s, ok := doc["$$indexRemoved"].(string); ok {
