@@ -94,8 +94,16 @@ func deserialize(data []byte, v any) error {
 
 	m := asMap(doc)
 
-	return mapstructure.Decode(&m, v)
-
+	// FIXME: Temporary, decoder should be an interfce
+	cfg := &mapstructure.DecoderConfig{
+		Result:  v,
+		TagName: "gedb",
+	}
+	dec, err := mapstructure.NewDecoder(cfg)
+	if err != nil {
+		return err
+	}
+	return dec.Decode(m)
 }
 
 func asMap(doc gedb.Document) map[string]any {

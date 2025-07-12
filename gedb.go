@@ -205,12 +205,12 @@ type PersistenceOptions struct {
 }
 
 type IndexDTO struct {
-	IndexCreated IndexCreated `json:"$$indexCreated" mapstructure:"$$indexCreated"`
+	IndexCreated IndexCreated `json:"$$indexCreated" gedb:"$$indexCreated,omitzero"`
 }
 type IndexCreated struct {
-	FieldName string `json:"fieldName" mapstructure:"fieldName"`
-	Unique    bool   `json:"unique" mapstructure:"unique"`
-	Sparse    bool   `json:"sparse" mapstructure:"sparse"`
+	FieldName string `json:"fieldName" gedb:"fieldName,omitzero"`
+	Unique    bool   `json:"unique" gedb:"unique,omitzero"`
+	Sparse    bool   `json:"sparse" gedb:"sparse,omitzero"`
 }
 
 type Storage interface {

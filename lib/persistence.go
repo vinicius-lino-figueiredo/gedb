@@ -165,7 +165,17 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 		} else {
 			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
 				ni := new(gedb.IndexDTO)
-				if err := mapstructure.Decode(doc, ni); err != nil {
+				// FIXME: Temporary, decoder should be an interfce
+				cfg := &mapstructure.DecoderConfig{
+					Result:  ni,
+					TagName: "gedb",
+				}
+				dec, err := mapstructure.NewDecoder(cfg)
+				if err != nil {
+					corruptItems++
+					continue
+				}
+				if err := dec.Decode(doc); err != nil {
 					corruptItems++
 				} else {
 					indexes[ni.IndexCreated.FieldName] = *ni

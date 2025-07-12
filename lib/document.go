@@ -5,6 +5,7 @@ import (
 	"iter"
 	"maps"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb"
@@ -38,6 +39,16 @@ func evaluate(v any) (any, error) {
 	val := reflect.ValueOf(&v).Elem().Elem()
 	typ := val.Type()
 	res := make(Document)
+	for {
+		if typ.Kind() != reflect.Pointer {
+			break
+		}
+		if val.IsNil() {
+			return nil, nil
+		}
+		val = val.Elem()
+		typ = typ.Elem()
+	}
 	if typ.Kind() == reflect.Map {
 		if typ.Key().Kind() != reflect.String {
 			return nil, fmt.Errorf("invalid map key type")
@@ -55,9 +66,35 @@ func evaluate(v any) (any, error) {
 		if val.Type() == reflect.TypeFor[time.Time]() {
 			return val.Interface(), nil
 		}
+	Fields:
 		for numField := range val.NumField() {
 			field := val.Field(numField)
-			name := typ.Field(numField).Name
+
+			var name string
+			if tag, ok := typ.Field(numField).Tag.Lookup("gedb"); ok {
+				if tag == "-" {
+					continue
+				}
+				parts := strings.Split(tag, ",")
+				if len(parts) > 0 {
+					if parts[0] == "" {
+						name = typ.Field(numField).Name
+					} else {
+						name = parts[0]
+					}
+					for _, flag := range parts[1:] {
+						if flag == "omitempty" && field.IsNil() {
+							continue Fields
+						}
+						if flag == "omitzero" && field.IsZero() {
+							continue Fields
+						}
+					}
+				}
+			} else {
+				name = typ.Field(numField).Name
+			}
+
 			fieldValue, err := evaluate(field.Interface())
 			if err != nil {
 				return nil, err
