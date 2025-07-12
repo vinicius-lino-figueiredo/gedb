@@ -76,7 +76,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 	}
 
 	return &persistence{
-		inMemoryOnly:          inMemoryOnly,
+		inMemoryOnly:          inMemoryOnly || filename == "",
 		filename:              filename,
 		corruptAlertThreshold: corruptAlertThreshold,
 		fileMode:              fileMode,

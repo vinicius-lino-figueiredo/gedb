@@ -42,7 +42,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		var err error
 		persistenceOptions := gedb.PersistenceOptions{
 			Filename:              options.Filename,
-			InMemoryOnly:          options.InMemoryOnly,
+			InMemoryOnly:          options.InMemoryOnly || options.Filename == "",
 			CorruptAlertThreshold: options.CorruptAlertThreshold,
 			FileMode:              options.FileMode,
 			DirMode:               options.DirMode,
