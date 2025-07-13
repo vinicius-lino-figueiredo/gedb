@@ -2,113 +2,135 @@ package lib
 
 import (
 	"context"
-	"io"
+	"fmt"
+	"sync"
 
 	"github.com/vinicius-lino-figueiredo/gedb"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
 )
 
 // Cursor implements gedb.Cursor.
 type Cursor struct {
-	data       []any
-	index      int64
-	limit      int64
-	projection any
-	sort       any
-	skip       int64
-	storedErr  error
-	query      any
-	mapFn      any
-	ctx        context.Context
+	data      []any
+	sort      any
+	ctx       context.Context
+	mu        *ctxsync.Mutex
+	dec       gedb.Decoder
+	once      sync.Once
+	started   bool
+	closed    bool
+	storedErr error
 }
 
 // NewCursor returns a new implementation of Cursor
-func NewCursor(ctx context.Context, data []any, options cursorOptions) *Cursor {
-	c := Cursor{
-		ctx:   ctx,
-		query: options.query,
-		mapFn: options.mapFn,
-		data:  data,
+func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOptions) (gedb.Cursor, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
-	return &c
+	if options.Matcher == nil {
+		options.Matcher = NewMatcher()
+	}
+	if options.Decoder == nil {
+		options.Decoder = NewDecoder()
+	}
+
+	if len(data) == 0 || int64(len(data)) < options.Skip {
+		return &Cursor{ctx: ctx, mu: ctxsync.NewMutex()}, nil
+	}
+
+	matches := make([]any, 0, len(data))
+
+	var skipped int64
+
+	for _, doc := range data {
+		if skipped < options.Skip {
+			skipped++
+			continue
+		}
+		doesMatch := true
+		var err error
+		if options.Query != nil {
+			doesMatch, err = options.Matcher.Match(doc, options.Query)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if doesMatch {
+			matches = append(matches, doc)
+			if int64(len(matches)) == options.Limit {
+				break
+			}
+		}
+	}
+
+	cur := &Cursor{
+		ctx:  ctx,
+		data: matches,
+		mu:   ctxsync.NewMutex(),
+		dec:  options.Decoder,
+	}
+
+	return cur, nil
 }
 
-type cursorOptions struct {
-	query      any
-	mapFn      func(any) any
-	limit      int64
-	skip       int64
-	sort       any
-	projection any
+// Err implements gedb.Cursor.
+func (c *Cursor) Err() error {
+	return c.storedErr
 }
 
 // Exec implements gedb.Cursor.
 func (c *Cursor) Exec(ctx context.Context, target any) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
+	innerCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancel(context.Cause(ctx))
+		case <-c.ctx.Done():
+			cancel(context.Cause(innerCtx))
+		case <-innerCtx.Done():
+		}
+	}()
+	if err := c.mu.LockWithContext(innerCtx); err != nil {
+		return err
 	}
+	defer c.mu.Unlock()
 	if c.storedErr != nil {
 		return c.storedErr
 	}
-	if target == nil {
-		return &errs.ErrTargetNil{}
+	if !c.started {
+		return fmt.Errorf("called Exec before calling Next")
 	}
-	// TODO: Implement cursor deserialization
-	panic("unimplemented")
-}
-
-// ID implements gedb.Cursor.
-func (c *Cursor) ID() string {
-	// TODO: Implement cursor ID getter
-	panic("unimplemented")
-}
-
-// Limit implements gedb.Cursor.
-func (c *Cursor) Limit(n int64) gedb.Cursor {
-	c.limit = n
-	return c
-}
-
-// Projection implements gedb.Cursor.
-func (c *Cursor) Projection(query any) gedb.Cursor {
-	c.projection = query
-	return c
-}
-
-// Skip implements gedb.Cursor.
-func (c *Cursor) Skip(n int64) gedb.Cursor {
-	c.skip = n
-	return c
-}
-
-// Sort implements gedb.Cursor.
-func (c *Cursor) Sort(query any) gedb.Cursor {
-	c.sort = query
-	return c
+	if len(c.data) == 0 {
+		return fmt.Errorf("called Exec on empty Cursor")
+	}
+	data := c.data[0]
+	return c.dec.Decode(data, target)
 }
 
 // Close implements gedb.Cursor.
-func (c *Cursor) Close() {
-	// TODO: Implement cursor Close function
-	panic("unimplemented")
+func (c *Cursor) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.data) > 0 {
+		c.storedErr = fmt.Errorf("cursor is closed")
+	}
+	c.data = nil
+	return nil
 }
 
 // Next implements gedb.Cursor.
-func (c *Cursor) Next(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		c.storedErr = ctx.Err()
-		return false
-	default:
-	}
-	c.index++
-	if c.index >= int64(len(c.data)) {
-		c.storedErr = io.EOF
+func (c *Cursor) Next() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.data) == 0 {
 		return false
 	}
-	return true
+	if c.started {
+		c.data = c.data[1:]
+	}
+	c.started = true
+	return len(c.data) > 0
 }
-
-var _ gedb.Cursor = (*Cursor)(nil)

@@ -67,14 +67,10 @@ type GEDB interface {
 }
 
 type Cursor interface {
-	ID() string
-	Projection(query any) Cursor
 	Exec(ctx context.Context, target any) error
-	Sort(query any) Cursor
-	Skip(n int64) Cursor
-	Limit(n int64) Cursor
-	Next(ctx context.Context) bool
-	Close()
+	Next() bool
+	Err() error
+	Close() error
 }
 
 type DatastoreOptions struct {
@@ -93,6 +89,8 @@ type DatastoreOptions struct {
 	IndexFactory          func(IndexOptions) Index
 	DocumentFactory       func(any) (Document, error)
 	Decoder               Decoder
+	Matcher               Matcher
+	CursorFactory         func(context.Context, []Document, CursorOptions) (Cursor, error)
 }
 
 type Serializer interface {
@@ -239,4 +237,18 @@ type Persistence interface {
 
 type Decoder interface {
 	Decode(any, any) error
+}
+
+type CursorOptions struct {
+	Query      any
+	Limit      int64
+	Skip       int64
+	Sort       any
+	Projection any
+	Matcher    Matcher
+	Decoder    Decoder
+}
+
+type Matcher interface {
+	Match(any, any) (bool, error)
 }

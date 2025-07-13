@@ -34,6 +34,7 @@ type Datastore struct {
 	ttlIndexes            map[string]time.Duration
 	indexFactory          func(gedb.IndexOptions) gedb.Index
 	documentFactory       func(any) (gedb.Document, error)
+	cursorFactory         func(context.Context, []gedb.Document, gedb.CursorOptions) (gedb.Cursor, error)
 }
 
 // NewDatastore returns a new implementation of Datastore
@@ -62,6 +63,12 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.DocumentFactory == nil {
 		options.DocumentFactory = NewDocument
 	}
+	if options.Matcher == nil {
+		options.Matcher = NewMatcher()
+	}
+	if options.CursorFactory == nil {
+		options.CursorFactory = NewCursor
+	}
 	IDIdx := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
 	return &Datastore{
 		filename:              options.Filename,
@@ -75,6 +82,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		persistence:           options.Persistence,
 		indexFactory:          options.IndexFactory,
 		documentFactory:       options.DocumentFactory,
+		cursorFactory:         options.CursorFactory,
 	}, nil
 }
 
@@ -155,7 +163,22 @@ func (d *Datastore) CompactDatafile(ctx context.Context) error {
 
 // Count implements gedb.GEDB.
 func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return 0, err
+	}
+	defer d.executor.Unlock()
+	cur, err := d.cursorFactory(ctx, d.getAllData(), gedb.CursorOptions{Query: query})
+	if err != nil {
+		return 0, err
+	}
+	var count int64
+	for cur.Next() {
+		count++
+	}
+	if err := cur.Err(); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (d *Datastore) createNewID() (string, error) {
@@ -258,7 +281,11 @@ func (d *Datastore) FindOne(ctx context.Context, query any, projection any) (ged
 
 // GetAllData implements gedb.GEDB.
 func (d *Datastore) GetAllData(ctx context.Context) (gedb.Cursor, error) {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return nil, err
+	}
+	defer d.executor.Unlock()
+	return d.cursorFactory(ctx, d.getAllData(), gedb.CursorOptions{})
 }
 
 func (d *Datastore) getAllData() []gedb.Document {
