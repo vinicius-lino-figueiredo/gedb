@@ -403,7 +403,32 @@ func (d *Datastore) removeFromIndexes(ctx context.Context, doc gedb.Document) er
 
 // RemoveIndex implements gedb.GEDB.
 func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames []string) error {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return err
+	}
+	defer d.executor.Unlock()
+	_fields := slices.Clone(fieldNames)
+	slices.Sort(_fields)
+
+	containsComma := func(s string) bool {
+		return strings.ContainsRune(s, ',')
+	}
+	if slices.ContainsFunc(_fields, containsComma) {
+		return errors.New("Cannot use comma in index fieldName")
+	}
+	fieldName := strings.Join(_fields, ",")
+	delete(d.indexes, fieldName)
+
+	dto := gedb.IndexDTO{
+		IndexRemoved: true,
+	}
+
+	idxDoc, err := d.documentFactory(dto)
+	if err != nil {
+		return err
+	}
+
+	return d.persistence.PersistNewState(ctx, idxDoc)
 }
 
 func (d *Datastore) resetIndexes(ctx context.Context, docs ...gedb.Document) error {

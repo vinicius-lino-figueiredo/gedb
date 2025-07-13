@@ -209,6 +209,7 @@ type PersistenceOptions struct {
 
 type IndexDTO struct {
 	IndexCreated IndexCreated `json:"$$indexCreated" gedb:"$$indexCreated,omitzero"`
+	IndexRemoved bool         `json:"$$indexRemoved" gedb:"$$indexRemoved,omitzero"`
 }
 type IndexCreated struct {
 	FieldName string `json:"fieldName" gedb:"fieldName,omitzero"`
