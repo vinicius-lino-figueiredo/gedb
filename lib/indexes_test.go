@@ -303,9 +303,9 @@ func (s *IndexesTestSuite) TestInsertion() {
 		// Supports field names separated by commas
 		s.Run("SupportFieldNameSeparatedByComma", func() {
 			idx := NewIndex(gedb.IndexOptions{FieldName: "tf,tf2"}).(*index)
-			doc1 := Document{"a": 5, "tf": "hello", "tf2": int64(7)}
-			doc2 := Document{"a": 8, "tf": "hello", "tf2": int64(6)}
-			doc3 := Document{"a": 2, "tf": "bloup", "tf2": int64(3)}
+			doc1 := Document{"a": int64(5), "tf": "hello", "tf2": int64(7)}
+			doc2 := Document{"a": int64(8), "tf": "hello", "tf2": int64(6)}
+			doc3 := Document{"a": int64(2), "tf": "bloup", "tf2": int64(3)}
 
 			ctx := context.Background()
 
@@ -315,9 +315,9 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 			// The underlying BST now has 3 nodes which contain the docs where it's expected
 			s.Equal(3, idx.tree.GetNumberOfKeys())
-			slices.Equal([]any{Document{"a": 5, "tf": "hello", "tf2": 7}}, idx.tree.Search(Document{"tf": "hello", "tf2": 7}))
-			slices.Equal([]any{Document{"a": 8, "tf": "hello", "tf2": 6}}, idx.tree.Search(Document{"tf": "hello", "tf2": 6}))
-			slices.Equal([]any{Document{"a": 2, "tf": "bloup", "tf2": 3}}, idx.tree.Search(Document{"tf": "bloup", "tf2": 3}))
+			s.Equal([]any{Document{"a": int64(5), "tf": "hello", "tf2": int64(7)}}, idx.tree.Search(Document{"tf": "hello", "tf2": int64(7)}))
+			s.Equal([]any{Document{"a": int64(8), "tf": "hello", "tf2": int64(6)}}, idx.tree.Search(Document{"tf": "hello", "tf2": int64(6)}))
+			s.Equal([]any{Document{"a": int64(2), "tf": "bloup", "tf2": int64(3)}}, idx.tree.Search(Document{"tf": "bloup", "tf2": int64(3)}))
 
 			// The nodes contain pointers to the actual documents
 			s.Equal(doc2, idx.tree.Search(Document{"tf": "hello", "tf2": int64(6)})[0])
