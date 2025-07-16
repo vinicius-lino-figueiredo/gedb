@@ -49,10 +49,14 @@ type PersistenceTestSuite struct {
 	suite.Suite
 	storage    testStorage
 	serializer gedb.Serializer
+	comparer   gedb.Comparer
 }
 
 func (s *PersistenceTestSuite) SetupTest() {
-	s.serializer = NewSerializer()
+
+	s.comparer = NewComparer()
+
+	s.serializer = NewSerializer(s.comparer)
 	if err := s.storage.EnsureParentDirectoryExists(testDb, DefaultDirMode); err != nil {
 		s.FailNow("could not ensure parent directory", err)
 	}
@@ -94,7 +98,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 3)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -116,7 +120,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "nested": Document{"today": now}}, treatedData[1])
@@ -137,7 +141,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -159,7 +163,7 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 	s.NoError(err)
 	_ = treatedData
 
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "nested": Document{"today": now}}, treatedData[0])
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[1])
@@ -180,7 +184,7 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3) + "\n" + string(rawData4))
 
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.NoError(err)
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "2", "hello": "world"}, treatedData[0])
@@ -201,7 +205,7 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 
 	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
@@ -224,7 +228,7 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 	s.Len(indexes, 1)
 	s.Equal(gedb.IndexDTO{IndexCreated: gedb.IndexCreated{FieldName: "test", Unique: true}}, indexes["test"])
 
-	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return compareThings(a.ID(), b.ID(), nil) })
+	slices.SortFunc(treatedData, func(a, b gedb.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
 	s.Equal(Document{"_id": "1", "a": int64(2), "ages": []any{int64(1), int64(5), int64(12)}}, treatedData[0])
 	s.Equal(Document{"_id": "3", "today": now}, treatedData[1])
@@ -1061,6 +1065,11 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 		s.NoError(err)
 		s.Len(docs, 1)
 	})
+}
+
+func (s *PersistenceTestSuite) compareThings(a any, b any) int {
+	comp, _ := s.comparer.Compare(a, b)
+	return comp
 }
 
 func TestPersistenceTestSuite(t *testing.T) {

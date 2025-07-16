@@ -21,6 +21,18 @@ type Deserializer struct {
 	decoder gedb.Decoder
 }
 
+func (d Deserializer) asMap(doc gedb.Document) map[string]any {
+	res := make(map[string]any)
+	for k, v := range doc.Iter() {
+		v2, ok := v.(gedb.Document)
+		if ok {
+			v = d.asMap(v2)
+		}
+		res[k] = v
+	}
+	return res
+}
+
 // Deserialize implements gedb.Deserializer.
 func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error {
 	select {
@@ -50,7 +62,7 @@ func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error
 		return nil
 	}
 
-	m := asMap(doc)
+	m := d.asMap(doc)
 
 	return d.decoder.Decode(m, v)
 }

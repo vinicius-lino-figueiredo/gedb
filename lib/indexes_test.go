@@ -14,6 +14,11 @@ import (
 
 type IndexesTestSuite struct {
 	suite.Suite
+	comparer gedb.Comparer
+}
+
+func (s *IndexesTestSuite) SetupSuite() {
+	s.comparer = NewComparer()
 }
 
 func (s *IndexesTestSuite) TestInsertion() {
@@ -262,14 +267,14 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.NoError(idx.Insert(ctx, obj))
 			s.NoError(idx.Insert(ctx, obj2))
 			s.Len(idx.GetMatching("aa"), 2)
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return s.compareThings(obj, d) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return s.compareThings(obj2, d) == 0 }))
 			s.Len(idx.GetMatching("cc"), 1)
 
 			s.NoError(idx.Remove(ctx, obj2))
 			s.Len(idx.GetMatching("aa"), 1)
-			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj, d, nil) == 0 }))
-			s.Equal(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return compareThings(obj2, d, nil) == 0 }))
+			s.NotEqual(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return s.compareThings(obj, d) == 0 }))
+			s.Equal(-1, slices.IndexFunc(idx.GetMatching("aa"), func(d gedb.Document) bool { return s.compareThings(obj2, d) == 0 }))
 			s.Len(idx.GetMatching("cc"), 0)
 		})
 
@@ -898,6 +903,11 @@ func (s *IndexesTestSuite) TestGetAll() {
 	s.NoError(idx.Insert(ctx, doc3))
 
 	s.Equal([]gedb.Document{Document{"a": 2, "tf": "bloup"}, Document{"a": 5, "tf": "hello"}, Document{"a": 8, "tf": "world"}}, idx.GetAll())
+}
+
+func (s *IndexesTestSuite) compareThings(a any, b any) int {
+	comp, _ := s.comparer.Compare(a, b)
+	return comp
 }
 
 func TestIndexesTestSuite(t *testing.T) {

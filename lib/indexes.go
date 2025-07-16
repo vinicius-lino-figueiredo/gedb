@@ -21,6 +21,7 @@ type index struct {
 	tree            *bst.BinarySearchTree
 	treeOptions     bst.Options
 	documentFactory func(any) (gedb.Document, error)
+	comparer        gedb.Comparer
 }
 
 // FieldName implements gedb.Index.
@@ -39,9 +40,15 @@ func (i *index) Unique() bool {
 }
 
 func NewIndex(options gedb.IndexOptions) gedb.Index {
+	if options.Comparer == nil {
+		options.Comparer = NewComparer()
+	}
 	treeOptions := bst.Options{
-		Unique:      options.Unique,
-		CompareKeys: compareThingsFunc(nil),
+		Unique: options.Unique,
+		CompareKeys: func(a, b any) int {
+			comp, _ := options.Comparer.Compare(a, b)
+			return comp
+		},
 	}
 	if options.DocumentFactory == nil {
 		options.DocumentFactory = NewDocument
@@ -54,6 +61,7 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 		treeOptions:     treeOptions,
 		tree:            bst.NewBinarySearchTree(treeOptions),
 		documentFactory: options.DocumentFactory,
+		comparer:        options.Comparer,
 	}
 }
 
@@ -104,8 +112,8 @@ DocInsertion:
 			l = []any{key}
 		}
 
-		slices.SortFunc(l, compareThingsFunc(nil))
-		l = slices.CompactFunc(l, func(a, b any) bool { return compareThingsFunc(nil)(a, b) == 0 })
+		slices.SortFunc(l, i.compareThings)
+		l = slices.CompactFunc(l, func(a, b any) bool { return i.compareThings(a, b) == 0 })
 
 		for _, k := range l {
 			if err = i.tree.Insert(k, d); err != nil {
@@ -158,7 +166,7 @@ func (i *index) Remove(ctx context.Context, docs ...gedb.Document) error {
 
 		if l, ok := key.([]any); ok {
 			uniq := slices.Clone(l)
-			slices.SortFunc(uniq, compareThingsFunc(nil))
+			slices.SortFunc(uniq, i.compareThings)
 			uniq = slices.Compact(uniq)
 			for _, _key := range uniq {
 				i.tree.Delete(_key, d)
@@ -283,7 +291,13 @@ func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Documen
 	if err != nil {
 		return nil, err
 	}
-	found := i.tree.BetweenBounds(Map(d), nil, nil)
+
+	m := make(Document, d.Len())
+	for k, v := range d.Iter() {
+		m[k] = v
+	}
+
+	found := i.tree.BetweenBounds(m, nil, nil)
 	res := make([]gedb.Document, len(found))
 	for n, f := range found {
 		res[n] = f.(gedb.Document)
@@ -299,4 +313,9 @@ func (i *index) GetAll() []gedb.Document {
 		}
 	})
 	return res
+}
+
+func (i *index) compareThings(a any, b any) int {
+	comp, _ := i.comparer.Compare(a, b)
+	return comp
 }

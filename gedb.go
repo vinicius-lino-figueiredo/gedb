@@ -159,6 +159,7 @@ type IndexOptions struct {
 	Sparse          bool
 	ExpireAfter     time.Duration
 	DocumentFactory func(any) (Document, error)
+	Comparer        Comparer
 	DTO             IndexDTO
 }
 
@@ -203,6 +204,7 @@ type PersistenceOptions struct {
 	Deserializer          Deserializer
 	Storage               Storage
 	Decoder               Decoder
+	Comparer              Comparer
 }
 
 type IndexDTO struct {
@@ -251,4 +253,8 @@ type CursorOptions struct {
 
 type Matcher interface {
 	Match(any, any) (bool, error)
+}
+
+type Comparer interface {
+	Compare(any, any) (int, error)
 }

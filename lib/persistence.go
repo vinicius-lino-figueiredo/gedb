@@ -32,6 +32,7 @@ type persistence struct {
 	broadcaster           *ctxsync.Cond
 	storage               gedb.Storage
 	decoder               gedb.Decoder
+	comparer              gedb.Comparer
 }
 
 func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
@@ -60,9 +61,14 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		return nil, errors.New("the datafile name can't end with a ~, which is reserved for crash safe backup files")
 	}
 
+	comparer := options.Comparer
+	if comparer == nil {
+		comparer = NewComparer()
+	}
+
 	serializer := options.Serializer
 	if serializer == nil {
-		serializer = NewSerializer()
+		serializer = NewSerializer(options.Comparer)
 	}
 
 	decoder := options.Decoder
@@ -91,6 +97,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		broadcaster:           ctxsync.NewCond(),
 		storage:               storage,
 		decoder:               decoder,
+		comparer:              comparer,
 	}, nil
 }
 
@@ -163,7 +170,12 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 			continue
 		}
 		if doc.Has("_id") {
-			if compareThings(doc.Get("$$deleted"), true, nil) == 0 {
+			comp, err := p.comparer.Compare(doc.Get("$$deleted"), true)
+			if err != nil {
+				corruptItems++
+				continue
+			}
+			if comp == 0 {
 				delete(dataByID, doc.ID())
 			} else {
 				dataByID[doc.ID()] = doc
