@@ -21,18 +21,6 @@ type Deserializer struct {
 	decoder gedb.Decoder
 }
 
-func (d Deserializer) asMap(doc gedb.Document) map[string]any {
-	res := make(map[string]any)
-	for k, v := range doc.Iter() {
-		v2, ok := v.(gedb.Document)
-		if ok {
-			v = d.asMap(v2)
-		}
-		res[k] = v
-	}
-	return res
-}
-
 // Deserialize implements gedb.Deserializer.
 func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error {
 	select {
@@ -43,6 +31,9 @@ func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error
 	if v == nil {
 		return errors.New("nil target")
 	}
+	// this should be the only use of Document outside of the context. Here
+	// we could use a map[string]any, but Document is slightly faster when
+	// unmarshaling json.
 	doc := make(Document)
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return err
@@ -53,16 +44,14 @@ func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error
 				doc[k] = time.Unix(i, 0)
 			}
 		}
-		if d, ok := v.(gedb.Document); ok && d.Get("$$date") != nil {
-			doc[k] = d.Get("date")
+		if d, ok := v.(map[string]any); ok && d["$$date"] != nil {
+			doc[k] = d["date"]
 		}
 	}
-	if p, ok := v.(*Document); ok {
+	if p, ok := v.(*map[string]any); ok {
 		*p = doc
 		return nil
 	}
 
-	m := d.asMap(doc)
-
-	return d.decoder.Decode(m, v)
+	return d.decoder.Decode(doc, v)
 }

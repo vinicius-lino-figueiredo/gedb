@@ -205,6 +205,7 @@ type PersistenceOptions struct {
 	Storage               Storage
 	Decoder               Decoder
 	Comparer              Comparer
+	DocumentFactory       func(any) (Document, error)
 }
 
 type IndexDTO struct {

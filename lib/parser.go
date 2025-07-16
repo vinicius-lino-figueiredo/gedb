@@ -3,7 +3,6 @@ package lib
 import (
 	"errors"
 	"strconv"
-	"strings"
 )
 
 type parser struct {
@@ -187,11 +186,7 @@ func (p *parser) num() (any, error) {
 	s := string(p.data[start:p.i])
 	var v any
 	var err error
-	if strings.ContainsRune(s, '.') {
-		v, err = strconv.ParseFloat(s, 64)
-	} else {
-		v, err = strconv.ParseInt(s, 10, 64)
-	}
+	v, err = strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, errors.New("invalid number")
 	}

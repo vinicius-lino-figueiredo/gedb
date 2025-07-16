@@ -33,6 +33,7 @@ type persistence struct {
 	storage               gedb.Storage
 	decoder               gedb.Decoder
 	comparer              gedb.Comparer
+	documentFactory       func(any) (gedb.Document, error)
 }
 
 func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
@@ -86,6 +87,11 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		storage = DefaultStorage{}
 	}
 
+	documentFactory := options.DocumentFactory
+	if documentFactory == nil {
+		documentFactory = NewDocument
+	}
+
 	return &persistence{
 		inMemoryOnly:          inMemoryOnly || filename == "",
 		filename:              filename,
@@ -98,6 +104,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		storage:               storage,
 		decoder:               decoder,
 		comparer:              comparer,
+		documentFactory:       documentFactory,
 	}, nil
 }
 
@@ -162,11 +169,16 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 		if len(line) == 0 {
 			continue
 		}
-		doc := make(Document)
-		err := p.deserializer.Deserialize(ctx, line, &doc)
+		m := make(map[string]any)
+		err := p.deserializer.Deserialize(ctx, line, &m)
 		if err != nil {
 			corruptItems++
 			dataLength++
+			continue
+		}
+		doc, err := p.documentFactory(m)
+		if err != nil {
+			corruptItems++
 			continue
 		}
 		if doc.Has("_id") {
@@ -190,8 +202,8 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 				}
 				indexes[ni.IndexCreated.FieldName] = *ni
 
-			} else if doc["$$indexRemoved"] != nil {
-				if s, ok := doc["$$indexRemoved"].(string); ok {
+			} else if doc.Get("$$indexRemoved") != nil {
+				if s, ok := doc.Get("$$indexRemoved").(string); ok {
 					delete(indexes, s)
 				}
 			}

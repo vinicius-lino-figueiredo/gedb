@@ -292,10 +292,7 @@ func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Documen
 		return nil, err
 	}
 
-	m := make(Document, d.Len())
-	for k, v := range d.Iter() {
-		m[k] = v
-	}
+	m := maps.Collect(d.Iter())
 
 	found := i.tree.BetweenBounds(m, nil, nil)
 	res := make([]gedb.Document, len(found))
