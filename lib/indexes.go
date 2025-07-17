@@ -13,7 +13,8 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
-type index struct {
+// Index implements gedb.Index.
+type Index struct {
 	fieldName       string
 	_fields         []string
 	unique          bool
@@ -25,20 +26,21 @@ type index struct {
 }
 
 // FieldName implements gedb.Index.
-func (i *index) FieldName() string {
+func (i *Index) FieldName() string {
 	return i.fieldName
 }
 
 // Sparse implements gedb.Index.
-func (i *index) Sparse() bool {
+func (i *Index) Sparse() bool {
 	return i.sparse
 }
 
 // Unique implements gedb.Index.
-func (i *index) Unique() bool {
+func (i *Index) Unique() bool {
 	return i.unique
 }
 
+// NewIndex returns a new implementation of gedb.Index.
 func NewIndex(options gedb.IndexOptions) gedb.Index {
 	if options.Comparer == nil {
 		options.Comparer = NewComparer()
@@ -53,7 +55,7 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 	if options.DocumentFactory == nil {
 		options.DocumentFactory = NewDocument
 	}
-	return &index{
+	return &Index{
 		fieldName:       options.FieldName,
 		_fields:         strings.Split(options.FieldName, ","),
 		unique:          options.Unique,
@@ -65,7 +67,8 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 	}
 }
 
-func (i *index) Reset(ctx context.Context, newData ...gedb.Document) error {
+// Reset implements gedb.Index.
+func (i *Index) Reset(ctx context.Context, newData ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -75,7 +78,8 @@ func (i *index) Reset(ctx context.Context, newData ...gedb.Document) error {
 	return i.Insert(ctx, newData...)
 }
 
-func (i *index) Insert(ctx context.Context, docs ...gedb.Document) error {
+// Insert implements gedb.Index.
+func (i *Index) Insert(ctx context.Context, docs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -145,7 +149,8 @@ DocInsertion:
 	return nil
 }
 
-func (i *index) Remove(ctx context.Context, docs ...gedb.Document) error {
+// Remove implements gedb.Index.
+func (i *Index) Remove(ctx context.Context, docs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -178,7 +183,8 @@ func (i *index) Remove(ctx context.Context, docs ...gedb.Document) error {
 	return nil
 }
 
-func (i *index) Update(ctx context.Context, oldDoc, newDoc gedb.Document) error {
+// Update implements gedb.Index.
+func (i *Index) Update(ctx context.Context, oldDoc, newDoc gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -197,7 +203,8 @@ func (i *index) Update(ctx context.Context, oldDoc, newDoc gedb.Document) error 
 	return nil
 }
 
-func (i *index) UpdateMultipleDocs(ctx context.Context, pairs ...gedb.Update) error {
+// UpdateMultipleDocs implements gedb.Index.
+func (i *Index) UpdateMultipleDocs(ctx context.Context, pairs ...gedb.Update) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -240,11 +247,13 @@ Loop:
 	return err
 }
 
-func (i *index) RevertUpdate(ctx context.Context, oldDoc, newDoc gedb.Document) error {
+// RevertUpdate implements gedb.Index.
+func (i *Index) RevertUpdate(ctx context.Context, oldDoc, newDoc gedb.Document) error {
 	return i.Update(ctx, newDoc, oldDoc)
 }
 
-func (i *index) RevertMultipleUpdates(ctx context.Context, pairs ...gedb.Update) error {
+// RevertMultipleUpdates implements gedb.Index.
+func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...gedb.Update) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -258,7 +267,8 @@ func (i *index) RevertMultipleUpdates(ctx context.Context, pairs ...gedb.Update)
 	return i.UpdateMultipleDocs(ctx, revert...)
 }
 
-func (i *index) GetMatching(value ...any) []gedb.Document {
+// GetMatching implements gedb.Index.
+func (i *Index) GetMatching(value ...any) []gedb.Document {
 	res := []gedb.Document{}
 	_res := make(map[string][]gedb.Document)
 	for _, v := range value {
@@ -281,7 +291,8 @@ func (i *index) GetMatching(value ...any) []gedb.Document {
 	return res
 }
 
-func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Document, error) {
+// GetBetweenBounds implements gedb.Index.
+func (i *Index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Document, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -302,7 +313,8 @@ func (i *index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Documen
 	return res, nil
 }
 
-func (i *index) GetAll() []gedb.Document {
+// GetAll implements gedb.Index.
+func (i *Index) GetAll() []gedb.Document {
 	var res []gedb.Document
 	i.tree.ExecuteOnEveryNode(func(bst *bst.BinarySearchTree) {
 		for _, data := range bst.Data() {
@@ -312,7 +324,7 @@ func (i *index) GetAll() []gedb.Document {
 	return res
 }
 
-func (i *index) compareThings(a any, b any) int {
+func (i *Index) compareThings(a any, b any) int {
 	comp, _ := i.comparer.Compare(a, b)
 	return comp
 }

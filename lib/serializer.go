@@ -10,17 +10,20 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
+// Serializer implements gedb.Serializer.
 type Serializer struct {
 	comparer gedb.Comparer
 }
 
+// NewSerializer returns a new implementation of gedb.Serializer.
 func NewSerializer(comparer gedb.Comparer) gedb.Serializer {
-	return Serializer{
+	return &Serializer{
 		comparer: comparer,
 	}
 }
 
-func (s Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
+// Serialize implements gedb.Serializer.
+func (s *Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -36,7 +39,7 @@ func (s Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-func (s Serializer) checkKey(k string, v any) error {
+func (s *Serializer) checkKey(k string, v any) error {
 	if strings.ContainsRune(k, '.') {
 		return errors.New("field names cannot contain a '.'")
 	}
@@ -60,7 +63,7 @@ func (s Serializer) checkKey(k string, v any) error {
 	return nil
 }
 
-func (s Serializer) isNumber(v any) bool {
+func (s *Serializer) isNumber(v any) bool {
 	if v == nil {
 		return false
 	}
@@ -75,7 +78,7 @@ func (s Serializer) isNumber(v any) bool {
 	}
 }
 
-func (s Serializer) isTrue(v any) bool {
+func (s *Serializer) isTrue(v any) bool {
 	if v == nil {
 		return false
 	}

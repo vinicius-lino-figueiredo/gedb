@@ -97,16 +97,20 @@ type Serializer interface {
 	Serialize(context.Context, any) ([]byte, error)
 }
 
+// SerializeFunc implements Serializer.
 type SerializeFunc func(context.Context, any) ([]byte, error)
 
+// Serialize implements Serializer.
 func (s SerializeFunc) Serialize(ctx context.Context, v any) ([]byte, error) { return s(ctx, v) }
 
 type Deserializer interface {
 	Deserialize(context.Context, []byte, any) error
 }
 
+// DeserializeFunc implements Deserializer.
 type DeserializeFunc func(context.Context, []byte, any) error
 
+// Deserialize implements Deserializer.
 func (s DeserializeFunc) Deserialize(ctx context.Context, b []byte, v any) error {
 	return s(ctx, b, v)
 }

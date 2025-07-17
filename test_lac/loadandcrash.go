@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	per, err := lib.NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/lac.db", Storage: fakeStorage{}})
+	per, err := lib.NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/lac.db", Storage: fakeStorage{lib.NewStorage()}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func (f fakeWriteStream) Close() error {
 }
 
 type fakeStorage struct {
-	lib.DefaultStorage
+	gedb.Storage
 }
 
 func (fs fakeStorage) AppendFile(filename string, mode os.FileMode, data []byte) (int, error) {

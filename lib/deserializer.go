@@ -22,7 +22,7 @@ type Deserializer struct {
 }
 
 // Deserialize implements gedb.Deserializer.
-func (d Deserializer) Deserialize(ctx context.Context, data []byte, v any) error {
+func (d *Deserializer) Deserialize(ctx context.Context, data []byte, v any) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

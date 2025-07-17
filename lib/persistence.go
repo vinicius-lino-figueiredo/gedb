@@ -21,7 +21,8 @@ const (
 	DefaultFileMode os.FileMode = 0o644
 )
 
-type persistence struct {
+// Persistence implements gedb.Persistence.
+type Persistence struct {
 	inMemoryOnly          bool
 	filename              string
 	corruptAlertThreshold float64
@@ -36,7 +37,8 @@ type persistence struct {
 	documentFactory       func(any) (gedb.Document, error)
 }
 
-func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
+// NewPersistence returns a new implementation of gedb.Persistence.
+func NewPersistence(options gedb.PersistenceOptions) (*Persistence, error) {
 
 	inMemoryOnly := options.InMemoryOnly
 	filename := options.Filename
@@ -84,7 +86,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 
 	storage := options.Storage
 	if storage == nil {
-		storage = DefaultStorage{}
+		storage = NewStorage()
 	}
 
 	documentFactory := options.DocumentFactory
@@ -92,7 +94,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 		documentFactory = NewDocument
 	}
 
-	return &persistence{
+	return &Persistence{
 		inMemoryOnly:          inMemoryOnly || filename == "",
 		filename:              filename,
 		corruptAlertThreshold: corruptAlertThreshold,
@@ -108,11 +110,13 @@ func NewPersistence(options gedb.PersistenceOptions) (*persistence, error) {
 	}, nil
 }
 
-func (p *persistence) SetCorruptAlertThreshold(v float64) {
+// SetCorruptAlertThreshold implements gedb.Persistence.
+func (p *Persistence) SetCorruptAlertThreshold(v float64) {
 	p.corruptAlertThreshold = v
 }
 
-func (p *persistence) PersistNewState(ctx context.Context, newDocs ...gedb.Document) error {
+// PersistNewState implements gedb.Persistence.
+func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...gedb.Document) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -146,7 +150,8 @@ func (p *persistence) PersistNewState(ctx context.Context, newDocs ...gedb.Docum
 	return err
 }
 
-func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
+// TreadRawStream implements gedb.Persistence.
+func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -225,7 +230,8 @@ func (p *persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 	return data, indexes, nil
 }
 
-func (p *persistence) LoadDatabase(ctx context.Context) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
+// LoadDatabase implements gedb.Persistence.
+func (p *Persistence) LoadDatabase(ctx context.Context) ([]gedb.Document, map[string]gedb.IndexDTO, error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -292,7 +298,8 @@ func (p *persistence) LoadDatabase(ctx context.Context) ([]gedb.Document, map[st
 	return newDocs, newIdxs, nil
 }
 
-func (p *persistence) DropDatabase(ctx context.Context) error {
+// DropDatabase implements gedb.Persistence.
+func (p *Persistence) DropDatabase(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -311,7 +318,8 @@ func (p *persistence) DropDatabase(ctx context.Context) error {
 	return nil
 }
 
-func (p *persistence) PersistCachedDatabase(ctx context.Context, allData []gedb.Document, indexes map[string]gedb.IndexDTO) error {
+// PersistCachedDatabase implements gedb.Persistence.
+func (p *Persistence) PersistCachedDatabase(ctx context.Context, allData []gedb.Document, indexes map[string]gedb.IndexDTO) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -350,7 +358,7 @@ func (p *persistence) PersistCachedDatabase(ctx context.Context, allData []gedb.
 	return nil
 }
 
-func (p *persistence) ensureParentDirectoryExistsAsync(ctx context.Context, dir string, mode os.FileMode) error {
+func (p *Persistence) ensureParentDirectoryExistsAsync(ctx context.Context, dir string, mode os.FileMode) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -359,6 +367,7 @@ func (p *persistence) ensureParentDirectoryExistsAsync(ctx context.Context, dir 
 	return p.storage.EnsureParentDirectoryExists(dir, mode)
 }
 
-func (p *persistence) WaitCompaction(ctx context.Context) error {
+// WaitCompaction implements gedb.Persistence.
+func (p *Persistence) WaitCompaction(ctx context.Context) error {
 	return p.broadcaster.WaitWithContext(ctx)
 }

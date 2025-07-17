@@ -11,6 +11,7 @@ import (
 // Comparer implements gedb.Comparer.
 type Comparer struct{}
 
+// NewComparer returns a new implementation of gedb.Comparer.
 func NewComparer() gedb.Comparer {
 	return &Comparer{}
 }

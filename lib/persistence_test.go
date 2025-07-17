@@ -25,7 +25,7 @@ import (
 // to keep the workspace dir where it is in original code.
 const testDb = "../workspace/test.db"
 
-var p *persistence
+var p *Persistence
 
 type testStorage struct {
 	DefaultStorage
