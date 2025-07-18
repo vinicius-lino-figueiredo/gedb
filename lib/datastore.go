@@ -39,6 +39,20 @@ type Datastore struct {
 	decoder               gedb.Decoder
 }
 
+// LoadDatastore creates a new gedb.GEDB and loads the database.
+func LoadDatastore(ctx context.Context, options gedb.DatastoreOptions) (gedb.GEDB, error) {
+	db, err := NewDatastore(options)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.LoadDatabase(ctx); err != nil {
+		if dropErr := db.DropDatabase(context.WithoutCancel(ctx)); dropErr != nil {
+			return nil, errors.Join(err, dropErr)
+		}
+	}
+	return db, nil
+}
+
 // NewDatastore returns a new implementation of Datastore
 func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.Decoder == nil {
@@ -285,6 +299,19 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options gedb.EnsureIndexOpt
 	return d.persistence.PersistNewState(ctx, idxDoc)
 }
 
+func (d *Datastore) filterIndexNames(indexNames []string, k string, v any) bool {
+	if !slices.Contains(indexNames, k) {
+		return false
+	}
+	if _, ok := v.(gedb.Document); ok {
+		return false
+	}
+	if _, ok := v.([]any); ok {
+		return false
+	}
+	return true
+}
+
 // Find implements gedb.GEDB.
 func (d *Datastore) Find(ctx context.Context, query any, options gedb.FindOptions) (gedb.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
@@ -295,6 +322,10 @@ func (d *Datastore) Find(ctx context.Context, query any, options gedb.FindOption
 }
 
 func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOptions) (gedb.Cursor, error) {
+
+	if query == nil {
+		query = map[string]any{}
+	}
 
 	queryDoc, err := d.documentFactory(query)
 	if err != nil {
@@ -311,7 +342,10 @@ func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOption
 		return nil, err
 	}
 
-	allData := d.getAllData()
+	allData, err := d.getCandidates(ctx, queryDoc, false)
+	if err != nil {
+		return nil, err
+	}
 
 	cursorOptions := gedb.CursorOptions{
 		Query:           queryDoc,
@@ -359,6 +393,54 @@ func (d *Datastore) getAllData() []gedb.Document {
 	return d.indexes["_id"].GetAll()
 }
 
+func (d *Datastore) getCandidates(ctx context.Context, query gedb.Document, dontExpireStaleDocs bool) ([]gedb.Document, error) {
+	docs, err := d.getRawCandidates(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if dontExpireStaleDocs {
+		return docs, nil
+	}
+
+	expiredDocsIDs := make([]string, 0, len(docs))
+	validDocs := make([]gedb.Document, 0, len(docs))
+DocLoop:
+	for _, doc := range docs {
+		for i, ttl := range d.ttlIndexes {
+			v := doc.Get(i)
+			if v == nil {
+				continue
+			}
+			t, ok := v.(time.Time)
+			if !ok {
+				continue
+			}
+			if time.Now().After(t.Add(ttl)) {
+				expiredDocsIDs = append(expiredDocsIDs, doc.ID())
+				continue DocLoop
+			}
+		}
+		validDocs = append(validDocs, doc)
+	}
+
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	for _, _id := range expiredDocsIDs {
+		rmMap := map[string]any{"_id": _id}
+		rm, err := d.documentFactory(rmMap)
+		if err != nil {
+			return nil, err
+		}
+
+		options := gedb.RemoveOptions{Multi: false}
+		if _, err = d.remove(ctx, rm, options); err != nil {
+			return nil, err
+		}
+	}
+	return validDocs, nil
+}
+
 func (d *Datastore) getIndexDTOs() map[string]gedb.IndexDTO {
 	indexDTOs := make(map[string]gedb.IndexDTO, len(d.indexes))
 	for indexName, idx := range d.indexes {
@@ -371,6 +453,75 @@ func (d *Datastore) getIndexDTOs() map[string]gedb.IndexDTO {
 		}
 	}
 	return indexDTOs
+}
+
+func (d *Datastore) getRawCandidates(ctx context.Context, query gedb.Document) ([]gedb.Document, error) {
+	if query.Len() == 0 {
+		return d.getAllData(), nil
+	}
+	indexNames := slices.Collect(maps.Keys(d.indexes))
+	for k, v := range query.Iter() {
+		if !d.filterIndexNames(indexNames, k, v) {
+			continue
+		}
+		return d.indexes[k].GetMatching(v), nil
+	}
+
+IndexesLoop:
+	for idxName, idx := range d.indexes {
+		parts := strings.Split(idxName, ",")
+		if len(parts) == 0 {
+			continue
+		}
+
+		for k := range query.Iter() {
+			if !slices.Contains(parts, k) {
+				continue IndexesLoop
+			}
+			vDoc := query.D(k)
+			if vDoc != nil {
+				continue IndexesLoop
+			}
+			if query.Len() == len(parts) {
+				continue IndexesLoop
+			}
+			q, err := d.documentFactory(query)
+			if err != nil {
+				return nil, err
+			}
+			return idx.GetMatching(q), nil
+		}
+	}
+
+	for k := range query.Iter() {
+		if vDoc := query.D(k); vDoc != nil {
+			if in := vDoc.Get("$in"); vDoc.Has("$in") {
+				if idx, ok := d.indexes[k]; ok {
+					return idx.GetMatching(in), nil
+				}
+			}
+		}
+	}
+
+	comp := [...]string{"$lt", "$lte", "$gt", "$gte"}
+	for k, v := range query.Iter() {
+		if v == nil {
+			continue
+		}
+
+		vDoc := query.D(k)
+		if vDoc == nil {
+			continue
+		}
+
+		for _, c := range comp {
+			if vDoc.Has(c) {
+				return d.indexes[k].GetBetweenBounds(ctx, vDoc)
+			}
+		}
+	}
+
+	return d.getAllData(), nil
 }
 
 // Insert implements gedb.GEDB.
@@ -483,7 +634,58 @@ func (d *Datastore) prepareDocumentsForInsertion(newDocs []any) ([]gedb.Document
 
 // Remove implements gedb.GEDB.
 func (d *Datastore) Remove(ctx context.Context, query any, options gedb.RemoveOptions) (int64, error) {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return 0, err
+	}
+	defer d.executor.Unlock()
+	queryDoc, err := d.documentFactory(query)
+	if err != nil {
+		return 0, err
+	}
+	return d.remove(ctx, queryDoc, options)
+}
+
+func (d *Datastore) remove(ctx context.Context, query gedb.Document, options gedb.RemoveOptions) (int64, error) {
+	var limit int64
+	if options.Multi {
+		limit = 0
+	}
+
+	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+	if err != nil {
+		return 0, err
+	}
+
+	// Probably should not directly reference this default type, but it
+	// makes code much cleaner because there are no error checks
+	var vals []Document
+	for cur.Next() {
+		var v Document
+		if err := cur.Exec(ctx, &v); err != nil {
+			return 0, err
+		}
+		vals = append(vals, v)
+	}
+	if err := cur.Err(); err != nil {
+		return 0, err
+	}
+
+	docs := make([]gedb.Document, len(vals))
+	var numRemoved int64
+	for n, val := range vals {
+		newVal := Document{"_id": val.ID(), "$$deleted": true}
+		numRemoved++
+		if err := d.removeFromIndexes(ctx, val); err != nil {
+			return 0, err
+		}
+		docs[n] = newVal
+	}
+
+	if err := d.persistence.PersistNewState(ctx, docs...); err != nil {
+		return 0, err
+	}
+
+	return numRemoved, nil
 }
 
 func (d *Datastore) removeFromIndexes(ctx context.Context, doc gedb.Document) error {
