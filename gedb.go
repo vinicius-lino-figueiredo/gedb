@@ -48,10 +48,10 @@ type GEDB interface {
 
 	// Find returns a cursor over all documents matching the query. A
 	// projection can be used to control which fields are returned.
-	Find(ctx context.Context, query any, projection any) (Cursor, error)
+	Find(ctx context.Context, query any, options FindOptions) (Cursor, error)
 
 	// FindOne returns a cursor over the first document matching the query.
-	FindOne(ctx context.Context, query any, projection any) (Cursor, error)
+	FindOne(ctx context.Context, query any, target any, options FindOptions) error
 
 	// Update modifies documents that match the query using the updateQuery.
 	// Returns the number of documents updated.
@@ -64,6 +64,13 @@ type GEDB interface {
 	// WaitCompaction blocks until the ongoing compaction process (if any)
 	// completes.
 	WaitCompaction(ctx context.Context) error
+}
+
+type FindOptions struct {
+	Projection any
+	Skip       int64
+	Limit      int64
+	Sort       any
 }
 
 type Cursor interface {
@@ -81,7 +88,7 @@ type DatastoreOptions struct {
 	Serializer            Serializer
 	Deserializer          Deserializer
 	CorruptAlertThreshold float64
-	Compare               func(any, any) int
+	Comparer              Comparer
 	FileMode              os.FileMode
 	DirMode               os.FileMode
 	Persistence           Persistence
@@ -247,17 +254,19 @@ type Decoder interface {
 }
 
 type CursorOptions struct {
-	Query      any
-	Limit      int64
-	Skip       int64
-	Sort       any
-	Projection any
-	Matcher    Matcher
-	Decoder    Decoder
+	Query           Document
+	Limit           int64
+	Skip            int64
+	Sort            map[string]int64
+	Projection      map[string]uint64
+	Matcher         Matcher
+	Decoder         Decoder
+	DocumentFactory func(any) (Document, error)
+	Comparer        Comparer
 }
 
 type Matcher interface {
-	Match(any, any) (bool, error)
+	Match(Document, Document) (bool, error)
 }
 
 type Comparer interface {

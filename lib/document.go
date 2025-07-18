@@ -103,6 +103,20 @@ func evaluate(v any) (any, error) {
 		}
 		return res, nil
 	}
+
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		list := make([]any, val.Len())
+		for i := range val.Len() {
+			item := val.Index(i).Interface()
+			item, err := evaluate(item)
+			if err != nil {
+				return nil, err
+			}
+			list[i] = item
+		}
+		return list, nil
+	}
+
 	return v, nil
 }
 

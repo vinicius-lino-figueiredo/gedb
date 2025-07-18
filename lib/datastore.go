@@ -25,7 +25,7 @@ type Datastore struct {
 	serializer            gedb.Serializer
 	deserializer          gedb.Deserializer
 	corruptAlertThreshold float64
-	compare               func(any, any) int
+	comparer              gedb.Comparer
 	fileMode              os.FileMode
 	dirMode               os.FileMode
 	executor              *ctxsync.Mutex
@@ -35,10 +35,15 @@ type Datastore struct {
 	indexFactory          func(gedb.IndexOptions) gedb.Index
 	documentFactory       func(any) (gedb.Document, error)
 	cursorFactory         func(context.Context, []gedb.Document, gedb.CursorOptions) (gedb.Cursor, error)
+	matcher               gedb.Matcher
+	decoder               gedb.Decoder
 }
 
 // NewDatastore returns a new implementation of Datastore
 func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
+	if options.Decoder == nil {
+		options.Decoder = NewDecoder()
+	}
 	if options.Persistence == nil {
 		var err error
 		persistenceOptions := gedb.PersistenceOptions{
@@ -64,10 +69,13 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		options.DocumentFactory = NewDocument
 	}
 	if options.Matcher == nil {
-		options.Matcher = NewMatcher()
+		options.Matcher = NewMatcher(options.DocumentFactory, options.Comparer)
 	}
 	if options.CursorFactory == nil {
 		options.CursorFactory = NewCursor
+	}
+	if options.Comparer == nil {
+		options.Comparer = NewComparer()
 	}
 	IDIdx := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
 	return &Datastore{
@@ -83,6 +91,8 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		indexFactory:          options.IndexFactory,
 		documentFactory:       options.DocumentFactory,
 		cursorFactory:         options.CursorFactory,
+		decoder:               options.Decoder,
+		comparer:              options.Comparer,
 	}, nil
 }
 
@@ -167,7 +177,13 @@ func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 		return 0, err
 	}
 	defer d.executor.Unlock()
-	cur, err := d.cursorFactory(ctx, d.getAllData(), gedb.CursorOptions{Query: query})
+	queryDoc, err := d.documentFactory(query)
+
+	if err != nil {
+		return 0, err
+	}
+
+	cur, err := d.cursorFactory(ctx, d.getAllData(), gedb.CursorOptions{Query: queryDoc})
 	if err != nil {
 		return 0, err
 	}
@@ -270,13 +286,64 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options gedb.EnsureIndexOpt
 }
 
 // Find implements gedb.GEDB.
-func (d *Datastore) Find(ctx context.Context, query any, projection any) (gedb.Cursor, error) {
-	panic("unimplemented") // TODO: implement
+func (d *Datastore) Find(ctx context.Context, query any, options gedb.FindOptions) (gedb.Cursor, error) {
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return nil, err
+	}
+	defer d.executor.Unlock()
+	return d.find(ctx, query, options)
+}
+
+func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOptions) (gedb.Cursor, error) {
+
+	queryDoc, err := d.documentFactory(query)
+	if err != nil {
+		return nil, err
+	}
+
+	proj := make(map[string]uint64)
+	if err := d.decoder.Decode(options.Projection, &proj); err != nil {
+		return nil, err
+	}
+
+	sort := make(map[string]int64)
+	if err := d.decoder.Decode(options.Sort, &sort); err != nil {
+		return nil, err
+	}
+
+	allData := d.getAllData()
+
+	cursorOptions := gedb.CursorOptions{
+		Query:           queryDoc,
+		Limit:           options.Limit,
+		Skip:            options.Skip,
+		Sort:            sort,
+		Projection:      proj,
+		Matcher:         d.matcher,
+		Decoder:         d.decoder,
+		DocumentFactory: d.documentFactory,
+		Comparer:        d.comparer,
+	}
+
+	return d.cursorFactory(ctx, allData, cursorOptions)
 }
 
 // FindOne implements gedb.GEDB.
-func (d *Datastore) FindOne(ctx context.Context, query any, projection any) (gedb.Cursor, error) {
-	panic("unimplemented") // TODO: implement
+func (d *Datastore) FindOne(ctx context.Context, query any, target any, options gedb.FindOptions) error {
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return err
+	}
+	defer d.executor.Unlock()
+	options.Limit = 1
+	cur, err := d.find(ctx, query, options)
+	if err != nil {
+		return err
+	}
+	defer cur.Close()
+	if !cur.Next() {
+		return fmt.Errorf("expected exactly one record, got 0")
+	}
+	return cur.Exec(ctx, target)
 }
 
 // GetAllData implements gedb.GEDB.

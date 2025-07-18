@@ -12,19 +12,44 @@ import (
 // Finding documents
 // ==============================================================
 
+func getDotValuesOk(object any, fields ...string) (any, bool, error) {
+	if object == nil {
+		return nil, false, nil
+	}
+	curr := object
+	ok := true
+	var err error
+	for n, part := range fields {
+		switch v := curr.(type) {
+		case gedb.Document:
+			if !v.Has(part) {
+				ok = false
+			}
+			curr = v.Get(part)
+		case []any:
+			curr, ok, err = getDotValueListOk(v, fields[n:]...)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+	}
+	return curr, ok, nil
+}
+
 func getDotValue(object any, fields ...string) (any, error) {
 	if object == nil {
 		return nil, nil
 	}
 	curr := object
 	var err error
-	for n, part := range fields {
-		for nestedField := range strings.SplitSeq(part, ".") {
+	for _, part := range fields {
+		nestedFields := strings.Split(part, ".")
+		for m, nestedField := range nestedFields {
 			switch v := curr.(type) {
 			case gedb.Document:
 				curr = v.Get(nestedField)
 			case []any:
-				curr, err = getDotValueList(v, fields[n:]...)
+				curr, err = getDotValueList(v, nestedFields[m:]...)
 				if err != nil {
 					return nil, err
 				}
@@ -50,6 +75,26 @@ func getDotValueList(v []any, fieldParts ...string) (any, error) {
 		return nil, fmt.Errorf("value %d out of bounds", i)
 	}
 	return v[i], nil
+
+}
+
+func getDotValueListOk(v []any, fieldParts ...string) (any, bool, error) {
+	i, err := strconv.Atoi(fieldParts[0])
+	ok := true
+	if err != nil {
+		m := make([]any, len(v))
+		for n, el := range v {
+			m[n], err = getDotValue(el, fieldParts...)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		return m, ok, nil
+	}
+	if i >= len(v) {
+		return nil, false, fmt.Errorf("value %d out of bounds", i)
+	}
+	return v[i], ok, nil
 
 }
 
