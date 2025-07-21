@@ -17,7 +17,7 @@ type Document map[string]any
 // NewDocument returns a new instance of gedb.Document.
 func NewDocument(v any) (gedb.Document, error) {
 	if v == nil {
-		return nil, nil
+		return Document{}, nil
 	}
 
 	d, err := evaluate(v)

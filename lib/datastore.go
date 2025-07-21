@@ -37,6 +37,7 @@ type Datastore struct {
 	cursorFactory         func(context.Context, []gedb.Document, gedb.CursorOptions) (gedb.Cursor, error)
 	matcher               gedb.Matcher
 	decoder               gedb.Decoder
+	modifier              gedb.Modifier
 }
 
 // LoadDatastore creates a new gedb.GEDB and loads the database.
@@ -91,6 +92,9 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.Comparer == nil {
 		options.Comparer = NewComparer()
 	}
+	if options.Modifier == nil {
+		options.Modifier = NewModifier(options.DocumentFactory)
+	}
 	IDIdx := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
 	return &Datastore{
 		filename:              options.Filename,
@@ -107,6 +111,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		cursorFactory:         options.CursorFactory,
 		decoder:               options.Decoder,
 		comparer:              options.Comparer,
+		modifier:              options.Modifier,
 	}, nil
 }
 
@@ -136,12 +141,6 @@ func (d *Datastore) addToIndexes(ctx context.Context, doc gedb.Document) error {
 func (d *Datastore) checkDocuments(docs ...gedb.Document) error {
 	for _, doc := range docs {
 		for k, v := range doc.Iter() {
-			if subDoc, ok := v.(gedb.Document); ok {
-				if err := d.checkDocuments(subDoc); err != nil {
-					return err
-				}
-				continue
-			}
 			if strings.HasPrefix(k, "$") {
 				switch k {
 				case "$$date":
@@ -166,6 +165,12 @@ func (d *Datastore) checkDocuments(docs ...gedb.Document) error {
 			}
 			if strings.ContainsRune(k, '.') {
 				return fmt.Errorf("field names cannot contain a '.'")
+			}
+			if subDoc, ok := v.(gedb.Document); ok {
+				if err := d.checkDocuments(subDoc); err != nil {
+					return err
+				}
+				continue
 			}
 		}
 	}
@@ -530,6 +535,10 @@ func (d *Datastore) Insert(ctx context.Context, newDocs ...any) ([]gedb.Document
 		return nil, err
 	}
 	defer d.executor.Unlock()
+	return d.insert(ctx, newDocs...)
+}
+
+func (d *Datastore) insert(ctx context.Context, newDocs ...any) ([]gedb.Document, error) {
 	if len(newDocs) == 0 {
 		return nil, nil
 	}
@@ -738,7 +747,107 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...gedb.Document) err
 
 // Update implements gedb.GEDB.
 func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options gedb.UpdateOptions) (int64, error) {
-	panic("unimplemented") // TODO: implement
+	if err := d.executor.LockWithContext(ctx); err != nil {
+		return 0, err
+	}
+	defer d.executor.Unlock()
+
+	QryDoc, err := d.documentFactory(query)
+	if err != nil {
+		return 0, err
+	}
+
+	updateQryDoc, err := d.documentFactory(updateQuery)
+	if err != nil {
+		return 0, err
+	}
+
+	var limit int64
+	if !options.Multi {
+		limit = 1
+	}
+
+	if options.Upsert {
+		cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+		if err != nil {
+			return 0, err
+		}
+		var count int64
+		for cur.Next() {
+			count++
+		}
+		if err := cur.Err(); err != nil {
+			return 0, err
+		}
+		if count != 1 {
+			if err := d.checkDocuments(updateQryDoc); err != nil {
+				if updateQryDoc, err = d.modifier.Modify(QryDoc, updateQryDoc); err != nil {
+					return 0, err
+				}
+			}
+			_, err = d.insert(ctx, updateQryDoc)
+			return count, err
+		}
+	}
+	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+	if err != nil {
+		return 0, err
+	}
+	var modifications []gedb.Update
+	for cur.Next() {
+		oldDoc, err := NewDocument(nil)
+		if err != nil {
+			return 0, err
+		}
+		if err := cur.Exec(ctx, &oldDoc); err != nil {
+			return 0, err
+		}
+		newDoc, err := d.modifier.Modify(oldDoc, updateQryDoc)
+		if err != nil {
+			return 0, err
+		}
+
+		if d.timestampData {
+			newDoc.Set("createdAt", oldDoc.Get("createdAt"))
+			newDoc.Set("updatedAt", time.Now())
+		}
+
+		update := gedb.Update{OldDoc: oldDoc, NewDoc: newDoc}
+		modifications = append(modifications, update)
+	}
+	if err := cur.Err(); err != nil {
+		return 0, err
+	}
+
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+
+	if err := d.updateIndexes(ctx, modifications); err != nil {
+		return 0, err
+	}
+
+	return int64(len(modifications)), nil
+}
+
+func (d *Datastore) updateIndexes(ctx context.Context, mods []gedb.Update) error {
+	var failingIndex int
+	var err error
+
+	keys := slices.Collect(maps.Keys(d.indexes))
+	for i, key := range keys {
+		if err = d.indexes[key].UpdateMultipleDocs(ctx, mods...); err != nil {
+			failingIndex = i
+		}
+	}
+	if err != nil {
+		for i := range failingIndex {
+			if revertErr := d.indexes[keys[i]].RevertMultipleUpdates(ctx, mods...); revertErr != nil {
+				err = errors.Join(err, revertErr)
+				break
+			}
+		}
+	}
+	return err
 }
 
 // WaitCompaction implements gedb.GEDB.

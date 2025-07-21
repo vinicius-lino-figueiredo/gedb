@@ -98,6 +98,7 @@ type DatastoreOptions struct {
 	Decoder               Decoder
 	Matcher               Matcher
 	CursorFactory         func(context.Context, []Document, CursorOptions) (Cursor, error)
+	Modifier              Modifier
 }
 
 type Serializer interface {
@@ -271,4 +272,8 @@ type Matcher interface {
 
 type Comparer interface {
 	Compare(any, any) (int, error)
+}
+
+type Modifier interface {
+	Modify(Document, Document) (Document, error)
 }
