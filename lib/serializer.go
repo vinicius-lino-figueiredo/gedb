@@ -6,19 +6,59 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
 
 // Serializer implements gedb.Serializer.
 type Serializer struct {
-	comparer gedb.Comparer
+	comparer        gedb.Comparer
+	documentFactory func(any) (gedb.Document, error)
 }
 
 // NewSerializer returns a new implementation of gedb.Serializer.
-func NewSerializer(comparer gedb.Comparer) gedb.Serializer {
+func NewSerializer(comparer gedb.Comparer, documentFactory func(any) (gedb.Document, error)) gedb.Serializer {
 	return &Serializer{
-		comparer: comparer,
+		comparer:        comparer,
+		documentFactory: documentFactory,
+	}
+}
+
+func (s *Serializer) copyDoc(doc gedb.Document) (gedb.Document, error) {
+	res, err := s.documentFactory(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range doc.Iter() {
+		copied, err := s.copyAny(v)
+		if err != nil {
+			return nil, err
+		}
+		res.Set(k, copied)
+	}
+	return res, nil
+}
+
+func (s *Serializer) copyAny(v any) (any, error) {
+	switch t := v.(type) {
+	case gedb.Document:
+		return s.copyDoc(t)
+	case []any:
+		newList := make([]any, len(t))
+		for n, itm := range t {
+			newV, err := s.copyAny(itm)
+			if err != nil {
+				return nil, err
+			}
+			newList[n] = newV
+		}
+		return newList, nil
+	case time.Time:
+		return s.documentFactory(map[string]int64{"$$date": t.UnixMilli()})
+	default:
+		return v, nil
 	}
 }
 
@@ -30,11 +70,16 @@ func (s *Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
 	default:
 	}
 	if doc, ok := obj.(gedb.Document); ok {
-		for k, v := range doc.Iter() {
+		cp, err := s.copyDoc(doc)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range cp.Iter() {
 			if err := s.checkKey(k, v); err != nil {
 				return nil, err
 			}
 		}
+		obj = cp
 	}
 	return json.Marshal(obj)
 }

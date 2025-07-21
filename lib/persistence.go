@@ -69,9 +69,14 @@ func NewPersistence(options gedb.PersistenceOptions) (*Persistence, error) {
 		comparer = NewComparer()
 	}
 
+	documentFactory := options.DocumentFactory
+	if documentFactory == nil {
+		documentFactory = NewDocument
+	}
+
 	serializer := options.Serializer
 	if serializer == nil {
-		serializer = NewSerializer(options.Comparer)
+		serializer = NewSerializer(options.Comparer, documentFactory)
 	}
 
 	decoder := options.Decoder
@@ -87,11 +92,6 @@ func NewPersistence(options gedb.PersistenceOptions) (*Persistence, error) {
 	storage := options.Storage
 	if storage == nil {
 		storage = NewStorage()
-	}
-
-	documentFactory := options.DocumentFactory
-	if documentFactory == nil {
-		documentFactory = NewDocument
 	}
 
 	return &Persistence{

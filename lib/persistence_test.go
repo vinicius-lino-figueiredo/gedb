@@ -56,7 +56,7 @@ func (s *PersistenceTestSuite) SetupTest() {
 
 	s.comparer = NewComparer()
 
-	s.serializer = NewSerializer(s.comparer)
+	s.serializer = NewSerializer(s.comparer, NewDocument)
 	if err := s.storage.EnsureParentDirectoryExists(testDb, DefaultDirMode); err != nil {
 		s.FailNow("could not ensure parent directory", err)
 	}

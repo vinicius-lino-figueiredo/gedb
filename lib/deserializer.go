@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,20 @@ type Deserializer struct {
 	decoder gedb.Decoder
 }
 
+func (d *Deserializer) convertDates(doc Document) any {
+	for k, v := range doc {
+		if k == "$$date" {
+			if i, ok := v.(float64); ok {
+				return time.UnixMilli(int64(i))
+			}
+		}
+		if vDoc, ok := v.(Document); ok {
+			doc[k] = d.convertDates(vDoc)
+		}
+	}
+	return doc
+}
+
 // Deserialize implements gedb.Deserializer.
 func (d *Deserializer) Deserialize(ctx context.Context, data []byte, v any) error {
 	select {
@@ -35,19 +50,12 @@ func (d *Deserializer) Deserialize(ctx context.Context, data []byte, v any) erro
 	// we could use a map[string]any, but Document is slightly faster when
 	// unmarshaling json.
 	doc := make(Document)
-	if err := json.Unmarshal(data, &doc); err != nil {
+
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
 		return err
 	}
-	for k, v := range doc {
-		if k == "$$date" {
-			if i, ok := v.(int64); ok {
-				doc[k] = time.Unix(i, 0)
-			}
-		}
-		if d, ok := v.(map[string]any); ok && d["$$date"] != nil {
-			doc[k] = d["date"]
-		}
-	}
+
+	d.convertDates(doc)
 	if p, ok := v.(*map[string]any); ok {
 		*p = doc
 		return nil
