@@ -243,7 +243,11 @@ func (m *Matcher) size(a any, b any) (bool, error) {
 		return false, nil
 	}
 
-	// FIXME: should not just compare. only works for integers
+	num, ok := asNumber(b)
+	if !ok || !num.IsInt() {
+		return false, fmt.Errorf("$size operator called without an integer")
+	}
+
 	comp, err := m.comparer.Compare(len(aArr), b)
 	if err != nil {
 		return false, err
