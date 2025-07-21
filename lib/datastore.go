@@ -38,6 +38,7 @@ type Datastore struct {
 	matcher               gedb.Matcher
 	decoder               gedb.Decoder
 	modifier              gedb.Modifier
+	timeGetter            gedb.TimeGetter
 }
 
 // LoadDatastore creates a new gedb.GEDB and loads the database.
@@ -96,6 +97,9 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.Modifier == nil {
 		options.Modifier = NewModifier(options.DocumentFactory)
 	}
+	if options.TimeGetter == nil {
+		options.TimeGetter = NewTimeGetter()
+	}
 	IDIdx := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
 	return &Datastore{
 		filename:              options.Filename,
@@ -113,6 +117,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		decoder:               options.Decoder,
 		comparer:              options.Comparer,
 		modifier:              options.Modifier,
+		timeGetter:            options.TimeGetter,
 	}, nil
 }
 
@@ -469,7 +474,7 @@ DocLoop:
 			if !ok {
 				continue
 			}
-			if time.Now().After(t.Add(ttl)) {
+			if d.timeGetter.GetTime().After(t.Add(ttl)) {
 				expiredDocsIDs = append(expiredDocsIDs, doc.ID())
 				continue DocLoop
 			}
@@ -673,7 +678,7 @@ func (d *Datastore) prepareDocumentsForInsertion(newDocs []any) ([]gedb.Document
 			preparedDoc.Set("_id", id)
 		}
 		if d.timestampData {
-			now := time.Now()
+			now := d.timeGetter.GetTime()
 			if !preparedDoc.Has("createdAt") {
 				preparedDoc.Set("createdAt", now)
 			}
@@ -857,7 +862,7 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 
 		if d.timestampData {
 			newDoc.Set("createdAt", oldDoc.Get("createdAt"))
-			newDoc.Set("updatedAt", time.Now())
+			newDoc.Set("updatedAt", d.timeGetter.GetTime())
 		}
 
 		update := gedb.Update{OldDoc: oldDoc, NewDoc: newDoc}

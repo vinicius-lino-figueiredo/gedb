@@ -99,6 +99,7 @@ type DatastoreOptions struct {
 	Matcher               Matcher
 	CursorFactory         func(context.Context, []Document, CursorOptions) (Cursor, error)
 	Modifier              Modifier
+	TimeGetter            TimeGetter
 }
 
 type Serializer interface {
@@ -276,4 +277,8 @@ type Comparer interface {
 
 type Modifier interface {
 	Modify(Document, Document) (Document, error)
+}
+
+type TimeGetter interface {
+	GetTime() time.Time
 }
