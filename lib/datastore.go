@@ -596,7 +596,7 @@ func (d *Datastore) LoadDatabase(ctx context.Context) error {
 		return err
 	}
 	for key, idx := range indexes {
-		d.indexes[key] = d.indexFactory(gedb.IndexOptions{DTO: idx})
+		d.indexes[key] = d.indexFactory(gedb.IndexOptions{DTO: &idx})
 	}
 	if err := d.resetIndexes(ctx, docs...); err != nil {
 		if resetErr := d.resetIndexes(ctx); resetErr != nil {

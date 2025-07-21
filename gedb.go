@@ -172,7 +172,7 @@ type IndexOptions struct {
 	ExpireAfter     time.Duration
 	DocumentFactory func(any) (Document, error)
 	Comparer        Comparer
-	DTO             IndexDTO
+	DTO             *IndexDTO
 }
 
 type Update struct {
