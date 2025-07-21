@@ -178,6 +178,48 @@ func (d *Datastore) checkDocuments(docs ...gedb.Document) error {
 	return nil
 }
 
+func (d *Datastore) cloneDocs(docs ...gedb.Document) ([]gedb.Document, error) {
+	res := make([]gedb.Document, len(docs))
+	for n, doc := range docs {
+		newDoc, err := d.clone(doc)
+		if err != nil {
+			return nil, err
+		}
+		res[n] = newDoc.(gedb.Document)
+	}
+	return res, nil
+}
+
+func (d *Datastore) clone(v any) (any, error) {
+	switch t := v.(type) {
+	case gedb.Document:
+		res, err := d.documentFactory(nil)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range t.Iter() {
+			val, err := d.clone(v)
+			if err != nil {
+				return nil, err
+			}
+			res.Set(k, val)
+		}
+		return res, nil
+	case []any:
+		res := make([]any, len(t))
+		for n, v := range t {
+			val, err := d.clone(v)
+			if err != nil {
+				return nil, err
+			}
+			res[n] = val
+		}
+		return res, nil
+	default:
+		return t, nil
+	}
+}
+
 // CompactDatafile implements gedb.GEDB.
 func (d *Datastore) CompactDatafile(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
@@ -363,6 +405,11 @@ func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOption
 		Decoder:         d.decoder,
 		DocumentFactory: d.documentFactory,
 		Comparer:        d.comparer,
+	}
+
+	allData, err = d.cloneDocs(allData...)
+	if err != nil {
+		return nil, err
 	}
 
 	return d.cursorFactory(ctx, allData, cursorOptions)
@@ -555,7 +602,7 @@ func (d *Datastore) insert(ctx context.Context, newDocs ...any) ([]gedb.Document
 	if err := d.persistence.PersistNewState(ctx, preparedDocs...); err != nil {
 		return nil, err
 	}
-	return preparedDocs, nil
+	return d.cloneDocs(preparedDocs...)
 }
 
 func (d *Datastore) insertInCache(ctx context.Context, preparedDocs []gedb.Document) error {
