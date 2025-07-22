@@ -29,10 +29,15 @@ func (s *DatastoreTestSuite) SetupTest() {
 	d, err := NewDatastore(gedb.DatastoreOptions{Filename: testDb})
 	s.NoError(err)
 	s.d = d.(*Datastore)
-	s.NoError(s.d.persistence.(*Persistence).ensureParentDirectoryExistsAsync(ctx, testDb, 0666))
-	_, err = os.Stat(testDb)
-	s.NoError(err)
-	s.NoError(os.Remove(testDb))
+	s.NoError(s.d.persistence.(*Persistence).ensureParentDirectoryExistsAsync(ctx, testDb, DefaultDirMode))
+	if _, err = os.Stat(testDb); err != nil {
+		if !os.IsNotExist(err) {
+			s.FailNow(err.Error())
+		}
+	} else {
+		s.NoError(os.Remove(testDb))
+	}
+
 	s.NoError(s.d.LoadDatabase(ctx))
 	s.Len(s.d.getAllData(), 0)
 }
