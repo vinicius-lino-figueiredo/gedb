@@ -2,6 +2,7 @@ package lib
 
 import (
 	"cmp"
+	"fmt"
 	"math/big"
 	"slices"
 
@@ -72,33 +73,22 @@ func (c *Comparer) Compare(a any, b any) (int, error) {
 		}
 		return -1, nil
 	}
-	if _, ok := b.(bool); ok {
+	if _, ok := b.([]any); ok {
 		return 1, nil
 	}
 
 	// Objects
-	da := a.(gedb.Document)
-	db := b.(gedb.Document)
-
-	aKeys := slices.Collect(da.Keys())
-	bKeys := slices.Collect(db.Keys())
-	slices.Sort(aKeys)
-	slices.Sort(bKeys)
-
-	var comp int
-	var err error
-	for i := range min(len(aKeys), len(bKeys)) {
-		comp, err = c.Compare(da.Get(aKeys[i]), db.Get(bKeys[i]))
-		if err != nil {
-			return 0, err
+	if a, ok := a.(gedb.Document); ok {
+		if b, ok := b.(gedb.Document); ok {
+			return c.compareDoc(a, b)
 		}
-
-		if comp != 0 {
-			return comp, nil
-		}
+		return -1, nil
+	}
+	if _, ok := b.(gedb.Document); ok {
+		return 1, nil
 	}
 
-	return cmp.Compare(da.Len(), db.Len()), nil
+	return 0, fmt.Errorf("cannot compare unexpected types %T and %T", a, b)
 }
 
 func (c *Comparer) compareArray(a, b []any) (int, error) {
@@ -129,6 +119,28 @@ func (c *Comparer) compareBool(a, b bool) int {
 		return 1
 	}
 	return -1
+}
+
+func (c *Comparer) compareDoc(a gedb.Document, b gedb.Document) (int, error) {
+	aKeys := slices.Collect(a.Keys())
+	bKeys := slices.Collect(b.Keys())
+	slices.Sort(aKeys)
+	slices.Sort(bKeys)
+
+	var comp int
+	var err error
+	for i := range min(len(aKeys), len(bKeys)) {
+		comp, err = c.Compare(a.Get(aKeys[i]), b.Get(bKeys[i]))
+		if err != nil {
+			return 0, err
+		}
+
+		if comp != 0 {
+			return comp, nil
+		}
+	}
+
+	return cmp.Compare(a.Len(), b.Len()), nil
 }
 
 func asNumber(v any) (*big.Float, bool) {
