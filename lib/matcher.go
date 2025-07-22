@@ -24,6 +24,23 @@ func NewMatcher(documentFctory func(any) (gedb.Document, error), comparer gedb.C
 	}
 }
 
+func (m *Matcher) and(obj gedb.Document, query any) (bool, error) {
+	q, ok := query.([]any)
+	if !ok {
+		return false, fmt.Errorf("$and operator used without an array")
+	}
+	for _, i := range q {
+		match, err := m.match(obj, i)
+		if err != nil {
+			return false, nil
+		}
+		if !match {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (m *Matcher) elemMatch(a any, b any) (bool, error) {
 	aArr, ok := a.([]any)
 	if !ok {
@@ -225,6 +242,31 @@ func (m *Matcher) nin(a any, b any) (bool, error) {
 	return !in, nil
 }
 
+func (m *Matcher) not(obj gedb.Document, query any) (bool, error) {
+	match, err := m.match(obj, query)
+	if err != nil {
+		return false, err
+	}
+	return !match, nil
+}
+
+func (m *Matcher) or(obj gedb.Document, query any) (bool, error) {
+	q, ok := query.([]any)
+	if !ok {
+		return false, fmt.Errorf("$or operator used without an array")
+	}
+	for _, i := range q {
+		match, err := m.match(obj, i)
+		if err != nil {
+			return false, nil
+		}
+		if match {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (m *Matcher) regex(a any, b any) (bool, error) {
 	rgx, ok := b.(*regexp.Regexp)
 	if !ok {
@@ -277,14 +319,24 @@ func (m *Matcher) useComparisonFunc(key string, a any, b any) (bool, error) {
 }
 
 func (m *Matcher) useLogicalOperators(k string, a gedb.Document, b any) (bool, error) {
-	var fn func(gedb.Document, any) (bool, error)
-	switch k {
-	case "$and":
-	case "$not":
-	case "$or":
-	case "$where":
-		return false, fmt.Errorf("unknown logic operator %q", k)
+	op := map[string]func(gedb.Document, any) (bool, error){
+		"$and":   m.and,
+		"$not":   m.not,
+		"$or":    m.or,
+		"$where": m.where,
 	}
-	return fn(a, b)
+	if fn, ok := op[k]; ok {
+		return fn(a, b)
+	}
+	return false, fmt.Errorf("unknown logic operator %q", k)
 
+}
+
+func (m *Matcher) where(obj gedb.Document, query any) (bool, error) {
+	fn, ok := query.(func(gedb.Document) (bool, error))
+	if !ok {
+		return false, fmt.Errorf("$where operator used without a func(gedb.Document) (bool, error)")
+	}
+
+	return fn(obj)
 }
