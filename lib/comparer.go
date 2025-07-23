@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
+	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb"
 )
@@ -85,6 +86,17 @@ func (c *Comparer) Compare(a any, b any) (int, error) {
 		return -1, nil
 	}
 	if _, ok := b.(gedb.Document); ok {
+		return 1, nil
+	}
+
+	// Dates
+	if a, ok := a.(time.Time); ok {
+		if b, ok := b.(time.Time); ok {
+			return a.Compare(b), nil
+		}
+		return -1, nil
+	}
+	if _, ok := b.(time.Time); ok {
 		return 1, nil
 	}
 
