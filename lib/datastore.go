@@ -106,6 +106,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		timestampData:         options.TimestampData,
 		inMemoryOnly:          options.InMemoryOnly || options.Filename == "",
 		indexes:               map[string]gedb.Index{"_id": IDIdx},
+		ttlIndexes:            make(map[string]time.Duration),
 		corruptAlertThreshold: options.CorruptAlertThreshold,
 		fileMode:              options.FileMode,
 		dirMode:               options.DirMode,
