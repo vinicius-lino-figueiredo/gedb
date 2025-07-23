@@ -372,10 +372,10 @@ func (d *Datastore) Find(ctx context.Context, query any, options gedb.FindOption
 		return nil, err
 	}
 	defer d.executor.Unlock()
-	return d.find(ctx, query, options)
+	return d.find(ctx, query, options, false)
 }
 
-func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOptions) (gedb.Cursor, error) {
+func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOptions, dontExpireStaleDocs bool) (gedb.Cursor, error) {
 
 	if query == nil {
 		query = map[string]any{}
@@ -396,7 +396,7 @@ func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOption
 		return nil, err
 	}
 
-	allData, err := d.getCandidates(ctx, queryDoc, false)
+	allData, err := d.getCandidates(ctx, queryDoc, dontExpireStaleDocs)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	}
 	defer d.executor.Unlock()
 	options.Limit = 1
-	cur, err := d.find(ctx, query, options)
+	cur, err := d.find(ctx, query, options, false)
 	if err != nil {
 		return err
 	}
@@ -716,7 +716,7 @@ func (d *Datastore) remove(ctx context.Context, query gedb.Document, options ged
 		limit = 0
 	}
 
-	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, true)
 	if err != nil {
 		return 0, err
 	}
@@ -824,7 +824,7 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 	}
 
 	if options.Upsert {
-		cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+		cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, false)
 		if err != nil {
 			return 0, err
 		}
@@ -845,7 +845,7 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 			return count, err
 		}
 	}
-	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit})
+	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, false)
 	if err != nil {
 		return 0, err
 	}
