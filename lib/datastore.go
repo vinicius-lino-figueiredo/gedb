@@ -461,7 +461,7 @@ func (d *Datastore) getCandidates(ctx context.Context, query gedb.Document, dont
 	if dontExpireStaleDocs {
 		return docs, nil
 	}
-
+	now := d.timeGetter.GetTime()
 	expiredDocsIDs := make([]string, 0, len(docs))
 	validDocs := make([]gedb.Document, 0, len(docs))
 DocLoop:
@@ -475,7 +475,7 @@ DocLoop:
 			if !ok {
 				continue
 			}
-			if d.timeGetter.GetTime().After(t.Add(ttl)) {
+			if now.After(t.Add(ttl)) {
 				expiredDocsIDs = append(expiredDocsIDs, doc.ID())
 				continue DocLoop
 			}
