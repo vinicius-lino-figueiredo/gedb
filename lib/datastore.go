@@ -532,7 +532,9 @@ IndexesLoop:
 			continue
 		}
 
-		for k := range query.Iter() {
+		queryKeys := slices.Collect(query.Keys())
+		for i, k := range queryKeys {
+			i++
 			if !slices.Contains(parts, k) {
 				continue IndexesLoop
 			}
@@ -540,15 +542,11 @@ IndexesLoop:
 			if vDoc != nil {
 				continue IndexesLoop
 			}
-			if query.Len() == len(parts) {
-				continue IndexesLoop
+			if i == query.Len() {
+				break
 			}
-			q, err := d.documentFactory(query)
-			if err != nil {
-				return nil, err
-			}
-			return idx.GetMatching(q), nil
 		}
+		return idx.GetMatching(query), nil
 	}
 
 	for k := range query.Iter() {
