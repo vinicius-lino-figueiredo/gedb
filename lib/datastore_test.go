@@ -790,3 +790,323 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	})
 } // ==== End of 'GetCandidates' ==== //
+
+func (s *DatastoreTestSuite) TestFind() {
+
+	// Can find all documents if an empty query is used
+	s.Run("FindAllDocumentsWithEmptyQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "another", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		s.Len(docs, 3)
+		somedataValues := make([]any, len(docs))
+		for i, doc := range docs {
+			somedataValues[i] = doc.Get("somedata")
+		}
+		s.Contains(somedataValues, "ok")
+		s.Contains(somedataValues, "another")
+		s.Contains(somedataValues, "again")
+
+		var docWithPlus Document
+		for _, doc := range docs {
+			if doc.Get("somedata") == "another" {
+				docWithPlus = doc
+				break
+			}
+		}
+		s.Equal("additional data", docWithPlus.Get("plus"))
+	})
+
+	// Can find all documents matching a basic query
+	s.Run("FindDocumentsMatchingBasicQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, Document{"somedata": "again"}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 2)
+
+		somedataValues := make([]any, len(docs))
+		for i, doc := range docs {
+			somedataValues[i] = doc.Get("somedata")
+		}
+		s.NotContains(somedataValues, "ok")
+
+		// Test with query that doesn't match anything
+		cur, err = s.d.Find(ctx, Document{"somedata": "nope"}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 0)
+	})
+
+	// Can find one document matching a basic query and return null if none is found
+	s.Run("FindOneDocumentOrReturnNil", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"somedata": "ok"}, &doc, gedb.FindOptions{})
+		s.NoError(err)
+		s.Len(doc, 2)
+		s.Equal("ok", doc.Get("somedata"))
+		s.Contains(doc, "_id")
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"somedata": "nope"}, &doc2, gedb.FindOptions{})
+		s.Error(err) // Go implementation returns error instead of nil
+	})
+
+	// Can find dates and objects (non JS-native types)
+	s.Run("FindDatesAndObjects", func() {
+		date1 := time.UnixMilli(1234543)
+		date2 := time.UnixMilli(9999)
+
+		_, err := s.d.Insert(ctx, Document{"now": date1, "sth": Document{"name": "gedb"}})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"now": date1}, &doc, gedb.FindOptions{})
+		s.NoError(err)
+		s.Equal("gedb", doc.Get("sth").(Document).Get("name"))
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"now": date2}, &doc2, gedb.FindOptions{})
+		s.Error(err) // No match
+
+		doc3 := make(Document)
+		err = s.d.FindOne(ctx, Document{"sth": Document{"name": "gedb"}}, &doc3, gedb.FindOptions{})
+		s.NoError(err)
+		s.Equal("gedb", doc3.Get("sth").(Document).Get("name"))
+
+		doc4 := make(Document)
+		err = s.d.FindOne(ctx, Document{"sth": Document{"name": "other"}}, &doc4, gedb.FindOptions{})
+		s.Error(err) // No match
+	})
+
+	// Can use dot-notation to query subfields
+	s.Run("DotNotationSubfields", func() {
+		_, err := s.d.Insert(ctx, Document{"greeting": Document{"english": "hello"}})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"greeting.english": "hello"}, &doc, gedb.FindOptions{})
+		s.NoError(err)
+		s.Equal("hello", doc.Get("greeting").(Document).Get("english"))
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"greeting.english": "hellooo"}, &doc2, gedb.FindOptions{})
+		s.Error(err) // No match
+
+		doc3 := make(Document)
+		err = s.d.FindOne(ctx, Document{"greeting.englis": "hello"}, &doc3, gedb.FindOptions{})
+		s.Error(err) // No match
+	})
+
+	// Array fields match if any element matches
+	s.Run("ArrayFieldsMatchAnyElement", func() {
+		doc1, err := s.d.Insert(ctx, Document{"fruits": []any{"pear", "apple", "banana"}})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"fruits": []any{"coconut", "orange", "pear"}})
+		s.NoError(err)
+		doc3, err := s.d.Insert(ctx, Document{"fruits": []any{"banana"}})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, Document{"fruits": "pear"}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 2)
+
+		ids := make([]any, len(docs))
+		for i, doc := range docs {
+			ids[i] = doc.ID()
+		}
+		s.Contains(ids, doc1[0].ID())
+		s.Contains(ids, doc2[0].ID())
+
+		cur, err = s.d.Find(ctx, Document{"fruits": "banana"}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 2)
+
+		ids = make([]any, len(docs))
+		for i, doc := range docs {
+			ids[i] = doc.ID()
+		}
+		s.Contains(ids, doc1[0].ID())
+		s.Contains(ids, doc3[0].ID())
+
+		cur, err = s.d.Find(ctx, Document{"fruits": "doesntexist"}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 0)
+	})
+
+	// Returns an error if the query is not well formed
+	s.Run("ErrorOnMalformedQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, Document{"$or": Document{"hello": "world"}}, gedb.FindOptions{})
+		s.Error(err)
+		s.Nil(cur)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"$or": Document{"hello": "world"}}, &doc, gedb.FindOptions{})
+		s.Error(err)
+	})
+
+	// Changing the documents returned by find or findOne do not change the database state
+	s.Run("ReturnedDocsDoNotChangeDatabase", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 2, "hello": "world"})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": 2}, &doc, gedb.FindOptions{})
+		s.NoError(err)
+		doc.Set("hello", "changed")
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": 2}, &doc2, gedb.FindOptions{})
+		s.NoError(err)
+		s.Equal("world", doc2.Get("hello"))
+
+		cur, err := s.d.Find(ctx, Document{"a": 2}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		docs[0].Set("hello", "changed")
+
+		doc3 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": 2}, &doc3, gedb.FindOptions{})
+		s.NoError(err)
+		s.Equal("world", doc3.Get("hello"))
+	})
+
+	// Can use sort, skip and limit with FindOptions
+	s.Run("SortSkipLimitWithFindOptions", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 2, "hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 24, "hello": "earth"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 13, "hello": "blueplanet"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 15, "hello": "home"})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{
+			Sort:  Document{"a": 1},
+			Limit: 2,
+		})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 2)
+		s.Equal("world", docs[0].Get("hello"))
+		s.Equal("blueplanet", docs[1].Get("hello"))
+	})
+
+	// Can use sort and skip with FindOne
+	s.Run("SortSkipWithFindOne", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 2, "hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 24, "hello": "earth"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 13, "hello": "blueplanet"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 15, "hello": "home"})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, nil, &doc, gedb.FindOptions{Sort: Document{"a": 1}})
+		s.NoError(err)
+		s.Equal("world", doc.Get("hello"))
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": Document{"$gt": 14}}, &doc2, gedb.FindOptions{Sort: Document{"a": 1}})
+		s.NoError(err)
+		s.Equal("home", doc2.Get("hello"))
+
+		doc3 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": Document{"$gt": 14}}, &doc3, gedb.FindOptions{
+			Sort: Document{"a": 1},
+			Skip: 1,
+		})
+		s.NoError(err)
+		s.Equal("earth", doc3.Get("hello"))
+
+		doc4 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": Document{"$gt": 14}}, &doc4, gedb.FindOptions{
+			Sort: Document{"a": 1},
+			Skip: 2,
+		})
+		s.Error(err) // No documents found
+	})
+
+	// Can use projections in find
+	s.Run("ProjectionsInFind", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 2, "hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 24, "hello": "earth"})
+		s.NoError(err)
+
+		cur, err := s.d.Find(ctx, Document{"a": 2}, gedb.FindOptions{
+			Projection: Document{"a": 0, "_id": 0},
+		})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+		s.Equal(Document{"hello": "world"}, docs[0])
+
+		cur, err = s.d.Find(ctx, Document{"a": 2}, gedb.FindOptions{
+			Projection: Document{"a": 0, "hello": 1},
+		})
+		s.Error(err)
+		s.Nil(cur)
+	})
+
+	// Can use projections in findOne
+	s.Run("ProjectionsInFindOne", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 2, "hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 24, "hello": "earth"})
+		s.NoError(err)
+
+		doc := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": 2}, &doc, gedb.FindOptions{
+			Projection: Document{"a": 0, "_id": 0},
+		})
+		s.NoError(err)
+		s.Equal(Document{"hello": "world"}, doc)
+
+		doc2 := make(Document)
+		err = s.d.FindOne(ctx, Document{"a": 2}, &doc2, gedb.FindOptions{
+			Projection: Document{"a": 0, "hello": 1},
+		})
+		s.Error(err)
+	})
+
+} // ==== End of 'Find' ==== //
