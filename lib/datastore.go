@@ -553,7 +553,11 @@ IndexesLoop:
 		if vDoc := query.D(k); vDoc != nil {
 			if in := vDoc.Get("$in"); vDoc.Has("$in") {
 				if idx, ok := d.indexes[k]; ok {
-					return idx.GetMatching(in), nil
+					if l, ok := in.([]any); ok {
+						return idx.GetMatching(l...), nil
+					} else {
+						return idx.GetMatching(in), nil
+					}
 				}
 			}
 		}
