@@ -88,6 +88,17 @@ func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOpt
 		}
 	}
 
+	// just making sure the iteration wont receive a negative number
+	options.Skip = max(0, options.Skip)
+	res = res[options.Skip:]
+
+	if options.Limit <= 0 {
+		options.Limit = int64(len(res))
+	}
+	options.Limit = min(int64(len(res)), options.Limit)
+
+	res = res[:options.Limit]
+
 	if len(options.Projection) != 0 && len(res) != 0 {
 		res, err = cur.project(res, options)
 		if err != nil {
@@ -351,11 +362,5 @@ func (c *Cursor) sort(candidates []gedb.Document, options gedb.CursorOptions) ([
 		return nil, err
 	}
 
-	// just making sure the iteration wont receive a negative number
-	options.Limit = max(options.Limit, 0)
-
-	limit := min(int64(len(res)), options.Limit)
-	skip := max(0, options.Skip)
-
-	return res[skip:limit], nil
+	return res, nil
 }
