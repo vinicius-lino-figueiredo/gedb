@@ -245,13 +245,8 @@ func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 		return 0, err
 	}
 	defer d.executor.Unlock()
-	queryDoc, err := d.documentFactory(query)
 
-	if err != nil {
-		return 0, err
-	}
-
-	cur, err := d.cursorFactory(ctx, d.getAllData(), gedb.CursorOptions{Query: queryDoc})
+	cur, err := d.find(ctx, query, gedb.FindOptions{}, false)
 	if err != nil {
 		return 0, err
 	}
