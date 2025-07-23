@@ -576,8 +576,8 @@ IndexesLoop:
 		}
 
 		for _, c := range comp {
-			if vDoc.Has(c) {
-				return d.indexes[k].GetBetweenBounds(ctx, vDoc)
+			if idx, ok := d.indexes[k]; ok && vDoc.Has(c) {
+				return idx.GetBetweenBounds(ctx, vDoc)
 			}
 		}
 	}
