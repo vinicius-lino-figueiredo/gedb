@@ -181,7 +181,7 @@ func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue 
 			if err != nil {
 				return false, err
 			}
-			matches, err := m.matchQueryPart(elObj, "k", queryKey, false)
+			matches, err := m.matchQueryPart(elObj, "k", queryValue, false)
 			if err != nil {
 				return false, err
 			}
@@ -210,8 +210,8 @@ func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue 
 					return false, err
 				}
 			}
+			return true, nil
 		}
-		return true, nil
 	}
 
 	if queryValueRegex, ok := queryValue.(*regexp.Regexp); ok {
