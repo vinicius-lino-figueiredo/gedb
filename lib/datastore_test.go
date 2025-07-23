@@ -1110,3 +1110,65 @@ func (s *DatastoreTestSuite) TestFind() {
 	})
 
 } // ==== End of 'Find' ==== //
+
+func (s *DatastoreTestSuite) TestCount() {
+	// Count all documents if an empty query is used
+	s.Run("NoQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "another", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+		docs, err := s.d.Count(ctx, nil)
+		s.NoError(err)
+		s.Equal(int64(3), docs)
+	})
+
+	// Count all documents matching a basic query
+	s.Run("BasicQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+		docs, err := s.d.Count(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+		s.Equal(int64(2), docs)
+		docs, err = s.d.Count(ctx, Document{"somedata": "nope"})
+		s.NoError(err)
+		s.Equal(int64(0), docs)
+	})
+
+	// Array fields match if any element matches
+	s.Run("ArrayFields", func() {
+		_, err := s.d.Insert(ctx, Document{"fruits": []any{"pear", "apple", "banana"}})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"fruits": []any{"coconut", "orange", "pear"}})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"fruits": []any{"banana"}})
+		s.NoError(err)
+
+		docs, err := s.d.Count(ctx, Document{"fruits": "pear"})
+		s.NoError(err)
+		s.Equal(int64(2), docs)
+
+		docs, err = s.d.Count(ctx, Document{"fruits": "banana"})
+		s.NoError(err)
+		s.Equal(int64(2), docs)
+
+		docs, err = s.d.Count(ctx, Document{"fruits": "doesntexist"})
+		s.NoError(err)
+		s.Equal(int64(0), docs)
+	})
+
+	// Returns an error if the query is not well formed
+	s.Run("BadQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Count(ctx, Document{"$or": Document{"hello": "world"}})
+		s.Error(err)
+	})
+
+} // ==== End of 'Count' ==== //
