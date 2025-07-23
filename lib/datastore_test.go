@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -524,3 +526,267 @@ func (s *DatastoreTestSuite) TestInsert() {
 	})
 
 } // ==== End of 'Insert' ==== //
+
+func (s *DatastoreTestSuite) TestGetCandidates() {
+	// Can use an index to get docs with a basic match
+	s.Run("BasicMatch", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"tf"}}))
+		_doc1, err := s.d.Insert(ctx, Document{"tf": 4})
+		s.NoError(err)
+		s.Len(_doc1, 1)
+		_, err = s.d.Insert(ctx, Document{"tf": 6})
+		s.NoError(err)
+		_doc2, err := s.d.Insert(ctx, Document{"tf": 4, "an": "other"})
+		s.Len(_doc2, 1)
+		_, err = s.d.Insert(ctx, Document{"tf": 9})
+		s.NoError(err)
+		data, err := s.d.getCandidates(ctx, Document{"r": 6, "tf": 4}, false)
+		s.NoError(err)
+		s.Len(data, 2)
+		doc1ID := slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })
+		s.GreaterOrEqual(doc1ID, 0)
+		doc2ID := slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })
+		s.GreaterOrEqual(doc2ID, 0)
+
+		doc1 := data[doc1ID]
+		doc2 := data[doc2ID]
+
+		s.Equal(Document{"_id": doc1.ID(), "tf": 4}, doc1)
+		s.Equal(Document{"_id": doc2.ID(), "tf": 4, "an": "other"}, doc2)
+	})
+
+	// Can use a compound index to get docs with a basic match
+	s.Run("BasicMatchCompoundIndex", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"tf", "tg"}}))
+
+		_, err := s.d.Insert(ctx, Document{"tf": 4, "tg": 0, "foo": 1})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"tf": 6, "tg": 0, "foo": 2})
+		s.NoError(err)
+		_doc1, err := s.d.Insert(ctx, Document{"tf": 4, "tg": 1, "foo": 3})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"tf": 6, "tg": 1, "foo": 4})
+		data, err := s.d.getCandidates(ctx, Document{"tf": 4, "tg": 1}, false)
+		s.NoError(err)
+		s.Len(data, 1)
+		doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+		s.Equal(Document{"_id": doc1.ID(), "tf": 4, "tg": 1, "foo": 3}, doc1)
+	})
+
+	// Can use an index to get docs with a $in match
+	s.Run("Match$inOperator", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"tf"}}))
+
+		_, err := s.d.Insert(ctx, Document{"tf": 4})
+		s.NoError(err)
+		_doc1, err := s.d.Insert(ctx, Document{"tf": 6})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"tf": 4, "an": "other"})
+		s.NoError(err)
+		_doc2, err := s.d.Insert(ctx, Document{"tf": 9})
+		s.NoError(err)
+
+		data, err := s.d.getCandidates(ctx, Document{"r": 6, "tf": Document{"$in": []any{6, 9, 5}}}, false)
+		s.NoError(err)
+
+		doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+		doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+
+		s.Len(data, 2)
+
+		s.Equal(Document{"_id": doc1.ID(), "tf": 6}, doc1)
+		s.Equal(Document{"_id": doc2.ID(), "tf": 9}, doc2)
+	})
+
+	// If no index can be used, return the whole database
+	s.Run("ReturnDatabaseIfNoUsabeIndex", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"tf"}}))
+
+		_doc1, err := s.d.Insert(ctx, Document{"tf": 4})
+		s.NoError(err)
+		_doc2, err := s.d.Insert(ctx, Document{"tf": 6})
+		s.NoError(err)
+		_doc3, err := s.d.Insert(ctx, Document{"tf": 4, "an": "other"})
+		s.NoError(err)
+		_doc4, err := s.d.Insert(ctx, Document{"tf": 9})
+		s.NoError(err)
+
+		data, err := s.d.getCandidates(ctx, Document{"r": 6, "notf": Document{"$in": []any{6, 9, 5}}}, false)
+		s.NoError(err)
+
+		doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+		doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+		doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc3[0].ID() })]
+		doc4 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc4[0].ID() })]
+
+		s.Equal(Document{"_id": doc1.ID(), "tf": 4}, doc1)
+		s.Equal(Document{"_id": doc2.ID(), "tf": 6}, doc2)
+		s.Equal(Document{"_id": doc3.ID(), "tf": 4, "an": "other"}, doc3)
+		s.Equal(Document{"_id": doc4.ID(), "tf": 9}, doc4)
+	})
+
+	// Can use indexes for comparison matches
+	s.Run("ComparisonMatch", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"tf"}}))
+
+		_, err := s.d.Insert(ctx, Document{"tf": 4})
+		s.NoError(err)
+		_doc2, err := s.d.Insert(ctx, Document{"tf": 6})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"tf": 4, "an": "other"})
+		s.NoError(err)
+		_doc4, err := s.d.Insert(ctx, Document{"tf": 9})
+		s.NoError(err)
+
+		data, err := s.d.getCandidates(ctx, Document{"r": 6, "tf": Document{"$lte": 9, "$gte": 6}}, false)
+		s.NoError(err)
+
+		doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+		doc4 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc4[0].ID() })]
+
+		s.Len(data, 2)
+
+		s.Equal(Document{"_id": doc2.ID(), "tf": 6}, doc2)
+		s.Equal(Document{"_id": doc4.ID(), "tf": 9}, doc4)
+	})
+
+	// Can set a TTL index that expires documents
+	s.Run("TLLIndex", func() {
+		now := time.Now()
+		timeGetter := new(timeGetterMock)
+		options := gedb.DatastoreOptions{
+			Filename:      testDb,
+			TimestampData: true,
+			Autoload:      true,
+			TimeGetter:    timeGetter,
+		}
+
+		d, err := LoadDatastore(ctx, options)
+		s.NoError(err)
+
+		s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"exp"}, ExpireAfter: 200 * time.Millisecond}))
+
+		// will be called on insert and on find
+		timeGetter.On("GetTime").Return(now.Add(300 * time.Millisecond))
+
+		_, err = d.Insert(ctx, Document{"hello": "world", "exp": now})
+		s.NoError(err)
+
+		cur, err := d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		s.Len(docs, 0)
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.NoError(d.WaitCompaction(ctx))
+			b, err := os.ReadFile(testDb)
+			s.NoError(err)
+			s.NotContains(string(b), "world")
+		}()
+		s.NoError(d.CompactDatafile(ctx))
+		wg.Wait()
+	})
+
+	// TTL indexes can expire multiple documents and only what needs to be expired
+	s.Run("RemoveMultipleExpiredAndKeepOthers", func() {
+		now := time.Now()
+		timeGetter := new(timeGetterMock)
+		options := gedb.DatastoreOptions{
+			Filename:      testDb,
+			TimestampData: true,
+			Autoload:      true,
+			TimeGetter:    timeGetter,
+		}
+
+		d, err := LoadDatastore(ctx, options)
+		s.NoError(err)
+
+		s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"exp"}, ExpireAfter: 200 * time.Millisecond}))
+
+		// will be called on insert and on find
+		firstTimestamp := timeGetter.On("GetTime").Return(now).Times(4)
+
+		_, err = d.Insert(ctx, Document{"hello": "world1", "exp": now})
+		s.NoError(err)
+		_, err = d.Insert(ctx, Document{"hello": "world2", "exp": now.Add(50 * time.Millisecond)})
+		s.NoError(err)
+		_, err = d.Insert(ctx, Document{"hello": "world3", "exp": now.Add(100 * time.Millisecond)})
+		s.NoError(err)
+
+		cur, err := d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 3)
+
+		firstTimestamp.Unset()
+
+		// after first doc (200ms) and second doc (250ms) + 1ms
+		secondTimestamp := timeGetter.On("GetTime").Return(now.Add(251 * time.Millisecond))
+
+		cur, err = d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+
+		secondTimestamp.Unset()
+
+		// after third doc (300ms) + 1ms
+		timeGetter.On("GetTime").Return(now.Add(301 * time.Millisecond))
+
+		cur, err = d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 0)
+	})
+
+	// Document where indexed field is absent or not a date are ignored
+	s.Run("IgnoreIfFieldIsNotAValidDate", func() {
+		now := time.Now()
+		timeGetter := new(timeGetterMock)
+		options := gedb.DatastoreOptions{
+			Filename:      testDb,
+			TimestampData: true,
+			Autoload:      true,
+			TimeGetter:    timeGetter,
+		}
+
+		d, err := LoadDatastore(ctx, options)
+		s.NoError(err)
+
+		s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"exp"}, ExpireAfter: 200 * time.Millisecond}))
+
+		// will be called on insert and on find
+		firstTimestamp := timeGetter.On("GetTime").Return(now).Times(4)
+
+		_, err = d.Insert(ctx, Document{"hello": "world1", "exp": now})
+		s.NoError(err)
+		_, err = d.Insert(ctx, Document{"hello": "world2", "exp": "not a date"})
+		s.NoError(err)
+		_, err = d.Insert(ctx, Document{"hello": "world3"})
+		s.NoError(err)
+
+		cur, err := d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 3)
+
+		firstTimestamp.Unset()
+
+		timeGetter.On("GetTime").Return(now.Add(301 * time.Millisecond))
+
+		cur, err = d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 2)
+
+	})
+} // ==== End of 'GetCandidates' ==== //
