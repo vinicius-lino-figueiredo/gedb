@@ -23,6 +23,7 @@ type Index struct {
 	treeOptions     bst.Options
 	documentFactory func(any) (gedb.Document, error)
 	comparer        gedb.Comparer
+	hasher          gedb.Hasher
 }
 
 // FieldName implements gedb.Index.
@@ -62,6 +63,9 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 	if options.DocumentFactory == nil {
 		options.DocumentFactory = NewDocument
 	}
+	if options.Hasher == nil {
+		options.Hasher = NewHasher()
+	}
 	return &Index{
 		fieldName:       options.FieldName,
 		_fields:         strings.Split(options.FieldName, ","),
@@ -71,6 +75,7 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 		tree:            bst.NewBinarySearchTree(treeOptions),
 		documentFactory: options.DocumentFactory,
 		comparer:        options.Comparer,
+		hasher:          options.Hasher,
 	}
 }
 
@@ -275,9 +280,9 @@ func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...gedb.Update)
 }
 
 // GetMatching implements gedb.Index.
-func (i *Index) GetMatching(value ...any) []gedb.Document {
+func (i *Index) GetMatching(value ...any) ([]gedb.Document, error) {
 	res := []gedb.Document{}
-	_res := make(map[string][]gedb.Document)
+	_res := newNonComparableMap[[]gedb.Document](i.hasher, i.comparer)
 	for _, v := range value {
 		found := i.tree.Search(v)
 		if len(found) == 0 {
@@ -288,14 +293,28 @@ func (i *Index) GetMatching(value ...any) []gedb.Document {
 		for n, d := range found {
 			foundDocs[n] = d.(gedb.Document)
 		}
-		_res[id] = foundDocs
+		_res.Set(id, foundDocs)
 	}
-	keys := slices.Collect(maps.Keys(_res))
-	slices.Sort(keys)
+	keys := slices.Collect(_res.Keys())
+	var err error
+	slices.SortFunc(keys, func(a, b any) int {
+		if err != nil {
+			return 0
+		}
+		comp, compErr := i.comparer.Compare(a, b)
+		if compErr != nil {
+			err = compErr
+		}
+		return comp
+	})
 	for _, _id := range keys {
-		res = append(res, _res[_id]...)
+		v, _, err := _res.Get(_id)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, v...)
 	}
-	return res
+	return res, nil
 }
 
 // GetBetweenBounds implements gedb.Index.

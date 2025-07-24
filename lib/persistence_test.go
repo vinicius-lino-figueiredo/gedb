@@ -894,11 +894,11 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			s.Len(f, datafileLength)
 
 			slices.SortFunc(docs, func(a, b gedb.Document) int {
-				idA, idB := a.ID(), b.ID()
+				idA, idB := a.ID().(string), b.ID().(string)
 				if len(idA) != len(idB) {
 					return cmp.Compare(len(idA), len(idB))
 				}
-				return cmp.Compare(a.ID(), b.ID())
+				return cmp.Compare(idA, idB)
 			})
 
 			s.Len(docs, N)

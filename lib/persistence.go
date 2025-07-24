@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"maps"
 	"os"
 	"slices"
 
@@ -35,6 +34,7 @@ type Persistence struct {
 	decoder               gedb.Decoder
 	comparer              gedb.Comparer
 	documentFactory       func(any) (gedb.Document, error)
+	hasher                gedb.Hasher
 }
 
 // NewPersistence returns a new implementation of gedb.Persistence.
@@ -94,6 +94,10 @@ func NewPersistence(options gedb.PersistenceOptions) (*Persistence, error) {
 		storage = NewStorage()
 	}
 
+	if options.Hasher == nil {
+		options.Hasher = NewHasher()
+	}
+
 	return &Persistence{
 		inMemoryOnly:          inMemoryOnly || filename == "",
 		filename:              filename,
@@ -107,6 +111,7 @@ func NewPersistence(options gedb.PersistenceOptions) (*Persistence, error) {
 		decoder:               decoder,
 		comparer:              comparer,
 		documentFactory:       documentFactory,
+		hasher:                options.Hasher,
 	}, nil
 }
 
@@ -157,7 +162,7 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 		return nil, nil, ctx.Err()
 	default:
 	}
-	dataByID := make(map[string]gedb.Document)
+	dataByID := newNonComparableMap[gedb.Document](p.hasher, p.comparer)
 
 	indexes := make(map[string]gedb.IndexDTO)
 
@@ -193,9 +198,9 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 				continue
 			}
 			if comp == 0 {
-				delete(dataByID, doc.ID())
+				dataByID.Delete(doc.ID())
 			} else {
-				dataByID[doc.ID()] = doc
+				dataByID.Set(doc.ID(), doc)
 			}
 		} else {
 			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
@@ -226,7 +231,7 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 			}
 		}
 	}
-	data := slices.Collect(maps.Values(dataByID))
+	data := slices.Collect(dataByID.Values())
 	return data, indexes, nil
 }
 

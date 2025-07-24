@@ -100,6 +100,7 @@ type DatastoreOptions struct {
 	CursorFactory         func(context.Context, []Document, CursorOptions) (Cursor, error)
 	Modifier              Modifier
 	TimeGetter            TimeGetter
+	Hasher                Hasher
 }
 
 type Serializer interface {
@@ -152,7 +153,7 @@ type Executor interface {
 type Index interface {
 	GetAll() []Document
 	GetBetweenBounds(ctx context.Context, query any) ([]Document, error)
-	GetMatching(value ...any) []Document
+	GetMatching(value ...any) ([]Document, error)
 	Insert(ctx context.Context, docs ...Document) error
 	Remove(ctx context.Context, docs ...Document) error
 	Reset(ctx context.Context, newData ...Document) error
@@ -173,6 +174,7 @@ type IndexOptions struct {
 	ExpireAfter     time.Duration
 	DocumentFactory func(any) (Document, error)
 	Comparer        Comparer
+	Hasher          Hasher
 	DTO             *IndexDTO
 }
 
@@ -187,7 +189,7 @@ type Update struct {
 // a time and doesn't need to be concurrency safe.
 type Document interface {
 	// ID returns the document ID, if any, or an empty string.
-	ID() string
+	ID() any
 	// D returns the subdocument for the given key, if any.
 	D(string) Document
 	// Get returns the value under the given key, or nil if unset.
@@ -219,6 +221,7 @@ type PersistenceOptions struct {
 	Decoder               Decoder
 	Comparer              Comparer
 	DocumentFactory       func(any) (Document, error)
+	Hasher                Hasher
 }
 
 type IndexDTO struct {
@@ -281,4 +284,8 @@ type Modifier interface {
 
 type TimeGetter interface {
 	GetTime() time.Time
+}
+
+type Hasher interface {
+	Hash(any) (uint64, error)
 }

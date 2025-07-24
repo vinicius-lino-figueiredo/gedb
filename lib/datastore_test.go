@@ -516,9 +516,6 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// Can insert a doc with id 0
 	s.Run("InsertNumberZeroAsID", func() {
-		// NOTE: This test passes, but persisted data would now work
-		// properly because the package expects _id to always be string.
-		s.T().Skip()
 		doc, err := s.d.Insert(ctx, Document{"_id": 0, "hello": "world"})
 		s.NoError(err)
 		s.Equal(0, doc[0].Get("_id"))

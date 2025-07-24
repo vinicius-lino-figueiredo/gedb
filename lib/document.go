@@ -121,12 +121,8 @@ func evaluate(v any) (any, error) {
 }
 
 // ID implements gedb.Document
-func (d Document) ID() string {
-	i := d["_id"]
-	if s, ok := i.(string); ok {
-		return s
-	}
-	return ""
+func (d Document) ID() any {
+	return d["_id"]
 }
 
 // Get implements gedb.Document

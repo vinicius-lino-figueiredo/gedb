@@ -39,6 +39,7 @@ type Datastore struct {
 	decoder               gedb.Decoder
 	modifier              gedb.Modifier
 	timeGetter            gedb.TimeGetter
+	hasher                gedb.Hasher
 }
 
 // LoadDatastore creates a new gedb.GEDB and loads the database.
@@ -61,6 +62,9 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.Decoder == nil {
 		options.Decoder = NewDecoder()
 	}
+	if options.Hasher == nil {
+		options.Hasher = NewHasher()
+	}
 	if options.Persistence == nil {
 		var err error
 		persistenceOptions := gedb.PersistenceOptions{
@@ -73,6 +77,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 			Deserializer:          options.Deserializer,
 			Storage:               options.Storage,
 			Decoder:               options.Decoder,
+			Hasher:                options.Hasher,
 		}
 		options.Persistence, err = NewPersistence(persistenceOptions)
 		if err != nil {
@@ -119,6 +124,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		comparer:              options.Comparer,
 		modifier:              options.Modifier,
 		timeGetter:            options.TimeGetter,
+		hasher:                options.Hasher,
 	}, nil
 }
 
@@ -270,7 +276,11 @@ func (d *Datastore) createNewID() (string, error) {
 
 		enc := base64.StdEncoding.EncodeToString(buf)
 		enc = strings.NewReplacer("+", "", "/", "").Replace(enc)
-		if m := d.indexes["_id"].GetMatching(enc); len(m) == 0 {
+		m, err := d.indexes["_id"].GetMatching(enc)
+		if err != nil {
+			return "", err
+		}
+		if len(m) == 0 {
 			return enc, nil
 		}
 	}
@@ -457,7 +467,7 @@ func (d *Datastore) getCandidates(ctx context.Context, query gedb.Document, dont
 		return docs, nil
 	}
 	now := d.timeGetter.GetTime()
-	expiredDocsIDs := make([]string, 0, len(docs))
+	expiredDocsIDs := make([]any, 0, len(docs))
 	validDocs := make([]gedb.Document, 0, len(docs))
 DocLoop:
 	for _, doc := range docs {
@@ -518,7 +528,7 @@ func (d *Datastore) getRawCandidates(ctx context.Context, query gedb.Document) (
 		if !d.filterIndexNames(indexNames, k, v) {
 			continue
 		}
-		return d.indexes[k].GetMatching(v), nil
+		return d.indexes[k].GetMatching(v)
 	}
 
 IndexesLoop:
@@ -542,7 +552,7 @@ IndexesLoop:
 				break
 			}
 		}
-		return idx.GetMatching(query), nil
+		return idx.GetMatching(query)
 	}
 
 	for k := range query.Iter() {
@@ -550,9 +560,9 @@ IndexesLoop:
 			if in := vDoc.Get("$in"); vDoc.Has("$in") {
 				if idx, ok := d.indexes[k]; ok {
 					if l, ok := in.([]any); ok {
-						return idx.GetMatching(l...), nil
+						return idx.GetMatching(l...)
 					} else {
-						return idx.GetMatching(in), nil
+						return idx.GetMatching(in)
 					}
 				}
 			}
