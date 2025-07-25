@@ -841,8 +841,10 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 					return 0, err
 				}
 			}
-			_, err = d.insert(ctx, updateQryDoc)
-			return count, err
+			if _, err = d.insert(ctx, updateQryDoc); err != nil {
+				return 0, err
+			}
+			return 1, err
 		}
 	}
 	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, false)
