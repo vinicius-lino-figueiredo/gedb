@@ -105,6 +105,9 @@ func (m *Modifier) deepCopy(doc gedb.Document) (gedb.Document, error) {
 	}
 
 	for k, v := range doc.Iter() {
+		if strings.HasPrefix(k, "$") {
+			continue
+		}
 		copied, err := m.copyAny(v)
 		if err != nil {
 			return nil, err
