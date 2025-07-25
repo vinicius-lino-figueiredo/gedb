@@ -556,9 +556,8 @@ IndexesLoop:
 				if idx, ok := d.indexes[k]; ok {
 					if l, ok := in.([]any); ok {
 						return idx.GetMatching(l...)
-					} else {
-						return idx.GetMatching(in)
 					}
+					return idx.GetMatching(in)
 				}
 			}
 		}
