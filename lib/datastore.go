@@ -381,11 +381,6 @@ func (d *Datastore) Find(ctx context.Context, query any, options gedb.FindOption
 }
 
 func (d *Datastore) find(ctx context.Context, query any, options gedb.FindOptions, dontExpireStaleDocs bool) (gedb.Cursor, error) {
-
-	if query == nil {
-		query = map[string]any{}
-	}
-
 	queryDoc, err := d.documentFactory(query)
 	if err != nil {
 		return nil, err
