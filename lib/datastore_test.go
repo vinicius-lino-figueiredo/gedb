@@ -1169,3 +1169,570 @@ func (s *DatastoreTestSuite) TestCount() {
 	})
 
 } // ==== End of 'Count' ==== //
+
+func (s *DatastoreTestSuite) TestUpdate() {
+
+	// If the query doesn't match anything, database is not modified
+	s.Run("NoChangeIfNoMatch", func() {
+		_, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "another"})
+		s.NoError(err)
+
+		n, err := s.d.Update(ctx, Document{"somedata": "nope"}, Document{"newDoc": "yes"}, gedb.UpdateOptions{Multi: true})
+		s.NoError(err)
+		s.Len(n, 0)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		doc1 := docs[slices.IndexFunc(docs, func(d Document) bool { return d["somedata"] == "ok" })]
+		doc2 := docs[slices.IndexFunc(docs, func(d Document) bool { return d["somedata"] == "again" })]
+		doc3 := docs[slices.IndexFunc(docs, func(d Document) bool { return d["somedata"] == "another" })]
+
+		s.Len(docs, 3)
+		for _, doc := range docs {
+			s.NotContains(doc, "newDoc")
+		}
+
+		s.Equal(Document{"_id": doc1["_id"], "somedata": "ok"}, doc1)
+		s.Equal(Document{"_id": doc2["_id"], "somedata": "again", "plus": "additional data"}, doc2)
+		s.Equal(Document{"_id": doc3["_id"], "somedata": "another"}, doc3)
+	})
+
+	// If timestampData option is set, update the updatedAt field
+	s.Run("PatchUpdatedAtField", func() {
+
+		beginning := time.Now().Truncate(time.Millisecond)
+
+		timeGetter := new(timeGetterMock)
+		call := timeGetter.On("GetTime").Return(beginning)
+
+		d, err := NewDatastore(gedb.DatastoreOptions{Filename: testDb, TimestampData: true, TimeGetter: timeGetter})
+		s.NoError(err)
+		insertedDocs, err := d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+
+		call.Unset()
+
+		s.Equal(beginning, insertedDocs[0].Get("updatedAt"))
+		s.Equal(beginning, insertedDocs[0].Get("createdAt"))
+		s.Len(insertedDocs[0], 4)
+
+		call = timeGetter.On("GetTime").Return(beginning.Add(time.Millisecond))
+		n, err := d.Update(ctx, Document{"_id": insertedDocs[0].ID()}, Document{"$set": Document{"hello": "mars"}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		cur, err := d.Find(ctx, Document{"_id": insertedDocs[0].ID()}, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		s.Len(docs, 1)
+		s.Len(docs[0], 4)
+		s.Equal(insertedDocs[0].ID(), docs[0].ID())
+		s.Equal(insertedDocs[0].Get("createdAt"), docs[0].Get("createdAt"))
+		s.Equal(beginning.Add(time.Millisecond), docs[0].Get("updatedAt"))
+		s.Equal("mars", docs[0].Get("hello"))
+
+	})
+
+	// Can update multiple documents matching the query
+	s.Run("MultipleMatches", func() {
+
+		_doc1, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		id1 := _doc1[0].ID()
+
+		_doc2, err := s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		id2 := _doc2[0].ID()
+
+		_doc3, err := s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+		id3 := _doc3[0].ID()
+
+		n, err := s.d.Update(ctx, Document{"somedata": "again"}, Document{"newDoc": "yes"}, gedb.UpdateOptions{Multi: true})
+		s.NoError(err)
+		s.Len(n, 2)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		doc1 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id1 })]
+		doc2 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id2 })]
+		doc3 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id3 })]
+
+		s.Len(docs, 3)
+
+		s.Len(doc1, 2)
+		s.Equal("ok", doc1.Get("somedata"))
+		// removed redundant _id assertion
+
+		s.Len(doc2, 2)
+		s.Equal("yes", doc2.Get("newDoc"))
+		// removed redundant _id assertion
+
+		s.Len(doc3, 2)
+		s.Equal("yes", doc3.Get("newDoc"))
+		// removed redundant _id assertion
+
+	})
+
+	// Can update only one document matching the query
+	s.Run("MultiDisabled", func() {
+		_doc1, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		id1 := _doc1[0].ID()
+		_doc2, err := s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		id2 := _doc2[0].ID()
+		_doc3, err := s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+		id3 := _doc3[0].ID()
+
+		n, err := s.d.Update(ctx, Document{"somedata": "again"}, Document{"newDoc": "yes"}, gedb.UpdateOptions{Multi: false})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		doc1 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id1 })]
+		doc2 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id2 })]
+		doc3 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id3 })]
+
+		s.Equal(Document{"_id": doc1.ID(), "somedata": "ok"}, doc1)
+		if len(doc2) == 2 {
+			s.Equal(Document{"_id": doc2.ID(), "newDoc": "yes"}, doc2)
+			s.Equal(Document{"_id": doc3.ID(), "somedata": "again"}, doc3)
+		} else {
+			s.Equal(Document{"_id": doc2.ID(), "somedata": "again", "plus": "additional data"}, doc2)
+			s.Equal(Document{"_id": doc3.ID(), "newDoc": "yes"}, doc3)
+		}
+
+		s.NoError(s.d.LoadDatabase(ctx))
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+
+		doc1 = docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id1 })]
+		doc2 = docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id2 })]
+		doc3 = docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == id3 })]
+
+		s.Equal(Document{"_id": doc1.ID(), "somedata": "ok"}, doc1)
+		if len(doc2) == 2 {
+			s.Equal(Document{"_id": doc2.ID(), "newDoc": "yes"}, doc2)
+			s.Equal(Document{"_id": doc3.ID(), "somedata": "again"}, doc3)
+		} else {
+			s.Equal(Document{"_id": doc2.ID(), "somedata": "again", "plus": "additional data"}, doc2)
+			s.Equal(Document{"_id": doc3.ID(), "newDoc": "yes"}, doc3)
+		}
+	})
+
+	s.Run("Upsert", func() {
+
+		// Can perform upserts if needed
+		s.Run("Simple", func() {
+			n, err := s.d.Update(ctx, Document{"impossible": "db is empty anyway"}, Document{"newDoc": true}, gedb.UpdateOptions{})
+			s.NoError(err)
+			s.Len(n, 0)
+
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 0)
+
+			n, err = s.d.Update(ctx, Document{"impossible": "db is empty anyway"}, Document{"something": "created ok"}, gedb.UpdateOptions{Upsert: true})
+			s.NoError(err)
+			s.Len(n, 1)
+
+			cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err = s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 1)
+			s.Equal("created ok", docs[0].Get("something"))
+
+			// original test would check if returned updated
+			// documents could modify the actual values in index,
+			// but update here does not return documents.
+		})
+
+		// If the update query is a normal object with no modifiers, it is the doc that will be upserted
+		s.Run("UseQueryIfNoDollarFields", func() {
+			qry := Document{"$or": []any{Document{"a": 4}, Document{"a": 5}}}
+			update := Document{"hello": "world", "bloup": "blap"}
+			n, err := s.d.Update(ctx, qry, update, gedb.UpdateOptions{Upsert: true})
+			s.NoError(err)
+			s.Len(n, 1)
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 1)
+			doc := docs[0]
+			s.Len(doc, 3)
+			s.Equal("world", doc.Get("hello"))
+			s.Equal("blap", doc.Get("bloup"))
+		})
+
+		// If the update query contains modifiers, it is applied to the object resulting from removing all operators from the find query 1
+		s.Run("UseNonOperatorsFromFindQuery", func() {
+			qry := Document{"$or": []any{Document{"a": 4}, Document{"a": 5}}}
+			update := Document{
+				"$set": Document{"hello": "world"},
+				"$inc": Document{"bloup": 3},
+			}
+			n, err := s.d.Update(ctx, qry, update, gedb.UpdateOptions{Upsert: true})
+			s.NoError(err)
+			s.Len(n, 1)
+
+			cur, err := s.d.Find(ctx, Document{"hello": "world"}, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+
+			s.Len(docs, 1)
+			doc := docs[0]
+			s.Len(doc, 3)
+			s.Equal("world", doc.Get("hello"))
+			s.Equal(float64(3), doc.Get("bloup"))
+		})
+
+		// If the update query contains modifiers, it is applied to the object resulting from removing all operators from the find query 2
+		s.Run("UseNonOperatorsFromFindQuery", func() {
+			qry := Document{
+				"$or": []any{Document{"a": 4}, Document{"a": 5}},
+				"cac": "rrr",
+			}
+			update := Document{
+				"$set": Document{"hello": "world"},
+				"$inc": Document{"bloup": 3},
+			}
+			n, err := s.d.Update(ctx, qry, update, gedb.UpdateOptions{Upsert: true})
+			s.NoError(err)
+			s.Len(n, 1)
+
+			cur, err := s.d.Find(ctx, Document{"hello": "world"}, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+
+			s.Len(docs, 1)
+			doc := docs[0]
+			s.Len(doc, 4)
+			s.Equal("rrr", doc.Get("cac"))
+			s.Equal("world", doc.Get("hello"))
+			s.Equal(float64(3), doc.Get("bloup"))
+		})
+
+		// Performing upsert with badly formatted fields yields a standard error not an exception
+		s.Run("BadField", func() {
+			_, err := s.d.Update(ctx, Document{"_id": "1234"}, Document{"$set": Document{"$$badfield": 5}}, gedb.UpdateOptions{Upsert: true})
+			s.Error(err)
+		})
+	}) // ==== End of 'Upserts' ==== //
+
+	// Cannot perform update if the update query is not either registered-modifiers-only or copy-only, or contain badly formatted fields
+	s.Run("ErrorBadField", func() {
+		_, err := s.d.Insert(ctx, Document{"somethnig": "yup"})
+		s.NoError(err)
+		_, err = s.d.Update(ctx, nil, Document{"$badField": 5}, gedb.UpdateOptions{})
+		s.Error(err)
+		_, err = s.d.Update(ctx, nil, Document{"bad.field": 5}, gedb.UpdateOptions{})
+		s.Error(err)
+		_, err = s.d.Update(ctx, nil, Document{"$inc": Document{"test": 5}, "mixed": "rrr"}, gedb.UpdateOptions{})
+		s.Error(err)
+		_, err = s.d.Update(ctx, nil, Document{"$inexistent": Document{"test": 5}}, gedb.UpdateOptions{})
+		s.Error(err)
+	})
+
+	// Can update documents using multiple modifiers
+	s.Run("MultipleModifiers", func() {
+		newDoc, err := s.d.Insert(ctx, Document{"something": "yup", "other": 40})
+		s.NoError(err)
+		id := newDoc[0].ID()
+
+		n, err := s.d.Update(ctx, nil, Document{"$set": Document{"something": "changed"}, "$inc": Document{"other": 10}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		var doc Document
+		s.NoError(s.d.FindOne(ctx, Document{"_id": id}, &doc, gedb.FindOptions{}))
+		s.Len(doc, 3)
+		s.Equal(id, doc.ID())
+		s.Equal("changed", doc.Get("something"))
+		s.Equal(float64(50), doc.Get("other"))
+	})
+
+	// Can upsert a document even with modifiers
+	s.Run("UpsertWithModifiers", func() {
+		n, err := s.d.Update(ctx, Document{"bloup": "blap"}, Document{"$set": Document{"hello": "world"}}, gedb.UpdateOptions{Upsert: true})
+		s.NoError(err)
+		s.Len(n, 1)
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+		s.Len(docs[0], 3)
+		s.Equal("world", docs[0].Get("hello"))
+		s.Equal("blap", docs[0].Get("bloup"))
+		s.Contains(docs[0], "_id")
+	})
+
+	// When using modifiers, the only way to update subdocs is with the dot-notation
+	s.Run("UpdateSubdocWithModifier", func() {
+		_, err := s.d.Insert(ctx, Document{"bloup": Document{"blip": "blap", "other": true}})
+		s.NoError(err)
+		n, err := s.d.Update(ctx, nil, Document{"$set": Document{"bloup.blip": "hello"}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		var doc Document
+		s.NoError(s.d.FindOne(ctx, nil, &doc, gedb.FindOptions{}))
+		s.Equal("hello", doc.D("bloup").Get("blip"))
+		s.Equal(true, doc.D("bloup").Get("other"))
+
+		// Wrong
+		n, err = s.d.Update(ctx, nil, Document{"$set": Document{"bloup": Document{"blip": "ola"}}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		s.NoError(s.d.FindOne(ctx, nil, &doc, gedb.FindOptions{}))
+		s.Equal("ola", doc.D("bloup").Get("blip"))
+		s.False(doc.D("bloup").Has("other"))
+
+	})
+
+	// Returns an error if the query is not well formed
+	s.Run("BadQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Update(ctx, Document{"$or": Document{"hello": "world"}}, Document{"a": 1}, gedb.UpdateOptions{})
+		s.Error(err)
+	})
+
+	// If an error is thrown by a modifier, the database state is not changed
+	s.Run("NoChangeIfModificationError", func() {
+		newDocs, err := s.d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+		n, err := s.d.Update(ctx, nil, Document{"$inc": Document{"hello": 4}}, gedb.UpdateOptions{})
+		s.Error(err)
+		s.Len(n, 0)
+
+		var doc Document
+		s.NoError(s.d.FindOne(ctx, nil, &doc, gedb.FindOptions{}))
+		s.Equal(newDocs[0], doc)
+	})
+
+	// Cant change the _id of a document
+	s.Run("CannotChangeID", func() {
+		newDocs, err := s.d.Insert(ctx, Document{"a": 2})
+		s.NoError(err)
+
+		_, err = s.d.Update(ctx, Document{"a": 2}, Document{"a": 2, "_id": "nope"}, gedb.UpdateOptions{})
+		s.Error(err)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		s.Len(docs, 1)
+		s.Len(docs[0], 2)
+		s.Equal(2, docs[0].Get("a"))
+		s.Equal(newDocs[0].ID(), docs[0].ID())
+
+		_, err = s.d.Update(ctx, Document{"a": 2}, Document{"$set": Document{"_id": "nope"}}, gedb.UpdateOptions{})
+		s.Error(err)
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+
+		s.Len(docs, 1)
+		s.Len(docs[0], 2)
+		s.Equal(2, docs[0].Get("a"))
+		s.Equal(newDocs[0].ID(), docs[0].ID())
+	})
+
+	// Non-multi updates are persistent
+	s.Run("PersistSingleUpdate", func() {
+		doc1, err := s.d.Insert(ctx, Document{"a": 1, "hello": "world"})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 2, "hello": "earth"})
+		s.NoError(err)
+		n, err := s.d.Update(ctx, Document{"a": 2}, Document{"$set": Document{"hello": "changed"}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		slices.SortFunc(docs, func(a, b Document) int { return a.Get("a").(int) - b.Get("a").(int) })
+		s.Len(docs, 2)
+		s.Equal(Document{"_id": doc1[0].ID(), "a": 1, "hello": "world"}, docs[0])
+		s.Equal(Document{"_id": doc2[0].ID(), "a": 2, "hello": "changed"}, docs[1])
+	})
+
+	// Multi updates are persistent
+	s.Run("PersistMultipleUpdates", func() {
+		doc1, err := s.d.Insert(ctx, Document{"a": 1, "hello": "world"})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 2, "hello": "earth"})
+		s.NoError(err)
+		doc3, err := s.d.Insert(ctx, Document{"a": 5, "hello": "pluton"})
+		s.NoError(err)
+		n, err := s.d.Update(ctx, Document{"a": 2}, Document{"$set": Document{"hello": "changed"}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		n, err = s.d.Update(ctx, Document{"a": Document{"$in": []any{1, 2}}}, Document{"$set": Document{"hello": "changed"}}, gedb.UpdateOptions{Multi: true})
+		s.NoError(err)
+		s.Len(n, 2)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		slices.SortFunc(docs, func(a, b Document) int { return a.Get("a").(int) - b.Get("a").(int) })
+		s.Len(docs, 3)
+		s.Equal(Document{"_id": doc1[0].ID(), "a": 1, "hello": "changed"}, docs[0])
+		s.Equal(Document{"_id": doc2[0].ID(), "a": 2, "hello": "changed"}, docs[1])
+		s.Equal(Document{"_id": doc3[0].ID(), "a": 5, "hello": "pluton"}, docs[2])
+
+		s.NoError(s.d.LoadDatabase(ctx))
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		slices.SortFunc(docs, func(a, b Document) int { return int(a.Get("a").(float64)) - int(b.Get("a").(float64)) })
+		s.Len(docs, 3)
+
+		// now numbers are float because they rave been serialized and then deserialized as json numbers
+		s.Equal(Document{"_id": doc1[0].ID(), "a": float64(1), "hello": "changed"}, docs[0])
+		s.Equal(Document{"_id": doc2[0].ID(), "a": float64(2), "hello": "changed"}, docs[1])
+		s.Equal(Document{"_id": doc3[0].ID(), "a": float64(5), "hello": "pluton"}, docs[2])
+
+	})
+
+	// NOTE: did not add idiomatic js test 'Can update without the options arg (will use defaults then)'
+
+	// If a multi update fails on one document, previous updates should be rolled back
+	s.Run("RollbackAllOnError", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+		doc1, err := s.d.Insert(ctx, Document{"a": 4})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 5})
+		s.NoError(err)
+		doc3, err := s.d.Insert(ctx, Document{"a": "abc"})
+		s.NoError(err)
+
+		qry := Document{"a": Document{"$in": []any{4, 5, "abc"}}}
+		update := Document{"$inc": Document{"a": 10}}
+		n, err := s.d.Update(ctx, qry, update, gedb.UpdateOptions{Multi: true})
+		s.Error(err)
+		s.Len(n, 0)
+
+		for _, idx := range s.d.indexes {
+			docs := idx.GetAll()
+			d1 := docs[slices.IndexFunc(docs, func(d gedb.Document) bool { return d.ID().(string) == doc1[0].ID().(string) })]
+			d2 := docs[slices.IndexFunc(docs, func(d gedb.Document) bool { return d.ID().(string) == doc2[0].ID().(string) })]
+			d3 := docs[slices.IndexFunc(docs, func(d gedb.Document) bool { return d.ID().(string) == doc3[0].ID().(string) })]
+
+			s.Equal(4, d1.Get("a"))
+			s.Equal(5, d2.Get("a"))
+			s.Equal("abc", d3.Get("a"))
+		}
+
+	})
+
+	// If an index constraint is violated by an update, all changes should be rolled back
+	s.Run("RespectIndexConstraints", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}, Unique: true}))
+		doc1, err := s.d.Insert(ctx, Document{"a": 4})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 5})
+		s.NoError(err)
+
+		qry := Document{"a": Document{"$in": []any{4, 5, "abc"}}}
+		update := Document{"$set": Document{"a": 10}}
+		n, err := s.d.Update(ctx, qry, update, gedb.UpdateOptions{Multi: true})
+		s.Error(err)
+		s.Len(n, 0)
+
+		for _, idx := range s.d.indexes {
+			docs := idx.GetAll()
+			d1 := docs[slices.IndexFunc(docs, func(d gedb.Document) bool { return d.ID().(string) == doc1[0].ID().(string) })]
+			d2 := docs[slices.IndexFunc(docs, func(d gedb.Document) bool { return d.ID().(string) == doc2[0].ID().(string) })]
+
+			s.Equal(4, d1.Get("a"))
+			s.Equal(5, d2.Get("a"))
+		}
+	})
+
+	// NOTE: did not add test 'If options.returnUpdatedDocs is true, return all matched docs'
+	// because there is no option returnUpdatedDocs in this package
+
+	// createdAt property is unchanged and updatedAt correct after an update, even a complete document replacement
+	s.Run("KeepCreatedAtOnUpdate", func() {
+		beginning := time.Now().Truncate(time.Millisecond)
+		timeGetter := new(timeGetterMock)
+		d2, err := NewDatastore(gedb.DatastoreOptions{TimestampData: true, TimeGetter: timeGetter})
+		s.NoError(err)
+
+		call := timeGetter.On("GetTime").Return(beginning)
+
+		_, err = d2.Insert(ctx, Document{"a": 1})
+		s.NoError(err)
+
+		var doc Document
+		s.NoError(d2.FindOne(ctx, Document{"a": 1}, &doc, gedb.FindOptions{}))
+		s.NoError(err)
+		createdAt := doc.Get("createdAt")
+
+		// unset after find because it gets time to remove expired docs
+		call.Unset()
+
+		call = timeGetter.On("GetTime").Return(beginning.Add(time.Second))
+
+		n, err := d2.Update(ctx, Document{"a": 1}, Document{"$set": Document{"b": 2}}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		doc = nil
+		s.NoError(d2.FindOne(ctx, Document{"a": 1}, &doc, gedb.FindOptions{}))
+		s.NoError(err)
+		s.Equal(createdAt, doc.Get("createdAt"))
+
+		call = timeGetter.On("GetTime").Return(beginning.Add(time.Minute))
+
+		n, err = d2.Update(ctx, Document{"a": 1}, Document{"c": 3}, gedb.UpdateOptions{})
+		s.NoError(err)
+		s.Len(n, 1)
+
+		doc = nil
+		s.NoError(d2.FindOne(ctx, Document{"c": 3}, &doc, gedb.FindOptions{}))
+		s.NoError(err)
+		s.Equal(createdAt, doc.Get("createdAt"))
+	})
+
+	// NOTE: 'Callback signature' tests not added because we dont use callbacks
+
+} // ==== End of 'Update' ==== //
