@@ -92,6 +92,22 @@ func (m *Modifier) lastStepModifierFunc(mod string, obj gedb.Document, field str
 	switch mod {
 	case "$set":
 		obj.Set(field, value)
+	case "$inc":
+		valueNum, ok := asNumber(value)
+		if !ok {
+			return fmt.Errorf("%v must be a number", value)
+		}
+		if !obj.Has(field) {
+			f, _ := valueNum.Float64()
+			obj.Set(field, f)
+			return nil
+		}
+		objValNum, ok := asNumber(obj.Get(field))
+		if !ok {
+			return fmt.Errorf("don't use the $inc modifier on non-number")
+		}
+		f, _ := objValNum.Add(objValNum, valueNum).Float64()
+		obj.Set(field, f)
 	default:
 		return fmt.Errorf("unknown modifier %s", mod)
 	}
