@@ -31,7 +31,7 @@ func (s *DatastoreTestSuite) SetupTest() {
 	d, err := NewDatastore(gedb.DatastoreOptions{Filename: testDb})
 	s.NoError(err)
 	s.d = d.(*Datastore)
-	s.NoError(s.d.persistence.(*Persistence).ensureParentDirectoryExistsAsync(ctx, testDb, DefaultDirMode))
+	s.NoError(s.d.persistence.(*Persistence).ensureParentDirectoryExists(ctx, testDb, DefaultDirMode))
 	if _, err = os.Stat(testDb); err != nil {
 		if !os.IsNotExist(err) {
 			s.FailNow(err.Error())

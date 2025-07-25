@@ -254,7 +254,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]gedb.Document, map[st
 		return nil, nil, nil
 	}
 
-	err := p.ensureParentDirectoryExistsAsync(ctx, p.filename, p.dirMode)
+	err := p.ensureParentDirectoryExists(ctx, p.filename, p.dirMode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -363,7 +363,7 @@ func (p *Persistence) PersistCachedDatabase(ctx context.Context, allData []gedb.
 	return nil
 }
 
-func (p *Persistence) ensureParentDirectoryExistsAsync(ctx context.Context, dir string, mode os.FileMode) error {
+func (p *Persistence) ensureParentDirectoryExists(ctx context.Context, dir string, mode os.FileMode) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
