@@ -52,7 +52,7 @@ func (m *Modifier) Modify(obj gedb.Document, updateQuery gedb.Document) (gedb.Do
 		if strings.HasPrefix(item, "$") {
 			dollarFisrtChars++
 		}
-		if dollarFisrtChars != firstChars {
+		if dollarFisrtChars > 0 && dollarFisrtChars != firstChars {
 			return nil, fmt.Errorf("you cannot mix modifiers and normal fields")
 		}
 		modifiers[item] = value
