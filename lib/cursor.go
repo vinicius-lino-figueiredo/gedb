@@ -14,7 +14,7 @@ import (
 
 // Cursor implements gedb.Cursor.
 type Cursor struct {
-	data      []any
+	data      []gedb.Document
 	ctx       context.Context
 	mu        *ctxsync.Mutex
 	dec       gedb.Decoder
@@ -106,7 +106,7 @@ func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOpt
 		}
 	}
 
-	values := make([]any, len(res))
+	values := make([]gedb.Document, len(res))
 	for n, doc := range res {
 		values[n] = doc
 	}
