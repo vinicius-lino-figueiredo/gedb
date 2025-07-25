@@ -850,6 +850,7 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 		return 0, err
 	}
 	var modifications []gedb.Update
+	var updatedDocs []gedb.Document
 	for cur.Next() {
 		oldDoc, err := NewDocument(nil)
 		if err != nil {
@@ -870,6 +871,7 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 
 		update := gedb.Update{OldDoc: oldDoc, NewDoc: newDoc}
 		modifications = append(modifications, update)
+		updatedDocs = append(updatedDocs, newDoc)
 	}
 	if err := cur.Err(); err != nil {
 		return 0, err
@@ -879,6 +881,10 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 	defer cancel()
 
 	if err := d.updateIndexes(ctx, modifications); err != nil {
+		return 0, err
+	}
+
+	if err := d.persistence.PersistNewState(ctx, updatedDocs...); err != nil {
 		return 0, err
 	}
 
