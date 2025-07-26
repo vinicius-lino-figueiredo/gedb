@@ -801,20 +801,20 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...gedb.Document) err
 }
 
 // Update implements gedb.GEDB.
-func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options gedb.UpdateOptions) (int64, error) {
+func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options gedb.UpdateOptions) ([]gedb.Document, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer d.executor.Unlock()
 
 	QryDoc, err := d.documentFactory(query)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	updateQryDoc, err := d.documentFactory(updateQuery)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	var limit int64
@@ -825,44 +825,45 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 	if options.Upsert {
 		cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, false)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		var count int64
 		for cur.Next() {
 			count++
 		}
 		if err := cur.Err(); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if count != 1 {
 			if err := d.checkDocuments(updateQryDoc); err != nil {
 				if updateQryDoc, err = d.modifier.Modify(QryDoc, updateQryDoc); err != nil {
-					return 0, err
+					return nil, err
 				}
 			}
-			if _, err = d.insert(ctx, updateQryDoc); err != nil {
-				return 0, err
+			insertedDoc, err := d.insert(ctx, updateQryDoc)
+			if err != nil {
+				return nil, err
 			}
-			return 1, err
+			return insertedDoc, err
 		}
 	}
 	cur, err := d.find(ctx, query, gedb.FindOptions{Limit: limit}, false)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	var modifications []gedb.Update
 	var updatedDocs []gedb.Document
 	for cur.Next() {
 		oldDoc, err := NewDocument(nil)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		if err := cur.Exec(ctx, &oldDoc); err != nil {
-			return 0, err
+			return nil, err
 		}
 		newDoc, err := d.modifier.Modify(oldDoc, updateQryDoc)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		if d.timestampData {
@@ -875,21 +876,21 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 		updatedDocs = append(updatedDocs, newDoc)
 	}
 	if err := cur.Err(); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
 
 	if err := d.updateIndexes(ctx, modifications); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if err := d.persistence.PersistNewState(ctx, updatedDocs...); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return int64(len(modifications)), nil
+	return d.cloneDocs(updatedDocs...)
 }
 
 func (d *Datastore) updateIndexes(ctx context.Context, mods []gedb.Update) error {

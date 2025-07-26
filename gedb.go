@@ -55,7 +55,7 @@ type GEDB interface {
 
 	// Update modifies documents that match the query using the updateQuery.
 	// Returns the number of documents updated.
-	Update(ctx context.Context, query any, updateQuery any, options UpdateOptions) (int64, error)
+	Update(ctx context.Context, query any, updateQuery any, options UpdateOptions) ([]Document, error)
 
 	// Remove deletes documents matching the query. Returns the number of
 	// documents removed.
