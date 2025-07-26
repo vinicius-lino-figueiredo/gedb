@@ -1736,3 +1736,189 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	// NOTE: 'Callback signature' tests not added because we dont use callbacks
 
 } // ==== End of 'Update' ==== //
+
+func (s *DatastoreTestSuite) TestRemove() {
+
+	// Can remove multiple documents
+	s.Run("MultipleDocs", func() {
+		_doc1, err := s.d.Insert(ctx, Document{"somedata": "ok"})
+		s.NoError(err)
+		id1 := _doc1[0].ID()
+		_, err = s.d.Insert(ctx, Document{"somedata": "again", "plus": "additional data"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"somedata": "again"})
+		s.NoError(err)
+
+		n, err := s.d.Remove(ctx, Document{"somedata": "again"}, gedb.RemoveOptions{Multi: true})
+		s.NoError(err)
+		s.Equal(int64(2), n)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+		s.Len(docs[0], 2)
+		s.Equal(id1, docs[0].ID())
+
+		s.NoError(s.d.LoadDatabase(ctx))
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+		s.Len(docs[0], 2)
+		s.Equal(id1, docs[0].ID())
+	})
+
+	// Remove can be called multiple times in parallel and everything that needs to be removed will be
+	s.Run("ParallelCalls", func() {
+		// context mutex should protect everything
+		_, err := s.d.Insert(ctx, Document{"planet": "Earth"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"planet": "Mars"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"planet": "Saturn"})
+		s.NoError(err)
+
+		mu := &sync.Mutex{}
+		removeStartWG := &sync.WaitGroup{}
+		removeStartWG.Add(2)
+
+		wg := &sync.WaitGroup{}
+		c := sync.NewCond(mu)
+
+		for _, planet := range [...]string{"Mars", "Saturn"} {
+			planet := planet // planet in this scope
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				mu.Lock()
+				removeStartWG.Done()
+				c.Wait()
+				mu.Unlock()
+				_, err := s.d.Remove(ctx, Document{"planet": planet}, gedb.RemoveOptions{})
+				s.NoError(err)
+			}()
+		}
+
+		removeStartWG.Wait() // wait until all removal goroutines are locked
+		mu.Lock()
+		c.Broadcast()
+		mu.Unlock()
+
+		wg.Wait() // wait until all goroutines finished removing
+
+		count, err := s.d.Count(ctx, nil)
+		s.NoError(err)
+		s.Equal(int64(1), count)
+	})
+
+	// Returns an error if the query is not well formed
+	s.Run("BadQuery", func() {
+		_, err := s.d.Insert(ctx, Document{"hello": "world"})
+		s.NoError(err)
+		badQuery := Document{"$or": Document{"hello": "world"}}
+		n, err := s.d.Remove(ctx, badQuery, gedb.RemoveOptions{})
+		s.Error(err)
+		s.Zero(n)
+	})
+
+	// Non-multi removes are persistent
+	s.Run("PersistSingleRemove", func() {
+		doc1, err := s.d.Insert(ctx, Document{"a": 1, "hello": "world"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 2, "hello": "earth"})
+		s.NoError(err)
+		doc3, err := s.d.Insert(ctx, Document{"a": 3, "hello": "moto"})
+		s.NoError(err)
+
+		n, err := s.d.Remove(ctx, Document{"a": 2}, gedb.RemoveOptions{})
+		s.NoError(err)
+		s.Equal(int64(1), n)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		slices.SortFunc(docs, func(a, b Document) int { return a.Get("a").(int) - b.Get("a").(int) })
+		s.Len(docs, 2)
+
+		s.Equal(Document{"_id": doc1[0].ID(), "a": 1, "hello": "world"}, doc1[0])
+		s.Equal(Document{"_id": doc3[0].ID(), "a": 3, "hello": "moto"}, doc3[0])
+
+		s.NoError(s.d.LoadDatabase(ctx))
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		// default deserializer unmarshals any number as float64
+		slices.SortFunc(docs, func(a, b Document) int { return int(a.Get("a").(float64)) - int(b.Get("a").(float64)) })
+		s.Len(docs, 2)
+
+		s.Equal(Document{"_id": doc1[0].ID(), "a": float64(1), "hello": "world"}, docs[0])
+		s.Equal(Document{"_id": doc3[0].ID(), "a": float64(3), "hello": "moto"}, docs[1])
+	})
+
+	// Multi removes are persistent
+	s.Run("PersistMultipleRemoves", func() {
+		_, err := s.d.Insert(ctx, Document{"a": 1, "hello": "world"})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 2, "hello": "earth"})
+		s.NoError(err)
+		_, err = s.d.Insert(ctx, Document{"a": 3, "hello": "moto"})
+		s.NoError(err)
+
+		n, err := s.d.Remove(ctx, Document{"a": Document{"$in": []any{1, 3}}}, gedb.RemoveOptions{})
+		s.NoError(err)
+		s.Equal(int64(2), n)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+
+		s.Equal(Document{"_id": doc2[0].ID(), "a": 2, "hello": "earth"}, docs[0])
+
+		s.NoError(s.d.LoadDatabase(ctx))
+
+		cur, err = s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err = s.readCursor(cur)
+		s.NoError(err)
+		s.Len(docs, 1)
+
+		s.Equal(Document{"_id": doc2[0].ID(), "a": float64(2), "hello": "earth"}, docs[0])
+	})
+
+	// Can remove without the options arg (will use defaults then)
+	s.Run("NoArgs", func() {
+		doc1, err := s.d.Insert(ctx, Document{"a": 1, "hello": "world"})
+		s.NoError(err)
+		doc2, err := s.d.Insert(ctx, Document{"a": 2, "hello": "earth"})
+		s.NoError(err)
+		doc3, err := s.d.Insert(ctx, Document{"a": 5, "hello": "moto"})
+		s.NoError(err)
+
+		n, err := s.d.Remove(ctx, Document{"a": 2}, gedb.RemoveOptions{})
+		s.NoError(err)
+		s.Equal(int64(1), n)
+
+		cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+		s.NoError(err)
+		docs, err := s.readCursor(cur)
+		s.NoError(err)
+
+		d1Index := slices.IndexFunc(docs, func(d Document) bool { return d.ID() == doc1[0].ID() })
+		d2Index := slices.IndexFunc(docs, func(d Document) bool { return d.ID() == doc2[0].ID() })
+		d3Index := slices.IndexFunc(docs, func(d Document) bool { return d.ID() == doc3[0].ID() })
+
+		s.Equal(1, docs[d1Index].Get("a"))
+		s.Negative(d2Index)
+		s.Equal(5, docs[d3Index].Get("a"))
+	})
+
+} // ==== End of 'Remove' ==== //
