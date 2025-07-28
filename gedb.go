@@ -175,7 +175,6 @@ type IndexOptions struct {
 	DocumentFactory func(any) (Document, error)
 	Comparer        Comparer
 	Hasher          Hasher
-	DTO             *IndexDTO
 }
 
 type Update struct {
@@ -229,9 +228,10 @@ type IndexDTO struct {
 	IndexRemoved bool         `json:"$$indexRemoved" gedb:"$$indexRemoved,omitzero"`
 }
 type IndexCreated struct {
-	FieldName string `json:"fieldName" gedb:"fieldName,omitzero"`
-	Unique    bool   `json:"unique" gedb:"unique,omitzero"`
-	Sparse    bool   `json:"sparse" gedb:"sparse,omitzero"`
+	FieldName   string  `json:"fieldName" gedb:"fieldName,omitzero"`
+	Unique      bool    `json:"unique" gedb:"unique,omitzero"`
+	Sparse      bool    `json:"sparse" gedb:"sparse,omitzero"`
+	ExpireAfter float64 `json:"$$expireAfterSeconds" gedb:"$$expireAfterSeconds,omitzero"`
 }
 
 type Storage interface {

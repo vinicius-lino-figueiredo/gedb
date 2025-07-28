@@ -47,12 +47,6 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 		options.Comparer = NewComparer()
 	}
 
-	if options.DTO != nil {
-		options.FieldName = options.DTO.IndexCreated.FieldName
-		options.Unique = options.DTO.IndexCreated.Unique
-		options.Sparse = options.DTO.IndexCreated.Sparse
-	}
-
 	treeOptions := bst.Options{
 		Unique: options.Unique,
 		CompareKeys: func(a, b any) int {

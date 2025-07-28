@@ -651,7 +651,16 @@ func (d *Datastore) LoadDatabase(ctx context.Context) error {
 		return err
 	}
 	for key, idx := range indexes {
-		d.indexes[key] = d.indexFactory(gedb.IndexOptions{DTO: &idx})
+		options := gedb.IndexOptions{
+			FieldName:       idx.IndexCreated.FieldName,
+			Unique:          idx.IndexCreated.Unique,
+			Sparse:          idx.IndexCreated.Sparse,
+			ExpireAfter:     time.Duration(idx.IndexCreated.ExpireAfter * float64(time.Second)),
+			DocumentFactory: d.documentFactory,
+			Comparer:        d.comparer,
+			Hasher:          d.hasher,
+		}
+		d.indexes[key] = d.indexFactory(options)
 	}
 	if err := d.resetIndexes(ctx, docs...); err != nil {
 		if resetErr := d.resetIndexes(ctx); resetErr != nil {
