@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
@@ -1922,3 +1924,1154 @@ func (s *DatastoreTestSuite) TestRemove() {
 	})
 
 } // ==== End of 'Remove' ==== //
+
+func (s *DatastoreTestSuite) TestIndexes() {
+
+	// ensureIndex and index initialization in database loading
+	s.Run("EnsureOnLoad", func() {
+
+		// ensureIndex can be called right after a loadDatabase and be initialized and filled correctly
+		s.Run("EnsureIndexOnLoad", func() {
+			now := time.Now()
+			s.Len(s.d.getAllData(), 0)
+
+			buf := make([]byte, 0, 1024)
+			docs := [...]Document{
+				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
+				{"_id": "bbb", "z": "2", "hello": "world"},
+				{"_id": "ccc", "z": "3", "nested": Document{"today": now}},
+			}
+			ser := NewSerializer(NewComparer(), NewDocument)
+			for _, doc := range docs {
+				b, err := ser.Serialize(ctx, doc)
+				s.NoError(err)
+				buf = append(buf, append(b, '\n')...)
+			}
+
+			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+
+			s.NoError(s.d.LoadDatabase(ctx))
+			s.Len(s.d.getAllData(), 3)
+
+			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.Equal("z", s.d.indexes["z"].(*Index).fieldName)
+			s.False(s.d.indexes["z"].(*Index).unique)
+			s.False(s.d.indexes["z"].(*Index).sparse)
+			s.Equal(3, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(3, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(s.d.getAllData()[0], s.d.indexes["z"].(*Index).tree.Search("1")[0])
+			s.Equal(s.d.getAllData()[1], s.d.indexes["z"].(*Index).tree.Search("2")[0])
+			s.Equal(s.d.getAllData()[2], s.d.indexes["z"].(*Index).tree.Search("3")[0])
+		})
+
+		// ensureIndex can be called twice on the same field, the second call will have no effect
+		s.Run("EnsureIndexTwice", func() {
+			s.Len(s.d.indexes, 1)
+			s.Equal("_id", slices.Collect(maps.Keys(s.d.indexes))[0])
+
+			_, err := s.d.Insert(ctx, Document{"planet": "Earth"})
+			s.NoError(err)
+			_, err = s.d.Insert(ctx, Document{"planet": "Mars"})
+			s.NoError(err)
+
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 2)
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"planet"}}))
+			s.Len(s.d.indexes, 2)
+
+			indexNames := slices.Collect(maps.Keys(s.d.indexes))
+			slices.Sort(indexNames)
+
+			s.Equal("_id", indexNames[0])
+			s.Equal("planet", indexNames[1])
+			s.Len(s.d.getAllData(), 2)
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"planet"}}))
+			s.Len(s.d.indexes, 2)
+
+			indexNames = slices.Collect(maps.Keys(s.d.indexes))
+			slices.Sort(indexNames)
+
+			s.Equal("_id", indexNames[0])
+			s.Equal("planet", indexNames[1])
+			s.Len(s.d.getAllData(), 2)
+		})
+
+		// ensureIndex can be called twice on the same compound fields, the second call will have no effect
+		s.Run("EnsureCompoundIndexTwice", func() {
+			s.Len(s.d.indexes, 1)
+			s.Equal("_id", slices.Collect(maps.Keys(s.d.indexes))[0])
+
+			_, err := s.d.Insert(ctx, Document{"star": "sun", "planet": "Earth"})
+			s.NoError(err)
+			_, err = s.d.Insert(ctx, Document{"star": "sun", "planet": "Mars"})
+			s.NoError(err)
+
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 2)
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"star", "planet"}}))
+			s.Len(s.d.indexes, 2)
+
+			indexNames := slices.Collect(maps.Keys(s.d.indexes))
+			slices.Sort(indexNames)
+
+			s.Equal("_id", indexNames[0])
+			s.Equal("planet,star", indexNames[1])
+			s.Len(s.d.getAllData(), 2)
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"star", "planet"}}))
+			s.Len(s.d.indexes, 2)
+
+			indexNames = slices.Collect(maps.Keys(s.d.indexes))
+			slices.Sort(indexNames)
+
+			s.Equal("_id", indexNames[0])
+			s.Equal("planet,star", indexNames[1])
+			s.Len(s.d.getAllData(), 2)
+		})
+
+		// ensureIndex cannot be called with an illegal field name
+		s.Run("IllegalFieldName", func() {
+			s.Error(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"star,planet"}}))
+			s.Error(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"star,planet", "other"}}))
+		})
+
+		// ensureIndex can be called after the data set was modified and the index still be correct
+		s.Run("AfterModifyingData", func() {
+			buf := make([]byte, 0, 1024)
+			_docs := [...]Document{
+				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
+				{"_id": "bbb", "z": "2", "hello": "world"},
+			}
+			ser := NewSerializer(NewComparer(), NewDocument)
+			for _, doc := range _docs {
+				b, err := ser.Serialize(ctx, doc)
+				s.NoError(err)
+				buf = append(buf, append(b, '\n')...)
+			}
+
+			s.Len(s.d.getAllData(), 0)
+
+			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(s.d.LoadDatabase(ctx))
+
+			s.Len(s.d.getAllData(), 2)
+
+			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
+
+			newDoc1, err := s.d.Insert(ctx, Document{"z": "12", "yes": "yes"})
+			s.NoError(err)
+			newDoc2, err := s.d.Insert(ctx, Document{"z": "14", "nope": "nope"})
+			s.NoError(err)
+			_, err = s.d.Remove(ctx, Document{"z": "2"}, gedb.RemoveOptions{})
+			s.NoError(err)
+			_, err = s.d.Update(ctx, Document{"z": "1"}, Document{"$set": Document{"yes": "yep"}}, gedb.UpdateOptions{})
+			s.NoError(err)
+
+			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+
+			s.Equal("z", s.d.indexes["z"].FieldName())
+			s.False(s.d.indexes["z"].Unique())
+			s.False(s.d.indexes["z"].Sparse())
+			s.Equal(3, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+
+			matching, err := s.d.indexes["_id"].(*Index).GetMatching("aaa")
+			s.NoError(err)
+			s.Equal(matching[0], s.d.indexes["z"].(*Index).tree.Search("1")[0])
+			matching, err = s.d.indexes["_id"].(*Index).GetMatching(newDoc1[0].ID())
+			s.NoError(err)
+			s.Equal(matching[0], s.d.indexes["z"].(*Index).tree.Search("12")[0])
+
+			matching, err = s.d.indexes["_id"].(*Index).GetMatching(newDoc2[0].ID())
+			s.NoError(err)
+			s.Equal(matching[0], s.d.indexes["z"].(*Index).tree.Search("14")[0])
+
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+
+			doc0 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == "aaa" })]
+			doc1 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == newDoc1[0].ID() })]
+			doc2 := docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == newDoc2[0].ID() })]
+
+			s.Len(docs, 3)
+
+			s.Equal(Document{"_id": "aaa", "z": "1", "a": float64(2), "ages": []any{float64(1), float64(5), float64(12)}, "yes": "yep"}, doc0)
+			s.Equal(Document{"_id": newDoc1[0].ID(), "z": "12", "yes": "yes"}, doc1)
+			s.Equal(Document{"_id": newDoc2[0].ID(), "z": "14", "nope": "nope"}, doc2)
+		})
+
+		// ensureIndex can be called before a loadDatabase and still be initialized and filled correctly
+		s.Run("BeforeLoadDatabase", func() {
+			now := time.Now()
+			buf := make([]byte, 0, 1024)
+			_docs := [...]Document{
+				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
+				{"_id": "bbb", "z": "2", "hello": "world"},
+				{"_id": "ccc", "z": "3", "nested": Document{"today": now}},
+			}
+			ser := NewSerializer(NewComparer(), NewDocument)
+			for _, doc := range _docs {
+				b, err := ser.Serialize(ctx, doc)
+				s.NoError(err)
+				buf = append(buf, append(b, '\n')...)
+			}
+
+			s.Len(s.d.getAllData(), 0)
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.Equal("z", s.d.indexes["z"].FieldName())
+			s.False(s.d.indexes["z"].Unique())
+			s.False(s.d.indexes["z"].Sparse())
+			s.Equal(0, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+
+			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(s.d.LoadDatabase(ctx))
+
+			data := s.d.getAllData()
+			doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "1" })]
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "2" })]
+			doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "3" })]
+
+			s.Len(data, 3)
+
+			s.Equal(3, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(doc1, s.d.indexes["z"].(*Index).tree.Search("1")[0])
+			s.Equal(doc2, s.d.indexes["z"].(*Index).tree.Search("2")[0])
+			s.Equal(doc3, s.d.indexes["z"].(*Index).tree.Search("3")[0])
+		})
+
+		// Can initialize multiple indexes on a database load
+		s.Run("InitializeMultipleIndexOnLoad", func() {
+			// this date has to be truncated because it will be
+			// persisted and loaded again
+			now := time.Now().Truncate(time.Millisecond)
+			buf := make([]byte, 0, 1024)
+			_docs := [...]Document{
+				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
+				{"_id": "bbb", "z": "2", "a": "world"},
+				{"_id": "ccc", "z": "3", "a": Document{"today": now}},
+			}
+			ser := NewSerializer(NewComparer(), NewDocument)
+			for _, doc := range _docs {
+				b, err := ser.Serialize(ctx, doc)
+				s.NoError(err)
+				buf = append(buf, append(b, '\n')...)
+			}
+
+			s.Len(s.d.getAllData(), 0)
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+
+			s.Equal(0, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(0, s.d.indexes["a"].(*Index).tree.GetNumberOfKeys())
+
+			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(s.d.LoadDatabase(ctx))
+
+			data := s.d.getAllData()
+			doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "1" })]
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "2" })]
+			doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.Get("z") == "3" })]
+
+			s.Len(data, 3)
+
+			s.Equal(3, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(doc1, s.d.indexes["z"].(*Index).tree.Search("1")[0])
+			s.Equal(doc2, s.d.indexes["z"].(*Index).tree.Search("2")[0])
+			s.Equal(doc3, s.d.indexes["z"].(*Index).tree.Search("3")[0])
+
+			s.Equal(3, s.d.indexes["a"].(*Index).tree.GetNumberOfKeys())
+			s.Equal(doc1, s.d.indexes["a"].(*Index).tree.Search(2)[0])
+			s.Equal(doc2, s.d.indexes["a"].(*Index).tree.Search("world")[0])
+			s.Equal(doc3, s.d.indexes["a"].(*Index).tree.Search(Document{"today": now})[0])
+		})
+
+		// If a unique constraint is not respected, database loading will not work and no data will be inserted
+		s.Run("LoadPersistedConstraintViolation", func() {
+			now := time.Now()
+			buf := make([]byte, 0, 1024)
+			_docs := [...]Document{
+				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
+				{"_id": "bbb", "z": "2", "a": "world"},
+				{"_id": "ccc", "z": "1", "a": Document{"today": now}},
+			}
+			ser := NewSerializer(NewComparer(), NewDocument)
+			for _, doc := range _docs {
+				b, err := ser.Serialize(ctx, doc)
+				s.NoError(err)
+				buf = append(buf, append(b, '\n')...)
+			}
+
+			s.Len(s.d.getAllData(), 0)
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}, Unique: true}))
+
+			s.Equal(0, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+
+			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			e := &bst.ErrViolated{}
+			s.ErrorAs(s.d.LoadDatabase(ctx), &e)
+			s.Len(s.d.getAllData(), 0)
+			s.Equal(0, s.d.indexes["z"].(*Index).tree.GetNumberOfKeys())
+		})
+
+		// If a unique constraint is not respected, ensureIndex will return an error and not create an index
+		s.Run("NotCreateIndexWithViolatedConstraint", func() {
+			_, err := s.d.Insert(ctx, Document{"a": 1, "b": 4})
+			s.NoError(err)
+			_, err = s.d.Insert(ctx, Document{"a": 2, "b": 45})
+			s.NoError(err)
+			_, err = s.d.Insert(ctx, Document{"a": 1, "b": 3})
+			s.NoError(err)
+
+			err = s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}, Unique: true})
+			s.NoError(err)
+
+			err = s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}, Unique: true})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+		})
+
+		// Can remove an index
+		s.Run("RemoveIndex", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"e"}}))
+			s.Len(s.d.indexes, 2)
+			s.Contains(s.d.indexes, "e")
+			s.NoError(s.d.RemoveIndex(ctx, "e"))
+			s.Len(s.d.indexes, 1)
+			s.NotContains(s.d.indexes, "e")
+		})
+
+	}) // ==== End of 'ensureIndex and index initialization in database loading' ==== //
+
+	// Indexing newly inserted documents
+	s.Run("IndexNew", func() {
+
+		// Newly inserted documents are indexed
+		s.Run("IndexNewlyInsertedDocs", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
+
+			newDoc, err := s.d.Insert(ctx, Document{"a": 2, "z": "yes"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err := s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			newDoc, err = s.d.Insert(ctx, Document{"a": 5, "z": "nope"})
+			s.NoError(err)
+			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err = s.d.indexes["z"].(*Index).GetMatching("nope")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+		})
+
+		// If multiple indexes are defined, the document is inserted in all of them
+		s.Run("InsertMultipleIndexes", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"ya"}}))
+			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
+			s.Equal(0, s.d.indexes["ya"].GetNumberOfKeys())
+
+			newDoc, err := s.d.Insert(ctx, Document{"a": 2, "z": "yes", "ya": "indeed"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["ya"].GetNumberOfKeys())
+			matching, err := s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+			matching, err = s.d.indexes["ya"].(*Index).GetMatching("indeed")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			newDoc2, err := s.d.Insert(ctx, Document{"a": 5, "z": "nope", "ya": "sure"})
+			s.NoError(err)
+			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
+			s.Equal(2, s.d.indexes["ya"].GetNumberOfKeys())
+			matching, err = s.d.indexes["z"].(*Index).GetMatching("nope")
+			s.NoError(err)
+			s.Equal(newDoc2, matching)
+			matching, err = s.d.indexes["ya"].(*Index).GetMatching("sure")
+			s.NoError(err)
+			s.Equal(newDoc2, matching)
+
+		})
+
+		// Can insert two docs at the same key for a non unique index
+		s.Run("AllowRepeatedNonUniqueIndexKey", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}}))
+			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
+
+			newDoc, err := s.d.Insert(ctx, Document{"a": 2, "z": "yes"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err := s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			newDoc2, err := s.d.Insert(ctx, Document{"a": 5, "z": "yes"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err = s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(append(newDoc, newDoc2...), matching)
+
+		})
+
+		// If the index has a unique constraint, an error is thrown if it is violated and the data is not modified
+		s.Run("NotModifyIfViolates", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"z"}, Unique: true}))
+			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
+
+			newDoc, err := s.d.Insert(ctx, Document{"a": 2, "z": "yes"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err := s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			newDoc2, err := s.d.Insert(ctx, Document{"a": 5, "z": "yes"})
+			e := &bst.ErrViolated{}
+			s.Error(err, &e)
+			s.Nil(newDoc2)
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			// TODO: assert violated key
+
+			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
+			matching, err = s.d.indexes["z"].(*Index).GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			s.Equal(newDoc, s.d.getAllData())
+			s.NoError(s.d.LoadDatabase(ctx))
+			s.Equal(Document{"_id": newDoc[0].ID(), "a": 2.0, "z": "yes"}, s.d.getAllData()[0])
+		})
+
+		// If an index has a unique constraint, other indexes cannot be modified when it raises an error
+		s.Run("NotModifyOthersIfViolates", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"nonu1"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"uni"}, Unique: true}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"nonu2"}}))
+
+			newDoc, err := s.d.Insert(ctx, Document{"nonu1": "yes", "nonu2": "yes2", "uni": "willfail"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["nonu1"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["uni"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["nonu2"].GetNumberOfKeys())
+
+			_, err = s.d.Insert(ctx, Document{"nonu1": "no", "nonu2": "no2", "uni": "willfail"})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+
+			s.Equal(1, s.d.indexes["nonu1"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["uni"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["nonu2"].GetNumberOfKeys())
+
+			matching, err := s.d.indexes["nonu1"].GetMatching("yes")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+			matching, err = s.d.indexes["uni"].GetMatching("willfail")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+			matching, err = s.d.indexes["nonu2"].GetMatching("yes2")
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+		})
+
+		// Unique indexes prevent you from inserting two docs where the field is undefined except if theyre sparse
+		s.Run("SparseAcceptUnset", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"zzz"}, Unique: true}))
+			s.Equal(0, s.d.indexes["zzz"].GetNumberOfKeys())
+
+			newDoc, err := s.d.Insert(ctx, Document{"a": 2, "z": "yes"})
+			s.NoError(err)
+			s.Equal(1, s.d.indexes["zzz"].GetNumberOfKeys())
+			matching, err := s.d.indexes["zzz"].GetMatching(nil)
+			s.NoError(err)
+			s.Equal(newDoc, matching)
+
+			_, err = s.d.Insert(ctx, Document{"a": 5, "z": "other"})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+			// TODO: assert violated key
+
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"yyy"}, Unique: true, Sparse: true}))
+
+			_, err = s.d.Insert(ctx, Document{"a": 5, "z": "other", "zzz": "set"})
+			s.NoError(err)
+			s.Len(s.d.indexes["yyy"].GetAll(), 0)
+			s.Len(s.d.indexes["zzz"].GetAll(), 2)
+		})
+
+		// Insertion still works as before with indexing
+		s.Run("InsertWithIndexing", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}}))
+
+			doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+
+			s.Equal(doc1[0], docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == doc1[0].ID() })])
+			s.Equal(doc2[0], docs[slices.IndexFunc(docs, func(d Document) bool { return d.ID() == doc2[0].ID() })])
+		})
+
+		// All indexes point to the same data as the main index on _id
+		s.Run("AllIndexesHaveSameData", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+
+			doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+			s.Len(docs, 2)
+			s.Len(s.d.getAllData(), 2)
+
+			matching, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.Len(matching, 1)
+			matching, err = s.d.indexes["a"].GetMatching(1)
+			s.Len(matching, 1)
+			matching, err = s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.NoError(err)
+			expected, err := s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
+			s.Equal(expected[0], matching[0])
+
+			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.Len(matching, 1)
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.Len(matching, 1)
+			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.NoError(err)
+			expected, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(expected[0], matching[0])
+		})
+
+		// If a unique constraint is violated, no index is changed, including the main one
+		s.Run("NoChangeOnUniqueViolation", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}, Unique: true}))
+
+			doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+
+			_, err = s.d.Insert(ctx, Document{"a": 1, "b": "si"})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+
+			cur, err := s.d.Find(ctx, nil, gedb.FindOptions{})
+			s.NoError(err)
+			docs, err := s.readCursor(cur)
+			s.NoError(err)
+
+			s.Len(docs, 1)
+			s.Len(s.d.getAllData(), 1)
+
+			matching, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.NoError(err)
+			s.Len(matching, 1)
+			matching, err = s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
+			s.Len(matching, 1)
+			expected, err := s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
+			matching, err = s.d.indexes["_id"].GetMatching(docs[0].ID())
+			s.NoError(err)
+			s.Equal(expected[0], matching[0])
+
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Len(matching, 0)
+		})
+	}) // ==== End of 'Indexing newly inserted documents' ==== //
+
+	// Updating indexes upon document update
+	s.Run("Update", func() {
+
+		s.Run("UpdateWithIndexing", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+
+			_doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			_doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+
+			n, err := s.d.Update(ctx, Document{"a": 1}, Document{"$set": Document{"a": 456, "b": "no"}}, gedb.UpdateOptions{})
+			s.NoError(err)
+			s.Len(n, 1)
+
+			data := s.d.getAllData()
+			doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+
+			s.Len(data, 2)
+			s.Equal(Document{"a": 456, "b": "no", "_id": _doc1[0].ID()}, doc1)
+			s.Equal(Document{"a": 2, "b": "si", "_id": _doc2[0].ID()}, doc2)
+
+			n, err = s.d.Update(ctx, nil, Document{"$inc": Document{"a": 10}, "$set": Document{"b": "same"}}, gedb.UpdateOptions{Multi: true})
+			s.NoError(err)
+			s.Len(n, 2)
+
+			data = s.d.getAllData()
+			doc1 = data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+			doc2 = data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+
+			s.Len(data, 2)
+			s.Equal(Document{"a": 466.0, "b": "same", "_id": _doc1[0].ID()}, doc1)
+			s.Equal(Document{"a": 12.0, "b": "same", "_id": _doc2[0].ID()}, doc2)
+		})
+
+		// Indexes get updated when a document (or multiple documents) is updated
+		s.Run("", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}}))
+
+			doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+
+			n, err := s.d.Update(ctx, Document{"a": 1}, Document{"$set": Document{"a": 456, "b": "no"}}, gedb.UpdateOptions{})
+			s.NoError(err)
+			s.Len(n, 1)
+
+			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
+			matching, err := s.d.indexes["a"].GetMatching(456)
+			s.NoError(err)
+			s.Equal(doc1[0].ID(), matching[0].ID())
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(doc2[0].ID(), matching[0].ID())
+
+			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
+			matching, err = s.d.indexes["b"].GetMatching("no")
+			s.NoError(err)
+			s.Equal(doc1[0].ID(), matching[0].ID())
+			matching, err = s.d.indexes["b"].GetMatching("si")
+			s.NoError(err)
+			s.Equal(doc2[0].ID(), matching[0].ID())
+
+			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
+			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
+			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
+
+			expected, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(456)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+			matching, err = s.d.indexes["b"].GetMatching("no")
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+
+			expected, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+			matching, err = s.d.indexes["b"].GetMatching("si")
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+
+			n, err = s.d.Update(ctx, nil, Document{"$inc": Document{"a": 10}, "$set": Document{"b": "same"}}, gedb.UpdateOptions{Multi: true})
+			s.NoError(err)
+			s.Len(n, 2)
+
+			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
+			matching, err = s.d.indexes["a"].GetMatching(466)
+			s.NoError(err)
+			s.Equal(doc1[0].ID(), matching[0].ID())
+			matching, err = s.d.indexes["a"].GetMatching(12)
+			s.NoError(err)
+			s.Equal(doc2[0].ID(), matching[0].ID())
+
+			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
+			matching, err = s.d.indexes["b"].GetMatching("same")
+			s.NoError(err)
+			s.Len(matching, 2)
+			matching, err = s.d.indexes["b"].GetMatching("same")
+			s.NoError(err)
+			ids := make([]any, len(matching))
+			for n, m := range matching {
+				ids[n] = m.ID()
+			}
+			s.Contains(ids, doc1[0].ID())
+			s.Contains(ids, doc2[0].ID())
+
+			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
+			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
+			s.Len(s.d.indexes["b"].GetAll(), 2)
+			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
+
+			expected, err = s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(466)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+			expected, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(12)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+		})
+
+		// If a simple update violates a contraint, all changes are rolled back and an error is thrown
+		s.Run("RollbackAllOnViolationSimple", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}, Unique: true}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}, Unique: true}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"c"}, Unique: true}))
+
+			_doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": 10, "c": 100})
+			s.NoError(err)
+			_doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": 20, "c": 200})
+			s.NoError(err)
+			_doc3, err := s.d.Insert(ctx, Document{"a": 3, "b": 30, "c": 300})
+			s.NoError(err)
+
+			n, err := s.d.Update(ctx, Document{"a": 2}, Document{"$inc": Document{"a": 10, "c": 1000}, "$set": Document{"b": 30}}, gedb.UpdateOptions{})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+			s.Len(n, 0)
+
+			data := s.d.getAllData()
+			doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+			doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc3[0].ID() })]
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
+			matching, err := s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["a"].GetMatching(3)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["b"].GetNumberOfKeys())
+			matching, err = s.d.indexes["b"].GetMatching(10)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["b"].GetMatching(20)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["b"].GetMatching(30)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["c"].GetNumberOfKeys())
+			matching, err = s.d.indexes["c"].GetMatching(100)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["c"].GetMatching(200)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["c"].GetMatching(300)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+		})
+
+		// If a multi update violates a contraint, all changes are rolled back and an error is thrown
+		s.Run("RollbackAllOnViolationMulti", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}, Unique: true}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}, Unique: true}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"c"}, Unique: true}))
+
+			_doc1, err := s.d.Insert(ctx, Document{"a": 1, "b": 10, "c": 100})
+			s.NoError(err)
+			_doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": 20, "c": 200})
+			s.NoError(err)
+			_doc3, err := s.d.Insert(ctx, Document{"a": 3, "b": 30, "c": 300})
+			s.NoError(err)
+
+			n, err := s.d.Update(ctx, Document{"a": Document{"$in": []any{1, 2}}}, Document{"$inc": Document{"a": 10, "c": 1000}, "$set": Document{"b": 30}}, gedb.UpdateOptions{Multi: true})
+			e := &bst.ErrViolated{}
+			s.ErrorAs(err, &e)
+			s.Len(n, 0)
+
+			data := s.d.getAllData()
+			doc1 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc1[0].ID() })]
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+			doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc3[0].ID() })]
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
+			matching, err := s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["a"].GetMatching(3)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["b"].GetNumberOfKeys())
+			matching, err = s.d.indexes["b"].GetMatching(10)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["b"].GetMatching(20)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["b"].GetMatching(30)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+
+			s.Len(data, 3)
+			s.Equal(3, s.d.indexes["c"].GetNumberOfKeys())
+			matching, err = s.d.indexes["c"].GetMatching(100)
+			s.NoError(err)
+			s.Equal(doc1, matching[0])
+			matching, err = s.d.indexes["c"].GetMatching(200)
+			s.NoError(err)
+			s.Equal(doc2, matching[0])
+			matching, err = s.d.indexes["c"].GetMatching(300)
+			s.NoError(err)
+			s.Equal(doc3, matching[0])
+		})
+
+	}) // ==== End of 'Updating indexes upon document update' ==== //
+
+	// Updating indexes upon document remove
+	s.Run("UpdateIndexOnRemoveDocs", func() {
+
+		// Removing docs still works as before with indexing
+		s.Run("UpdateIndexOnRemoveDocs", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+			_, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			_doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+			_doc3, err := s.d.Insert(ctx, Document{"a": 3, "b": "coin"})
+			s.NoError(err)
+			n, err := s.d.Remove(ctx, Document{"a": 1}, gedb.RemoveOptions{})
+			s.NoError(err)
+			s.Equal(int64(1), n)
+
+			data := s.d.getAllData()
+			doc2 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc2[0].ID() })]
+			doc3 := data[slices.IndexFunc(data, func(d gedb.Document) bool { return d.ID() == _doc3[0].ID() })]
+
+			s.Len(data, 2)
+			s.Equal(Document{"a": 2, "b": "si", "_id": _doc2[0].ID()}, doc2)
+			s.Equal(Document{"a": 3, "b": "coin", "_id": _doc3[0].ID()}, doc3)
+
+			n, err = s.d.Remove(ctx, Document{"a": Document{"$in": []any{2, 3}}}, gedb.RemoveOptions{Multi: true})
+			s.NoError(err)
+			s.Equal(int64(2), n)
+
+			data = s.d.getAllData()
+			s.Len(data, 0)
+		})
+
+		// Indexes get updated when a document (or multiple documents) is removed
+		s.Run("UpdateIndexesOnRemoveMulti", func() {
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"a"}}))
+			s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"b"}}))
+			_, err := s.d.Insert(ctx, Document{"a": 1, "b": "hello"})
+			s.NoError(err)
+			doc2, err := s.d.Insert(ctx, Document{"a": 2, "b": "si"})
+			s.NoError(err)
+			doc3, err := s.d.Insert(ctx, Document{"a": 3, "b": "coin"})
+			s.NoError(err)
+			n, err := s.d.Remove(ctx, Document{"a": 1}, gedb.RemoveOptions{})
+			s.NoError(err)
+			s.Equal(int64(1), n)
+
+			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
+			matching, err := s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(doc2[0].ID(), matching[0].ID())
+			matching, err = s.d.indexes["a"].GetMatching(3)
+			s.NoError(err)
+			s.Equal(doc3[0].ID(), matching[0].ID())
+
+			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
+			matching, err = s.d.indexes["b"].GetMatching("si")
+			s.NoError(err)
+			s.Equal(doc2[0].ID(), matching[0].ID())
+			matching, err = s.d.indexes["b"].GetMatching("coin")
+			s.NoError(err)
+			s.Equal(doc3[0].ID(), matching[0].ID())
+
+			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
+
+			expected, err := s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+			matching, err = s.d.indexes["b"].GetMatching("si")
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+
+			expected, err = s.d.indexes["_id"].GetMatching(doc3[0].ID())
+			s.NoError(err)
+			matching, err = s.d.indexes["a"].GetMatching(3)
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+			matching, err = s.d.indexes["b"].GetMatching("coin")
+			s.NoError(err)
+			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
+		})
+
+	}) // ==== End of 'Updating indexes upon document remove' ==== //
+
+	// Persisting indexes
+	s.Run("Persistence", func() {
+
+		// Indexes are persisted to a separate file and recreated upon reload
+		s.Run("PersistAndReload", func() {
+			persDB := "../workspace/persistIndexes.db"
+
+			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
+				os.WriteFile(persDB, nil, DefaultFileMode)
+			}
+
+			db, err := LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d := db.(*Datastore)
+
+			s.Len(d.indexes, 1)
+			s.Contains(d.indexes, "_id")
+
+			_, err = d.Insert(ctx, Document{"planet": "Earth"})
+			s.NoError(err)
+			_, err = d.Insert(ctx, Document{"planet": "Mars"})
+			s.NoError(err)
+
+			s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"planet"}}))
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+		})
+
+		// Indexes are persisted with their options and recreated even if some db operation happen between loads
+		s.Run("PersistOperationBetweenLoads", func() {
+			persDB := "../workspace/persistIndexes.db"
+
+			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
+				os.WriteFile(persDB, nil, DefaultFileMode)
+			}
+
+			db, err := LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d := db.(*Datastore)
+
+			s.Len(d.indexes, 1)
+			s.Contains(d.indexes, "_id")
+
+			_, err = d.Insert(ctx, Document{"planet": "Earth"})
+			s.NoError(err)
+			_, err = d.Insert(ctx, Document{"planet": "Mars"})
+			s.NoError(err)
+
+			s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"planet"}, Unique: true}))
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+			s.True(d.indexes["planet"].Unique())
+			s.False(d.indexes["planet"].Sparse())
+
+			_, err = d.Insert(ctx, Document{"planet": "Jupiter"})
+			s.NoError(err)
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 3)
+			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Len(d.indexes["_id"].GetAll(), 3)
+			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+			s.True(d.indexes["planet"].Unique())
+			s.False(d.indexes["planet"].Sparse())
+
+			s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"bloup"}, Sparse: true}))
+
+			s.Len(d.indexes, 3)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Contains(d.indexes, "bloup")
+			s.Len(d.indexes["_id"].GetAll(), 3)
+			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Len(d.indexes["bloup"].GetAll(), 0)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+			s.Equal("bloup", d.indexes["bloup"].FieldName())
+			s.True(d.indexes["planet"].Unique())
+			s.False(d.indexes["planet"].Sparse())
+			s.False(d.indexes["bloup"].Unique())
+			s.True(d.indexes["bloup"].Sparse())
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 3)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Contains(d.indexes, "bloup")
+			s.Len(d.indexes["_id"].GetAll(), 3)
+			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Len(d.indexes["bloup"].GetAll(), 0)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+			s.Equal("bloup", d.indexes["bloup"].FieldName())
+			s.True(d.indexes["planet"].Unique())
+			s.False(d.indexes["planet"].Sparse())
+			s.False(d.indexes["bloup"].Unique())
+			s.True(d.indexes["bloup"].Sparse())
+		})
+
+		// Indexes can also be removed and the remove persisted
+		s.Run("PersistRemove", func() {
+			persDB := "../workspace/persistIndexes.db"
+
+			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
+				os.WriteFile(persDB, nil, DefaultFileMode)
+			}
+
+			db, err := LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d := db.(*Datastore)
+
+			s.Len(d.indexes, 1)
+			s.Contains(d.indexes, "_id")
+
+			_, err = d.Insert(ctx, Document{"planet": "Earth"})
+			s.NoError(err)
+			_, err = d.Insert(ctx, Document{"planet": "Mars"})
+			s.NoError(err)
+
+			s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"planet"}}))
+			s.NoError(d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"another"}}))
+
+			s.Len(d.indexes, 3)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Contains(d.indexes, "another")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 3)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "planet")
+			s.Contains(d.indexes, "another")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal("planet", d.indexes["planet"].FieldName())
+
+			s.NoError(d.RemoveIndex(ctx, "planet"))
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "another")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "another")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+
+			db, err = LoadDatastore(ctx, gedb.DatastoreOptions{Filename: persDB})
+			s.NoError(err)
+			d = db.(*Datastore)
+
+			s.Len(d.indexes, 2)
+			s.Contains(d.indexes, "_id")
+			s.Contains(d.indexes, "another")
+			s.Len(d.indexes["_id"].GetAll(), 2)
+		})
+
+	}) // ==== End of 'Persisting indexes' ====
+
+	// Results of getMatching should never contain duplicates
+	s.Run("NoDuplicatesInGetMatching", func() {
+		s.NoError(s.d.EnsureIndex(ctx, gedb.EnsureIndexOptions{FieldNames: []string{"bad"}}))
+		_, err := s.d.Insert(ctx, Document{"bad": []any{"a", "b"}})
+		s.NoError(err)
+		candidates, err := s.d.getCandidates(ctx, Document{"$in": []any{"a", "b"}}, false)
+		s.NoError(err)
+		s.Len(candidates, 1)
+	})
+
+} // ==== End of 'Using indexes' ==== //
