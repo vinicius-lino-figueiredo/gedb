@@ -771,7 +771,7 @@ func (d *Datastore) removeFromIndexes(ctx context.Context, doc gedb.Document) er
 }
 
 // RemoveIndex implements gedb.GEDB.
-func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames []string) error {
+func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
 	}

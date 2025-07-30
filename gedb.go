@@ -36,7 +36,7 @@ type GEDB interface {
 	EnsureIndex(ctx context.Context, options EnsureIndexOptions) error
 
 	// RemoveIndex deletes an existing index by field name(s).
-	RemoveIndex(ctx context.Context, fieldNames []string) error
+	RemoveIndex(ctx context.Context, fieldNames ...string) error
 
 	// Insert adds one or more documents to the database and returns the
 	// stored versions, including generated metadata like IDs. Documents
