@@ -161,7 +161,7 @@ type Index interface {
 	RevertUpdate(ctx context.Context, oldDoc Document, newDoc Document) error
 	Update(ctx context.Context, oldDoc Document, newDoc Document) error
 	UpdateMultipleDocs(ctx context.Context, pairs ...Update) error
-
+	GetNumberOfKeys() int
 	FieldName() string
 	Unique() bool
 	Sparse() bool

@@ -344,6 +344,11 @@ func (i *Index) GetAll() []gedb.Document {
 	return res
 }
 
+// GetNumberOfKeys implements gedb.Index.
+func (i *Index) GetNumberOfKeys() int {
+	return i.tree.GetNumberOfKeys()
+}
+
 func (i *Index) compareThings(a any, b any) int {
 	comp, _ := i.comparer.Compare(a, b)
 	return comp
