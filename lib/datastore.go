@@ -910,6 +910,7 @@ func (d *Datastore) updateIndexes(ctx context.Context, mods []gedb.Update) error
 	for i, key := range keys {
 		if err = d.indexes[key].UpdateMultipleDocs(ctx, mods...); err != nil {
 			failingIndex = i
+			break
 		}
 	}
 	if err != nil {
