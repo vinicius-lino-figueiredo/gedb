@@ -789,7 +789,7 @@ func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error
 	delete(d.indexes, fieldName)
 
 	dto := gedb.IndexDTO{
-		IndexRemoved: true,
+		IndexRemoved: fieldName,
 	}
 
 	idxDoc, err := d.documentFactory(dto)
