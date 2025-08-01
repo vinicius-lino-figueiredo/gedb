@@ -29,11 +29,24 @@ func (d *Deserializer) convertDates(doc Document) any {
 				return time.UnixMilli(int64(i))
 			}
 		}
-		if vDoc, ok := v.(Document); ok {
-			doc[k] = d.convertDates(vDoc)
-		}
+		doc[k] = d.convertAny(v)
 	}
 	return doc
+}
+
+func (d *Deserializer) convertAny(v any) any {
+	switch t := v.(type) {
+	case Document:
+		return d.convertDates(t)
+	case []any:
+		newL := make([]any, len(t))
+		for n, i := range t {
+			newL[n] = d.convertAny(i)
+		}
+		return newL
+	default:
+		return v
+	}
 }
 
 // Deserialize implements gedb.Deserializer.
