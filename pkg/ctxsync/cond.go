@@ -42,18 +42,6 @@ func (c *Cond) WaitWithContext(ctx context.Context) error {
 	}
 }
 
-// Signal wakes one waiting goroutine, if any.
-// Does not guarantee ordering or priority.
-func (c *Cond) Signal() {
-	c.L.Lock()
-	defer c.L.Unlock()
-
-	select {
-	case *c.sem.Load() <- struct{}{}:
-	default:
-	}
-}
-
 // Broadcast wakes all waiting goroutines, if any.
 func (c *Cond) Broadcast() {
 	c.L.Lock()
