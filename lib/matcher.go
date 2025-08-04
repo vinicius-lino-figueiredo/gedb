@@ -159,9 +159,12 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 }
 
 func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue any, treatObjAsValue bool) (bool, error) {
-	objValue, err := getDotValue(obj, queryKey)
+	objValue, fieldExists, err := getDotValuesOk(obj, strings.Split(queryKey, ".")...)
 	if err != nil {
 		return false, err
+	}
+	if !fieldExists {
+		return false, nil
 	}
 	if objValueArray, ok := objValue.([]any); ok && !treatObjAsValue {
 		if _, ok := queryValue.([]any); ok {
