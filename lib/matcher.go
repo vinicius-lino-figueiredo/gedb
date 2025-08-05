@@ -75,6 +75,9 @@ func (m *Matcher) exists(a any, b any) (bool, error) {
 }
 
 func (m *Matcher) gt(a any, b any) (bool, error) {
+	if !m.comparer.Comparable(a, b) {
+		return false, nil
+	}
 	comp, err := m.comparer.Compare(a, b)
 	if err != nil {
 		return false, err
@@ -83,6 +86,9 @@ func (m *Matcher) gt(a any, b any) (bool, error) {
 }
 
 func (m *Matcher) gte(a any, b any) (bool, error) {
+	if !m.comparer.Comparable(a, b) {
+		return false, nil
+	}
 	comp, err := m.comparer.Compare(a, b)
 	if err != nil {
 		return false, err
@@ -108,6 +114,9 @@ func (m *Matcher) in(a any, b any) (bool, error) {
 }
 
 func (m *Matcher) lt(a any, b any) (bool, error) {
+	if !m.comparer.Comparable(a, b) {
+		return false, nil
+	}
 	comp, err := m.comparer.Compare(a, b)
 	if err != nil {
 		return false, err
@@ -116,6 +125,9 @@ func (m *Matcher) lt(a any, b any) (bool, error) {
 }
 
 func (m *Matcher) lte(a any, b any) (bool, error) {
+	if !m.comparer.Comparable(a, b) {
+		return false, nil
+	}
 	comp, err := m.comparer.Compare(a, b)
 	if err != nil {
 		return false, err

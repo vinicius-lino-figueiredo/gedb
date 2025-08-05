@@ -18,6 +18,21 @@ func NewComparer() gedb.Comparer {
 	return &Comparer{}
 }
 
+// Comparable implements gedb.Comparer.
+func (c *Comparer) Comparable(a, b any) bool {
+	return c.comparable(a) && c.comparable(b)
+}
+
+func (c *Comparer) comparable(v any) bool {
+	switch v.(type) {
+	case string, time.Time, uint, uint8, uint16, uint32, uint64, int, int8,
+		int16, int32, int64, float32, float64:
+		return true
+	default:
+		return false
+	}
+}
+
 // Compare implements gedb.Comparer.
 func (c *Comparer) Compare(a any, b any) (int, error) {
 

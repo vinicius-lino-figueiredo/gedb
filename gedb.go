@@ -276,6 +276,7 @@ type Matcher interface {
 
 type Comparer interface {
 	Compare(any, any) (int, error)
+	Comparable(any, any) bool
 }
 
 type Modifier interface {
