@@ -49,9 +49,6 @@ func LoadDatastore(ctx context.Context, options gedb.DatastoreOptions) (gedb.GED
 		return nil, err
 	}
 	if err := db.LoadDatabase(ctx); err != nil {
-		if dropErr := db.DropDatabase(context.WithoutCancel(ctx)); dropErr != nil {
-			err = errors.Join(err, dropErr)
-		}
 		return nil, err
 	}
 	return db, nil
