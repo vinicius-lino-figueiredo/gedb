@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"math/big"
 	"regexp"
 	"strings"
 
@@ -59,13 +60,12 @@ func (m *Matcher) elemMatch(a any, b any) (bool, error) {
 func (m *Matcher) exists(a any, b any) (bool, error) {
 	var bBool bool
 	if b != nil {
-		bBool = true
-	} else {
-		comp, err := m.comparer.Compare(b, "")
-		if err != nil {
-			return false, err
+		if n, ok := asNumber(b); ok {
+			bBool = n.Cmp(big.NewFloat(0)) != 0
+		} else {
+			nb, ok := b.(bool)
+			bBool = nb == ok
 		}
-		bBool = comp == 0
 	}
 
 	if a == nil {
