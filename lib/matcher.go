@@ -33,7 +33,7 @@ func (m *Matcher) and(obj gedb.Document, query any) (bool, error) {
 	for _, i := range q {
 		match, err := m.match(obj, i)
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 		if !match {
 			return false, nil
