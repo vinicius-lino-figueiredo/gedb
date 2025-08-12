@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -72,7 +71,7 @@ func getDotValueList(v []any, fieldParts ...string) (any, error) {
 		return m, nil
 	}
 	if i >= len(v) {
-		return nil, fmt.Errorf("value %d out of bounds", i)
+		return nil, nil
 	}
 	return v[i], nil
 
@@ -92,7 +91,7 @@ func getDotValueListOk(v []any, fieldParts ...string) (any, bool, error) {
 		return m, ok, nil
 	}
 	if i >= len(v) {
-		return nil, false, fmt.Errorf("value %d out of bounds", i)
+		return nil, false, nil
 	}
 	return v[i], ok, nil
 
