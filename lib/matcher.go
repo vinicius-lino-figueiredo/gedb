@@ -42,7 +42,7 @@ func (m *Matcher) and(obj gedb.Document, query any) (bool, error) {
 	return true, nil
 }
 
-func (m *Matcher) elemMatch(a any, b any) (bool, error) {
+func (m *Matcher) elemMatch(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	aArr, ok := a.([]any)
 	if !ok {
 		return false, nil
@@ -57,7 +57,7 @@ func (m *Matcher) elemMatch(a any, b any) (bool, error) {
 	return false, nil
 }
 
-func (m *Matcher) exists(a any, b any) (bool, error) {
+func (m *Matcher) exists(obj gedb.Document, _ any, field string, b any) (bool, error) {
 	var bBool bool
 	if b != nil {
 		if n, ok := asNumber(b); ok {
@@ -68,13 +68,10 @@ func (m *Matcher) exists(a any, b any) (bool, error) {
 		}
 	}
 
-	if a == nil {
-		return !bBool, nil
-	}
-	return bBool, nil
+	return obj.Has(field) == bBool, nil
 }
 
-func (m *Matcher) gt(a any, b any) (bool, error) {
+func (m *Matcher) gt(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	if !m.comparer.Comparable(a, b) {
 		return false, nil
 	}
@@ -85,7 +82,7 @@ func (m *Matcher) gt(a any, b any) (bool, error) {
 	return comp > 0, nil
 }
 
-func (m *Matcher) gte(a any, b any) (bool, error) {
+func (m *Matcher) gte(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	if !m.comparer.Comparable(a, b) {
 		return false, nil
 	}
@@ -96,7 +93,7 @@ func (m *Matcher) gte(a any, b any) (bool, error) {
 	return comp >= 0, nil
 }
 
-func (m *Matcher) in(a any, b any) (bool, error) {
+func (m *Matcher) in(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	bArr, ok := b.([]any)
 	if !ok {
 		return false, fmt.Errorf("$in operator called with a non-array")
@@ -113,7 +110,7 @@ func (m *Matcher) in(a any, b any) (bool, error) {
 	return false, nil
 }
 
-func (m *Matcher) lt(a any, b any) (bool, error) {
+func (m *Matcher) lt(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	if !m.comparer.Comparable(a, b) {
 		return false, nil
 	}
@@ -124,7 +121,7 @@ func (m *Matcher) lt(a any, b any) (bool, error) {
 	return comp < 0, nil
 }
 
-func (m *Matcher) lte(a any, b any) (bool, error) {
+func (m *Matcher) lte(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	if !m.comparer.Comparable(a, b) {
 		return false, nil
 	}
@@ -220,7 +217,7 @@ func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue 
 
 		if dollarFields > 0 {
 			for key, value := range queryValueObj.Iter() {
-				matches, err := m.useComparisonFunc(key, objValue, value)
+				matches, err := m.useComparisonFunc(obj, key, queryKey, objValue, value)
 				if !matches || err != nil {
 					return false, err
 				}
@@ -230,7 +227,7 @@ func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue 
 	}
 
 	if queryValueRegex, ok := queryValue.(*regexp.Regexp); ok {
-		return m.regex(objValue, queryValueRegex)
+		return m.regex(nil, objValue, "", queryValueRegex)
 	}
 
 	comp, err := m.comparer.Compare(objValue, queryValue)
@@ -241,7 +238,7 @@ func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue 
 	return comp == 0, nil
 }
 
-func (m *Matcher) ne(a any, b any) (bool, error) {
+func (m *Matcher) ne(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	comp, err := m.comparer.Compare(a, b)
 	if err != nil {
 		return false, err
@@ -249,8 +246,8 @@ func (m *Matcher) ne(a any, b any) (bool, error) {
 	return comp != 0, nil
 }
 
-func (m *Matcher) nin(a any, b any) (bool, error) {
-	in, err := m.in(a, b)
+func (m *Matcher) nin(_ gedb.Document, a any, _ string, b any) (bool, error) {
+	in, err := m.in(nil, a, "", b)
 	if err != nil {
 		return false, err
 	}
@@ -282,7 +279,7 @@ func (m *Matcher) or(obj gedb.Document, query any) (bool, error) {
 	return false, nil
 }
 
-func (m *Matcher) regex(a any, b any) (bool, error) {
+func (m *Matcher) regex(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	rgx, ok := b.(*regexp.Regexp)
 	if !ok {
 		return false, fmt.Errorf("$regex operator called with non regular expression")
@@ -294,7 +291,7 @@ func (m *Matcher) regex(a any, b any) (bool, error) {
 	return rgx.MatchString(str), nil
 }
 
-func (m *Matcher) size(a any, b any) (bool, error) {
+func (m *Matcher) size(_ gedb.Document, a any, _ string, b any) (bool, error) {
 	aArr, ok := a.([]any)
 	if !ok {
 		return false, nil
@@ -313,8 +310,8 @@ func (m *Matcher) size(a any, b any) (bool, error) {
 	return comp == 0, nil
 }
 
-func (m *Matcher) useComparisonFunc(key string, a any, b any) (bool, error) {
-	comp := map[string]func(any, any) (bool, error){
+func (m *Matcher) useComparisonFunc(obj gedb.Document, key string, field string, a any, b any) (bool, error) {
+	comp := map[string]func(gedb.Document, any, string, any) (bool, error){
 		"$lt":        m.lt,
 		"$lte":       m.lte,
 		"$gt":        m.gt,
@@ -328,7 +325,7 @@ func (m *Matcher) useComparisonFunc(key string, a any, b any) (bool, error) {
 		"$elemMatch": m.elemMatch,
 	}
 	if fn, ok := comp[key]; ok {
-		return fn(a, b)
+		return fn(obj, a, field, b)
 	}
 	return false, fmt.Errorf("Unknown comparison function %q", key)
 }
