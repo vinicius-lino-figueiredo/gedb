@@ -143,12 +143,19 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 	}
 	obj, okObj := o.(gedb.Document)
 	query, okQuery := q.(gedb.Document)
-	if !okObj || !okQuery {
-		obj, err := m.documentFactory(map[string]any{"needAKey": obj})
+	if !okObj {
+		var err error
+		obj, err = m.documentFactory(map[string]any{"needAKey": obj})
 		if err != nil {
 			return false, err
 		}
-		return m.matchQueryPart(obj, "needAKey", q, false)
+	}
+	if !okQuery {
+		var err error
+		query, err = m.documentFactory(query)
+		if err != nil {
+			return false, err
+		}
 	}
 	for queryKey, queryValue := range query.Iter() {
 		if !strings.HasPrefix(queryKey, "$") {
