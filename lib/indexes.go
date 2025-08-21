@@ -2,12 +2,8 @@ package lib
 
 import (
 	"context"
-	"encoding/json"
-	"hash"
-	"hash/fnv"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/vinicius-lino-figueiredo/bst"
 	"github.com/vinicius-lino-figueiredo/gedb"
@@ -15,15 +11,15 @@ import (
 
 // Index implements gedb.Index.
 type Index struct {
-	fieldName       string
-	_fields         []string
-	unique          bool
-	sparse          bool
-	tree            *bst.BinarySearchTree
-	treeOptions     bst.Options
-	documentFactory func(any) (gedb.Document, error)
-	comparer        gedb.Comparer
-	hasher          gedb.Hasher
+	fieldName   string
+	_fields     []string
+	unique      bool
+	sparse      bool
+	tree        *bst.BinarySearchTree
+	treeOptions bst.Options
+	comparer    gedb.Comparer
+	hasher      gedb.Hasher
+	fieldGetter gedb.FieldGetter
 }
 
 // FieldName implements gedb.Index.
@@ -42,7 +38,7 @@ func (i *Index) Unique() bool {
 }
 
 // NewIndex returns a new implementation of gedb.Index.
-func NewIndex(options gedb.IndexOptions) gedb.Index {
+func NewIndex(options gedb.IndexOptions) (gedb.Index, error) {
 	if options.Comparer == nil {
 		options.Comparer = NewComparer()
 	}
@@ -60,17 +56,25 @@ func NewIndex(options gedb.IndexOptions) gedb.Index {
 	if options.Hasher == nil {
 		options.Hasher = NewHasher()
 	}
-	return &Index{
-		fieldName:       options.FieldName,
-		_fields:         strings.Split(options.FieldName, ","),
-		unique:          options.Unique,
-		sparse:          options.Sparse,
-		treeOptions:     treeOptions,
-		tree:            bst.NewBinarySearchTree(treeOptions),
-		documentFactory: options.DocumentFactory,
-		comparer:        options.Comparer,
-		hasher:          options.Hasher,
+	if options.FieldGetter == nil {
+		options.FieldGetter = NewFieldGetter()
 	}
+	// fields := strings.Split(options.FieldName, ",")
+	fields, err := options.FieldGetter.SplitFields(options.FieldName)
+	if err != nil {
+		return nil, err
+	}
+	return &Index{
+		fieldName:   options.FieldName,
+		_fields:     fields,
+		unique:      options.Unique,
+		sparse:      options.Sparse,
+		treeOptions: treeOptions,
+		tree:        bst.NewBinarySearchTree(treeOptions),
+		comparer:    options.Comparer,
+		hasher:      options.Hasher,
+		fieldGetter: options.FieldGetter,
+	}, nil
 }
 
 // Reset implements gedb.Index.
@@ -82,6 +86,57 @@ func (i *Index) Reset(ctx context.Context, newData ...gedb.Document) error {
 	}
 	i.tree = bst.NewBinarySearchTree(i.treeOptions)
 	return i.Insert(ctx, newData...)
+}
+
+// Insert2 implements gedb.Index.
+func (i *Index) getKeys(doc gedb.Document) ([]any, error) {
+
+	// When a dotted field path references multiple array elements, each
+	// element is treated as an individual key and inserted separately into
+	// the index
+	if len(i._fields) != 1 {
+		var containsKey bool
+		k := make(Document)
+		for _, field := range i._fields {
+
+			key, ok, err := i.fieldGetter.GetField(doc, field)
+			if err != nil {
+				return nil, err
+			}
+
+			if ok { // if undefined, treat as nil
+				k[field] = key[0]
+			} else {
+				k[field] = nil
+			}
+
+			containsKey = containsKey || k[field] != nil
+		}
+		if i.sparse && !containsKey {
+			return nil, nil
+		}
+		return []any{k}, nil
+	}
+
+	keysAlt, ok, err := i.fieldGetter.GetField(doc, i._fields[0])
+	if err != nil {
+		return nil, err
+	}
+
+	if i.sparse && !ok {
+		return nil, nil
+	}
+
+	if len(keysAlt) == 0 {
+		return []any{nil}, nil
+	}
+
+	if l, ok := keysAlt[0].([]any); ok {
+		return l, nil
+	}
+
+	return keysAlt, nil
+
 }
 
 // Insert implements gedb.Index.
@@ -99,27 +154,17 @@ func (i *Index) Insert(ctx context.Context, docs ...gedb.Document) error {
 
 	keys := make(map[uint64]kv, len(docs))
 
-	var err error
-	var key any
-	var h uint64
-	var ds []gedb.Document
-	var b []byte
-	var hasher hash.Hash64
+	var (
+		err error
+		h   uint64
+		ds  []gedb.Document
+	)
 DocInsertion:
 	for _, d := range docs {
-		key, err = getDotValues(d, i._fields)
+		var l []any
+		l, err = i.getKeys(d)
 		if err != nil {
-			return err
-		}
-
-		oKey, isObj := key.(gedb.Document)
-		if i.sparse && (key == nil || (isObj && !slices.ContainsFunc(slices.Collect(oKey.Values()), func(el any) bool { return el != nil }))) {
-			return nil
-		}
-
-		l, ok := key.([]any)
-		if !ok {
-			l = []any{key}
+			break
 		}
 
 		slices.SortFunc(l, i.compareThings)
@@ -130,16 +175,11 @@ DocInsertion:
 				break DocInsertion
 			}
 
-			b, err = json.Marshal(k)
+			h, err = i.hasher.Hash(k)
 			if err != nil {
-				break
+				break DocInsertion
 			}
-			hasher = fnv.New64a()
-			_, err = hasher.Write(b)
-			if err != nil {
-				break
-			}
-			h = hasher.Sum64()
+
 			ds = append(keys[h].docs, d)
 			keys[h] = kv{key: k, docs: ds}
 		}
@@ -163,27 +203,38 @@ func (i *Index) Remove(ctx context.Context, docs ...gedb.Document) error {
 	default:
 	}
 
-	var key any
-	var err error
 	for _, d := range docs {
-		key, err = getDotValue(d, i._fields...)
-		if err != nil {
-			return err
+		var keys []any
+		NoValid := false
+		for _, field := range i._fields {
+			key, ok, err := i.fieldGetter.GetField(d, field)
+			if err != nil {
+				return err
+			}
+
+			for _, k := range key {
+				if kl, ok := k.([]any); ok {
+					keys = append(keys, kl...)
+				} else {
+					keys = append(keys, k)
+				}
+			}
+
+			NoValid = NoValid || ok
 		}
 
-		if key == nil && i.sparse {
+		if i.sparse && NoValid {
 			return nil
 		}
 
-		if l, ok := key.([]any); ok {
-			uniq := slices.Clone(l)
-			slices.SortFunc(uniq, i.compareThings)
-			uniq = slices.Compact(uniq)
-			for _, _key := range uniq {
-				i.tree.Delete(_key, d)
-			}
+		uniq := slices.Clone(keys)
+		slices.SortFunc(uniq, i.compareThings)
+		uniq = slices.Compact(uniq)
+		for _, _key := range uniq {
+			i.tree.Delete(_key, d)
 		}
-		i.tree.Delete(key, d)
+
+		i.tree.Delete(keys, d)
 	}
 
 	return nil
@@ -312,18 +363,14 @@ func (i *Index) GetMatching(value ...any) ([]gedb.Document, error) {
 }
 
 // GetBetweenBounds implements gedb.Index.
-func (i *Index) GetBetweenBounds(ctx context.Context, query any) ([]gedb.Document, error) {
+func (i *Index) GetBetweenBounds(ctx context.Context, query gedb.Document) ([]gedb.Document, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
-	d, err := i.documentFactory(query)
-	if err != nil {
-		return nil, err
-	}
 
-	m := maps.Collect(d.Iter())
+	m := maps.Collect(query.Iter())
 
 	found := i.tree.BetweenBounds(m, nil, nil)
 	res := make([]gedb.Document, len(found))

@@ -32,7 +32,7 @@ type Datastore struct {
 	persistence           gedb.Persistence
 	indexes               map[string]gedb.Index
 	ttlIndexes            map[string]time.Duration
-	indexFactory          func(gedb.IndexOptions) gedb.Index
+	indexFactory          func(gedb.IndexOptions) (gedb.Index, error)
 	documentFactory       func(any) (gedb.Document, error)
 	cursorFactory         func(context.Context, []gedb.Document, gedb.CursorOptions) (gedb.Cursor, error)
 	matcher               gedb.Matcher
@@ -40,6 +40,7 @@ type Datastore struct {
 	modifier              gedb.Modifier
 	timeGetter            gedb.TimeGetter
 	hasher                gedb.Hasher
+	fieldGetter           gedb.FieldGetter
 }
 
 // LoadDatastore creates a new gedb.GEDB and loads the database.
@@ -62,6 +63,9 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.Hasher == nil {
 		options.Hasher = NewHasher()
 	}
+	if options.FieldGetter == nil {
+		options.FieldGetter = NewFieldGetter()
+	}
 	if options.Persistence == nil {
 		var err error
 		persistenceOptions := gedb.PersistenceOptions{
@@ -75,6 +79,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 			Storage:               options.Storage,
 			Decoder:               options.Decoder,
 			Hasher:                options.Hasher,
+			FieldGetter:           options.FieldGetter,
 		}
 		options.Persistence, err = NewPersistence(persistenceOptions)
 		if err != nil {
@@ -88,7 +93,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		options.DocumentFactory = NewDocument
 	}
 	if options.Matcher == nil {
-		options.Matcher = NewMatcher(options.DocumentFactory, options.Comparer)
+		options.Matcher = NewMatcher(options.DocumentFactory, options.Comparer, options.FieldGetter)
 	}
 	if options.CursorFactory == nil {
 		options.CursorFactory = NewCursor
@@ -102,7 +107,10 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 	if options.TimeGetter == nil {
 		options.TimeGetter = NewTimeGetter()
 	}
-	IDIdx := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
+	IDIdx, err := options.IndexFactory(gedb.IndexOptions{FieldName: "_id", Unique: true})
+	if err != nil {
+		return nil, err
+	}
 	return &Datastore{
 		filename:              options.Filename,
 		timestampData:         options.TimestampData,
@@ -122,6 +130,7 @@ func NewDatastore(options gedb.DatastoreOptions) (gedb.GEDB, error) {
 		modifier:              options.Modifier,
 		timeGetter:            options.TimeGetter,
 		hasher:                options.Hasher,
+		fieldGetter:           options.FieldGetter,
 	}, nil
 }
 
@@ -291,7 +300,10 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	defer d.executor.Unlock()
 	ctx = context.WithoutCancel(ctx) // should complete this task
 	// d.StopAutocompaction not added for now
-	IDIdx := d.indexFactory(gedb.IndexOptions{FieldName: "_id"})
+	IDIdx, err := d.indexFactory(gedb.IndexOptions{FieldName: "_id"})
+	if err != nil {
+		return err
+	}
 	d.indexes = map[string]gedb.Index{"_id": IDIdx}
 	d.ttlIndexes = make(map[string]time.Duration)
 	return d.persistence.DropDatabase(ctx)
@@ -328,7 +340,12 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options gedb.EnsureIndexOpt
 		return nil
 	}
 
-	d.indexes[_options.FieldName] = d.indexFactory(_options)
+	var err error
+	d.indexes[_options.FieldName], err = d.indexFactory(_options)
+	if err != nil {
+		return err
+	}
+
 	if options.ExpireAfter > 0 {
 		d.ttlIndexes[_options.FieldName] = options.ExpireAfter
 	}
@@ -525,7 +542,10 @@ func (d *Datastore) getRawCandidates(ctx context.Context, query gedb.Document) (
 
 IndexesLoop:
 	for idxName, idx := range d.indexes {
-		parts := strings.Split(idxName, ",")
+		parts, err := d.fieldGetter.SplitFields(idxName)
+		if err != nil {
+			return nil, err
+		}
 		if len(parts) == 0 {
 			continue
 		}
@@ -657,7 +677,10 @@ func (d *Datastore) LoadDatabase(ctx context.Context) error {
 			Comparer:        d.comparer,
 			Hasher:          d.hasher,
 		}
-		d.indexes[key] = d.indexFactory(options)
+		d.indexes[key], err = d.indexFactory(options)
+		if err != nil {
+			return err
+		}
 	}
 	if err := d.resetIndexes(ctx, docs...); err != nil {
 		if resetErr := d.resetIndexes(ctx); resetErr != nil {

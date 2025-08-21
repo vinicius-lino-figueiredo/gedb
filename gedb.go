@@ -93,7 +93,7 @@ type DatastoreOptions struct {
 	DirMode               os.FileMode
 	Persistence           Persistence
 	Storage               Storage
-	IndexFactory          func(IndexOptions) Index
+	IndexFactory          func(IndexOptions) (Index, error)
 	DocumentFactory       func(any) (Document, error)
 	Decoder               Decoder
 	Matcher               Matcher
@@ -101,6 +101,7 @@ type DatastoreOptions struct {
 	Modifier              Modifier
 	TimeGetter            TimeGetter
 	Hasher                Hasher
+	FieldGetter           FieldGetter
 }
 
 type Serializer interface {
@@ -152,7 +153,7 @@ type Executor interface {
 
 type Index interface {
 	GetAll() []Document
-	GetBetweenBounds(ctx context.Context, query any) ([]Document, error)
+	GetBetweenBounds(ctx context.Context, query Document) ([]Document, error)
 	GetMatching(value ...any) ([]Document, error)
 	Insert(ctx context.Context, docs ...Document) error
 	Remove(ctx context.Context, docs ...Document) error
@@ -175,6 +176,7 @@ type IndexOptions struct {
 	DocumentFactory func(any) (Document, error)
 	Comparer        Comparer
 	Hasher          Hasher
+	FieldGetter     FieldGetter
 }
 
 type Update struct {
@@ -221,6 +223,7 @@ type PersistenceOptions struct {
 	Comparer              Comparer
 	DocumentFactory       func(any) (Document, error)
 	Hasher                Hasher
+	FieldGetter           FieldGetter
 }
 
 type IndexDTO struct {
@@ -268,6 +271,7 @@ type CursorOptions struct {
 	Decoder         Decoder
 	DocumentFactory func(any) (Document, error)
 	Comparer        Comparer
+	FieldGetter     FieldGetter
 }
 
 type Matcher interface {
@@ -289,4 +293,9 @@ type TimeGetter interface {
 
 type Hasher interface {
 	Hash(any) (uint64, error)
+}
+
+type FieldGetter interface {
+	GetField(any, string) ([]any, bool, error)
+	SplitFields(string) ([]string, error)
 }

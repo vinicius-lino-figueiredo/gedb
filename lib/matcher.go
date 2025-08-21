@@ -13,15 +13,17 @@ import (
 type Matcher struct {
 	documentFactory func(any) (gedb.Document, error)
 	comparer        gedb.Comparer
+	fieldGetter     gedb.FieldGetter
 }
 
 // NewMatcher returns a new implementation of gedb.Matcher.
-func NewMatcher(documentFctory func(any) (gedb.Document, error), comparer gedb.Comparer) gedb.Matcher {
+func NewMatcher(documentFctory func(any) (gedb.Document, error), comparer gedb.Comparer, fieldGetter gedb.FieldGetter) gedb.Matcher {
 	// return nil
 	return &Matcher{
 		documentFactory: documentFctory,
 		// model:           model,
-		comparer: comparer,
+		comparer:    comparer,
+		fieldGetter: fieldGetter,
 	}
 }
 
@@ -175,12 +177,16 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 }
 
 func (m *Matcher) matchQueryPart(obj gedb.Document, queryKey string, queryValue any, treatObjAsValue bool) (bool, error) {
-	objValue, fieldExists, err := getDotValuesOk(obj, strings.Split(queryKey, ".")...)
+	objValues, fieldExists, err := m.fieldGetter.GetField(obj, queryKey)
 	if err != nil {
 		return false, err
 	}
 	if !fieldExists {
 		return false, nil
+	}
+	objValue := any(objValues)
+	if len(objValues) == 1 {
+		objValue = objValues[0]
 	}
 	if objValueArray, ok := objValue.([]any); ok && !treatObjAsValue {
 		if _, ok := queryValue.([]any); ok {

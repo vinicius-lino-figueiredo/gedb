@@ -14,14 +14,15 @@ import (
 
 // Cursor implements gedb.Cursor.
 type Cursor struct {
-	data      []gedb.Document
-	ctx       context.Context
-	mu        *ctxsync.Mutex
-	dec       gedb.Decoder
-	once      sync.Once
-	started   bool
-	closed    bool
-	storedErr error
+	data        []gedb.Document
+	ctx         context.Context
+	mu          *ctxsync.Mutex
+	dec         gedb.Decoder
+	once        sync.Once
+	started     bool
+	closed      bool
+	storedErr   error
+	fieldGetter gedb.FieldGetter
 }
 
 // NewCursor returns a new implementation of Cursor
@@ -31,8 +32,11 @@ func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOpt
 		return nil, ctx.Err()
 	default:
 	}
+	if options.FieldGetter == nil {
+		options.FieldGetter = NewFieldGetter()
+	}
 	if options.Matcher == nil {
-		options.Matcher = NewMatcher(options.DocumentFactory, options.Comparer)
+		options.Matcher = NewMatcher(options.DocumentFactory, options.Comparer, options.FieldGetter)
 	}
 	if options.Decoder == nil {
 		options.Decoder = NewDecoder()
@@ -76,9 +80,10 @@ func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOpt
 		}
 	}
 	cur := &Cursor{
-		ctx: ctx,
-		mu:  ctxsync.NewMutex(),
-		dec: options.Decoder,
+		ctx:         ctx,
+		mu:          ctxsync.NewMutex(),
+		dec:         options.Decoder,
+		fieldGetter: options.FieldGetter,
 	}
 
 	if len(options.Sort) != 0 && len(res) != 0 {
@@ -118,7 +123,7 @@ func NewCursor(ctx context.Context, data []gedb.Document, options gedb.CursorOpt
 
 func (c *Cursor) addField(doc map[string]any, candidate gedb.Document, proj string) error {
 	projFields := strings.Split(proj, ".")
-	val, ok, err := getDotValuesOk(candidate, projFields...)
+	val, ok, err := c.fieldGetter.GetField(candidate, proj)
 	if err != nil {
 		return err
 	}
@@ -161,11 +166,11 @@ func (c *Cursor) asMap(doc gedb.Document) map[string]any {
 }
 
 func (c *Cursor) compareByCriterion(a, b gedb.Document, comparer gedb.Comparer, criterion string, direction int) (int, error) {
-	criterionA, err := getDotValue(a, criterion)
+	criterionA, _, err := c.fieldGetter.GetField(a, criterion)
 	if err != nil {
 		return 0, err
 	}
-	criterionB, err := getDotValue(b, criterion)
+	criterionB, _, err := c.fieldGetter.GetField(b, criterion)
 	if err != nil {
 		return 0, err
 	}

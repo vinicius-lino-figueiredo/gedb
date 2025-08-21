@@ -82,6 +82,18 @@ func (m *nonComparableMap[T]) Keys() iter.Seq[any] {
 	}
 }
 
+func (m *nonComparableMap[T]) Iter() iter.Seq2[any, T] {
+	return func(yield func(any, T) bool) {
+		for _, bucket := range m.buckets {
+			for _, v := range bucket {
+				if !yield(v.key, v.value) {
+					return
+				}
+			}
+		}
+	}
+}
+
 func (m *nonComparableMap[T]) Set(key any, value T) error {
 	bucketIndex, err := m.getBucketIndex(key)
 	if err != nil {
