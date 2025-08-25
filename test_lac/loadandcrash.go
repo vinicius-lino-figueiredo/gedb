@@ -10,13 +10,17 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/vinicius-lino-figueiredo/gedb"
-	"github.com/vinicius-lino-figueiredo/gedb/lib"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 func main() {
-	per, err := lib.NewPersistence(gedb.PersistenceOptions{Filename: "../workspace/lac.db", Storage: fakeStorage{lib.NewStorage()}})
+	per, err := persistence.NewPersistence(
+		domain.WithPersistenceFilename("../../../workspace/lac.db"),
+		domain.WithPersistenceStorage(fakeStorage{storage.NewStorage()}),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,7 +46,7 @@ func (f fakeWriteStream) Close() error {
 }
 
 type fakeStorage struct {
-	gedb.Storage
+	domain.Storage
 }
 
 func (fs fakeStorage) AppendFile(filename string, mode os.FileMode, data []byte) (int, error) {
