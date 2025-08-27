@@ -90,6 +90,8 @@ type Document interface {
 	Get(string) any
 	// Set sets the value under the given key.
 	Set(string, any)
+	// Unset unsets the value under the given key.
+	Unset(string)
 	// Iter returns an unordered sequence of key-value pairs in the
 	// document.
 	Iter() iter.Seq2[string, any]

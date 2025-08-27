@@ -106,6 +106,8 @@ func (m *Modifier) lastStepModifierFunc(mod string, obj domain.Document, field s
 	switch mod {
 	case "$set":
 		obj.Set(field, value)
+	case "$unset":
+		obj.Unset(field)
 	case "$inc":
 		valueNum, ok := m.asNumber(value)
 		if !ok {

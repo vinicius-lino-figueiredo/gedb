@@ -136,6 +136,11 @@ func (d M) Set(key string, value any) {
 	d[key] = value
 }
 
+// Unset implements domain.Document
+func (d M) Unset(key string) {
+	delete(d, key)
+}
+
 // D implements domain.Document
 func (d M) D(key string) domain.Document {
 	r := d[key]
