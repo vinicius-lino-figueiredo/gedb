@@ -36,6 +36,7 @@ func (m *Modifier) modifierFunc(mod string, obj domain.Document, fields []string
 				return err
 			}
 			subObj = newDoc
+			curr.Set(field, newDoc)
 		}
 		curr = subObj
 	}
