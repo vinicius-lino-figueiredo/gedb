@@ -222,10 +222,6 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 		return nil, nil, ctx.Err()
 	default:
 	}
-	// In-memory only datastore
-	if p.inMemoryOnly {
-		return nil, nil, nil
-	}
 	// NOTE: Not Reseting DB indexes here. This should be done in the
 	// datastore implementation
 

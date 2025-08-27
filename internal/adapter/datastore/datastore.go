@@ -357,7 +357,7 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 		return strings.ContainsRune(s, ',')
 	}
 	if slices.ContainsFunc(_fields, containsComma) {
-		return errors.New("Cannot use comma in index fieldName")
+		return errors.New("cannot use comma in index fieldName")
 	}
 
 	fields := strings.Join(_fields, ",")
@@ -848,7 +848,7 @@ func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error
 		return strings.ContainsRune(s, ',')
 	}
 	if slices.ContainsFunc(_fields, containsComma) {
-		return errors.New("Cannot use comma in index fieldName")
+		return errors.New("cannot use comma in index fieldName")
 	}
 	fieldName := strings.Join(_fields, ",")
 	delete(d.indexes, fieldName)

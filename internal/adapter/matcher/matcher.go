@@ -351,7 +351,7 @@ func (m *Matcher) useComparisonFunc(obj domain.Document, key string, field strin
 	if fn, ok := comp[key]; ok {
 		return fn(obj, a, field, b)
 	}
-	return false, fmt.Errorf("Unknown comparison function %q", key)
+	return false, fmt.Errorf("unknown comparison function %q", key)
 }
 
 func (m *Matcher) useLogicalOperators(k string, a domain.Document, b any) (bool, error) {
