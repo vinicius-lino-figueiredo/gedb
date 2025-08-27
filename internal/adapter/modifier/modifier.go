@@ -29,16 +29,20 @@ func (m *Modifier) modifierFunc(mod string, obj domain.Document, fields []string
 		if n == last {
 			return m.lastStepModifierFunc(mod, curr, field, value)
 		}
+
 		subObj := curr.D(field)
-		if subObj == nil {
+		if subObj != nil {
+			curr = subObj
+		} else if !curr.Has(field) {
 			newDoc, err := m.documentFactory(nil)
 			if err != nil {
 				return err
 			}
-			subObj = newDoc
 			curr.Set(field, newDoc)
+			curr = newDoc
+		} else {
+			return nil
 		}
-		curr = subObj
 	}
 	return nil
 }
