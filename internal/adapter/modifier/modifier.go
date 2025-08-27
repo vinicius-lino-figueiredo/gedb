@@ -11,12 +11,14 @@ import (
 // Modifier implements domain.Modifier.
 type Modifier struct {
 	documentFactory func(any) (domain.Document, error)
+	comp            domain.Comparer
 }
 
 // NewModifier returns a new implementation of domain.Modifier.
-func NewModifier(documentFactory func(any) (domain.Document, error)) domain.Modifier {
+func NewModifier(documentFactory func(any) (domain.Document, error), comp domain.Comparer) domain.Modifier {
 	return &Modifier{
 		documentFactory: documentFactory,
+		comp:            comp,
 	}
 }
 
@@ -47,7 +49,13 @@ func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (dom
 	modifiers := make(map[string]any, updateQuery.Len())
 	for item, value := range updateQuery.Iter() {
 		if item == "_id" {
-			return nil, fmt.Errorf("you cannot change a document's _id")
+			c, err := m.comp.Compare(value, obj.ID())
+			if err != nil {
+				return nil, err
+			}
+			if c != 0 {
+				return nil, fmt.Errorf("you cannot change a document's _id")
+			}
 		}
 		firstChars++
 		if strings.HasPrefix(item, "$") {
