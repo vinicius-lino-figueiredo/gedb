@@ -20,17 +20,21 @@ func NewComparer() domain.Comparer {
 
 // Comparable implements domain.Comparer.
 func (c *Comparer) Comparable(a, b any) bool {
-	return c.comparable(a) && c.comparable(b)
-}
+	equal := false
+	if _, ok := c.asNumber(a); ok {
+		_, equal = c.asNumber(b)
+		return equal
+	}
 
-func (c *Comparer) comparable(v any) bool {
-	switch v.(type) {
-	case string, time.Time, uint, uint8, uint16, uint32, uint64, int, int8,
-		int16, int32, int64, float32, float64:
-		return true
+	switch a.(type) {
+	case string:
+		_, equal = b.(string)
+	case time.Time:
+		_, equal = b.(time.Time)
 	default:
 		return false
 	}
+	return equal
 }
 
 // Compare implements domain.Comparer.
