@@ -11,8 +11,9 @@ import (
 //
 // A Cond must not be copied after first use.
 type Cond struct {
-	sem atomic.Pointer[chan struct{}]
-	L   sync.Locker
+	sem     atomic.Pointer[chan struct{}]
+	L       sync.Locker
+	waiters int64
 }
 
 // NewCond returns a new Cond.
@@ -34,12 +35,27 @@ func (c *Cond) Wait() {
 // WaitWithContext blocks until awoken by Signal, Broadcast, or context
 // cancellation. Should be used in a loop that checks the condition.
 func (c *Cond) WaitWithContext(ctx context.Context) error {
+
+	sem := *c.sem.Load()
+	done := ctx.Done()
+
+	atomic.AddInt64(&c.waiters, 1)
+	defer atomic.AddInt64(&c.waiters, -1)
+
 	select {
-	case <-ctx.Done():
+	case <-done:
 		return ctx.Err()
-	case <-*c.sem.Load():
+	case <-sem:
 		return nil
 	}
+}
+
+// WaiterCount returns the amount of goroutines that are locked waiting for a
+// broadcast. Since there is a small time window between adding the waiter count
+// and locking at the select, it might return >0 before the waiter is actually
+// locked in the select, but it should generally return a valid value.
+func (c *Cond) WaiterCount() int64 {
+	return atomic.LoadInt64(&c.waiters)
 }
 
 // Broadcast wakes all waiting goroutines, if any.
