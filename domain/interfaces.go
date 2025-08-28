@@ -65,8 +65,14 @@ type TimeGetter interface {
 
 // FieldGetter provides field access operations with dot notation support.
 type FieldGetter interface {
-	// GetField extracts values from nested document fields using dot notation.
+	// GetField extracts values from nested document fields using string
+	// notation.
 	GetField(any, string) ([]any, bool, error)
+	// GetAddress extracts nested path from the string address using the
+	// expected notation.
+	GetAddress(field string) ([]string, error)
+	// GetField extracts values from nested document.
+	GetFieldFromParts(any, ...string) ([]any, bool, error)
 	// SplitFields parses compound field names into individual field components.
 	SplitFields(string) ([]string, error)
 }

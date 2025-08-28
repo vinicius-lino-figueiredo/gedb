@@ -15,15 +15,24 @@ func NewFieldGetter() domain.FieldGetter {
 	return &FieldGetter{}
 }
 
+// GetAddress returns a new instance of [domain.FieldGetter].
+func (fg *FieldGetter) GetAddress(field string) ([]string, error) {
+	return strings.Split(field, "."), nil
+}
+
 // GetField implements [domain.FieldGetter].
 func (fg *FieldGetter) GetField(obj any, field string) ([]any, bool, error) {
+	fieldParts, _ := fg.GetAddress(field)
+	return fg.GetFieldFromParts(obj, fieldParts...)
+}
 
+// GetFieldFromParts implements [domain.FieldGetter].
+func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, bool, error) {
 	if obj == nil {
 		return nil, false, nil
 	}
 
 	var (
-		fieldParts = strings.Split(field, ".")
 		// has to be a list to include expanded queries
 		curr = []any{obj}
 		// set to true when continuing a query for every item in a list
