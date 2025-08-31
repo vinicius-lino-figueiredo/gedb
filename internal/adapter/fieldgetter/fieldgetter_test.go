@@ -221,6 +221,37 @@ func (s *FieldGetterTestSuite) TestExpandedOutOfBounds() {
 	s.Equal([]any{nil}, dv)
 }
 
+func (s *FieldGetterTestSuite) TestStopExpansion() {
+	doc := data.M{
+		"ducks": []any{
+			[]any{
+				data.M{
+					"name": "Huguinho",
+				},
+				data.M{
+					"name": "Zezinho",
+				},
+				data.M{
+					"name": "Luisinho",
+				},
+			},
+			data.M{
+				"name": "Donald",
+			},
+		},
+	}
+	dv, defined, err := s.fg.GetField(doc, "ducks.name")
+	s.NoError(err)
+	s.True(defined)
+	s.Equal([]any{nil, "Donald"}, dv)
+
+	dv, defined, err = s.fg.GetField(doc, "ducks.nope")
+	s.NoError(err)
+	s.True(defined)
+	s.Equal([]any{nil, nil}, dv)
+
+}
+
 func TestFieldGetterTestSuite(t *testing.T) {
 	suite.Run(t, new(FieldGetterTestSuite))
 }

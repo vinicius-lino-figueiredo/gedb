@@ -32,9 +32,14 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 		return nil, false, nil
 	}
 
+	type V struct {
+		v          any
+		expandable bool
+	}
+
 	var (
 		// has to be a list to include expanded queries
-		curr = []any{obj}
+		curr = []V{{v: obj, expandable: true}}
 		// set to true when continuing a query for every item in a list
 		expanded = false
 	)
@@ -47,9 +52,9 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 
 			item := curr[n]
 
-			switch t := item.(type) {
+			switch t := item.v.(type) {
 			case domain.Document:
-				curr[n] = t.Get(part)
+				curr[n] = V{v: t.Get(part), expandable: true}
 				if !expanded && !t.Has(part) {
 					return nil, false, nil
 				}
@@ -57,6 +62,18 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 				i, err := strconv.Atoi(part)
 				if err != nil {
 					expanded = true
+
+					if !item.expandable {
+						// curr = slices.Delete(curr, n, n+1)
+						curr[n] = V{v: nil, expandable: true}
+						n--
+						continue
+					}
+
+					tv := make([]V, len(t))
+					for n, v := range t {
+						tv[n] = V{v: v, expandable: false}
+					}
 
 					// expanding current list without losing
 					// track of current index by inserting
@@ -67,21 +84,21 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 					end := curr[n+1:]
 
 					// expanding t
-					curr = append(append(start, t...), end...)
+					curr = append(append(start, tv...), end...)
 
 					// rerunning current index because the
 					// order was changed by removal
 					n--
 
 				} else if i >= 0 && i < len(t) {
-					curr[n] = t[i]
+					curr[n] = V{v: t[i], expandable: true}
 				} else if expanded {
-					curr[n] = nil
+					curr[n] = V{v: nil, expandable: true}
 				} else {
 					return nil, false, nil
 				}
 			default:
-				curr[n] = nil
+				curr[n].v = nil
 				if !expanded {
 					return nil, false, nil
 				}
@@ -89,7 +106,13 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 
 		}
 	}
-	return curr, true, nil
+
+	res := make([]any, len(curr))
+	for n, v := range curr {
+		res[n] = v.v
+	}
+
+	return res, true, nil
 }
 
 // SplitFields implements [domain.FieldGetter].
