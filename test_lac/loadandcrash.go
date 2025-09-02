@@ -13,7 +13,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 func main() {
@@ -149,15 +148,15 @@ func (fs fakeStorage) flushToStorage(filename string, isDir bool, mode os.FileMo
 
 	fileHandle, err := os.OpenFile(filename, flags, mode)
 	if err != nil {
-		return errs.ErrFlushToStorage{ErrorOnFsync: err}
+		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
 	if err := fileHandle.Sync(); err != nil {
-		return errs.ErrFlushToStorage{ErrorOnFsync: err}
+		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
 	if err := fileHandle.Close(); err != nil {
-		return errs.ErrFlushToStorage{ErrorOnClose: err}
+		return domain.ErrFlushToStorage{ErrorOnClose: err}
 	}
 
 	return nil

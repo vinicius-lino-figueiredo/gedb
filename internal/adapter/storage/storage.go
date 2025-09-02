@@ -7,7 +7,6 @@ import (
 	"runtime"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 // Storage implements domain.Storage.
@@ -123,15 +122,15 @@ func (d *Storage) flushToStorage(filename string, isDir bool, mode os.FileMode) 
 
 	fileHandle, err := os.OpenFile(filename, flags, mode)
 	if err != nil {
-		return errs.ErrFlushToStorage{ErrorOnFsync: err}
+		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
 	if err := fileHandle.Sync(); err != nil {
-		return errs.ErrFlushToStorage{ErrorOnFsync: err}
+		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
 	if err := fileHandle.Close(); err != nil {
-		return errs.ErrFlushToStorage{ErrorOnClose: err}
+		return domain.ErrFlushToStorage{ErrorOnClose: err}
 	}
 
 	return nil

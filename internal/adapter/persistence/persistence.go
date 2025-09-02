@@ -21,7 +21,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparablemap"
 )
 
@@ -203,7 +202,7 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 	if dataLength > 0 {
 		corruptionRate := float64(corruptItems) / float64(dataLength)
 		if corruptionRate > p.corruptAlertThreshold {
-			return nil, nil, errs.ErrCorruptFiles{
+			return nil, nil, domain.ErrCorruptFiles{
 				CorruptionRate:        corruptionRate,
 				CorruptItems:          corruptItems,
 				DataLength:            dataLength,

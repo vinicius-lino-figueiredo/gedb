@@ -24,7 +24,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/errs"
 )
 
 const testDb = "../../../workspace/test.db"
@@ -334,7 +333,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 
 	ctx := context.Background()
 	_, _, err = p.LoadDatabase(ctx)
-	e := &errs.ErrCorruptFiles{}
+	e := &domain.ErrCorruptFiles{}
 	s.ErrorAs(err, e)
 	s.Equal(0.25, e.CorruptionRate)
 	s.Equal(1, e.CorruptItems)
