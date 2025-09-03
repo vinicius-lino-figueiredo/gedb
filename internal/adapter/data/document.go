@@ -37,8 +37,12 @@ func evaluate(v any) (any, error) {
 	if v == nil {
 		return nil, nil
 	}
+
 	val := reflect.ValueOf(&v).Elem().Elem()
 	typ := val.Type()
+	if isNullable(typ) && val.IsNil() {
+		return nil, nil
+	}
 	res := make(M)
 	for {
 		if typ.Kind() != reflect.Pointer {
@@ -119,6 +123,17 @@ func evaluate(v any) (any, error) {
 	}
 
 	return v, nil
+}
+
+func isNullable(t reflect.Type) bool {
+	k := t.Kind()
+	return k == reflect.Pointer ||
+		k == reflect.Slice ||
+		k == reflect.Map ||
+		k == reflect.Interface ||
+		// WARN: these might be removed later
+		k == reflect.Func ||
+		k == reflect.Chan
 }
 
 // ID implements domain.Document
