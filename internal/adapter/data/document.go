@@ -73,6 +73,11 @@ func evaluate(v any) (any, error) {
 		}
 	Fields:
 		for numField := range val.NumField() {
+			structField := typ.Field(numField)
+			if !structField.IsExported() {
+				continue
+			}
+
 			field := val.Field(numField)
 
 			var name string
@@ -97,7 +102,7 @@ func evaluate(v any) (any, error) {
 					}
 				}
 			} else {
-				name = typ.Field(numField).Name
+				name = structField.Name
 			}
 
 			fieldValue, err := evaluate(field.Interface())
