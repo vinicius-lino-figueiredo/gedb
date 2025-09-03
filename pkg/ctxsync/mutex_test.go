@@ -204,6 +204,8 @@ func TestIndependentCancelling(t *testing.T) {
 
 	mu.Lock()
 
+	ready := make(chan struct{}, workers)
+
 	for i := range workers {
 		wg.Add(1)
 		go func() {
@@ -214,6 +216,7 @@ func TestIndependentCancelling(t *testing.T) {
 				cancel()
 				ctx = c
 			}
+			ready <- struct{}{}
 			if err := mu.LockWithContext(ctx); err != nil {
 				errs[i] = err
 				return
@@ -221,6 +224,11 @@ func TestIndependentCancelling(t *testing.T) {
 			defer mu.Unlock()
 		}()
 	}
+
+	for range workers {
+		<-ready
+	}
+	time.Sleep(time.Millisecond)
 
 	mu.Unlock()
 	wg.Wait()
