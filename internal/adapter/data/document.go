@@ -93,7 +93,7 @@ func evaluate(v any) (any, error) {
 						name = parts[0]
 					}
 					for _, flag := range parts[1:] {
-						if flag == "omitempty" && field.IsNil() {
+						if flag == "omitempty" && isNullable(field.Type()) && field.IsNil() {
 							continue Fields
 						}
 						if flag == "omitzero" && field.IsZero() {
