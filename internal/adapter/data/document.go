@@ -5,10 +5,17 @@ import (
 	"iter"
 	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
+)
+
+const TagName = "gedb"
+
+var (
+	timeTyp = reflect.TypeFor[time.Time]()
 )
 
 // M implements domain.Document by using a hashed map. Duplicates replace old
@@ -16,118 +23,177 @@ import (
 type M map[string]any
 
 // NewDocument returns a new instance of [domain.Document].
-func NewDocument(v any) (domain.Document, error) {
-	if v == nil {
+func NewDocument(in any) (domain.Document, error) {
+	if in == nil {
 		return M{}, nil
 	}
+	if doc, err := parseSimple(in); err != nil && doc == nil {
+		return doc, err
+	}
 
-	d, err := evaluate(v)
+	r := reflect.ValueOf(in)
+	k := r.Kind()
+	for k == reflect.Interface || k == reflect.Pointer {
+		if r.IsNil() {
+			return M{}, nil
+		}
+		r = r.Elem()
+		k = r.Kind()
+	}
+	if k != reflect.Struct && k != reflect.Map {
+		return nil, fmt.Errorf("expected map or struct, got %s", r.Type().String())
+	}
+	doc, err := parseReflect(r)
+	if err != nil {
+		return nil, err
+	}
+	return doc.(domain.Document), nil
+}
+
+func parseSimple(v any) (domain.Document, error) {
+	switch t := v.(type) {
+	case map[string]any:
+		return parseMap3(t), nil
+	case map[string]string:
+		return parseMap3(t), nil
+	case map[string]bool:
+		return parseMap3(t), nil
+	case map[string]int:
+		return parseMap3(t), nil
+	case map[string]int8:
+		return parseMap3(t), nil
+	case map[string]int16:
+		return parseMap3(t), nil
+	case map[string]int32:
+		return parseMap3(t), nil
+	case map[string]int64:
+		return parseMap3(t), nil
+	case map[string]uint:
+		return parseMap3(t), nil
+	case map[string]uint8:
+		return parseMap3(t), nil
+	case map[string]uint16:
+		return parseMap3(t), nil
+	case map[string]uint32:
+		return parseMap3(t), nil
+	case map[string]uint64:
+		return parseMap3(t), nil
+	case map[string]float32:
+		return parseMap3(t), nil
+	case map[string]float64:
+		return parseMap3(t), nil
+	case map[string]time.Time:
+		return parseMap3(t), nil
+	case map[string]time.Duration:
+		return parseMap3(t), nil
+	default:
+		return nil, nil
+	}
+}
+
+func parseMap3[T any](v map[string]T) domain.Document {
+	res := make(M, len(v))
+	for k, v := range v {
+		res[k] = v
+	}
+	return res
+}
+
+func parseReflect(r reflect.Value) (any, error) {
+	for r.Kind() == reflect.Pointer || r.Kind() == reflect.Interface {
+		r = r.Elem()
+	}
+	switch r.Kind() {
+	case reflect.Invalid:
+		return nil, fmt.Errorf("received invalid type")
+	case reflect.Array, reflect.Slice:
+		return parseList(r), nil
+	case reflect.Struct:
+		if r.Type() == timeTyp {
+			return r.Interface(), nil
+		}
+		return parseStruct3(r)
+	case reflect.Map:
+		return parseMapRflect(r)
+	case reflect.Chan, reflect.Func:
+		return r.Interface(), nil
+	default:
+		return r.Interface(), nil
+	}
+}
+
+func parseStruct3(r reflect.Value) (domain.Document, error) {
+	typ := r.Type()
+	numField := r.NumField()
+
+	res := make(M, numField)
+
+	for n := range numField {
+		field := typ.Field(n)
+		fieldValue := r.Field(n)
+
+		fieldInfo, err := parseField(fieldValue, field)
+		if err != nil {
+			return nil, err
+		}
+
+		if fieldInfo == nil {
+			continue
+		}
+		res[fieldInfo.name] = fieldInfo.value
+	}
+	return res, nil
+}
+
+func parseMapRflect(v reflect.Value) (domain.Document, error) {
+	res := make(M, v.Len())
+	for _, k := range v.MapKeys() {
+		str := k.String()
+		var err error
+		if res[str], err = parseReflect(v.MapIndex(k)); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+type field struct {
+	name  string
+	value any
+}
+
+func parseField(r reflect.Value, typ reflect.StructField) (*field, error) {
+	name := typ.Name
+	var tagSegments []string
+	if tag, ok := typ.Tag.Lookup(TagName); ok {
+		tagSegments = strings.Split(tag, ",")
+		if tagSegments[0] != "" {
+			name = tagSegments[0]
+		}
+		tagSegments = tagSegments[1:]
+	}
+	if slices.Contains(tagSegments, "omitempty") && isNullable(typ.Type) && r.IsNil() {
+		return nil, nil
+	}
+	if slices.Contains(tagSegments, "omitzero") && r.IsZero() {
+		return nil, nil
+	}
+
+	value, err := parseReflect(r)
 	if err != nil {
 		return nil, err
 	}
 
-	if doc, ok := d.(domain.Document); ok {
-		return doc, nil
-	}
-
-	return nil, fmt.Errorf("expected type struct or map, got %T", v)
+	return &field{name: name, value: value}, nil
 }
 
-func evaluate(v any) (any, error) {
-	if v == nil {
-		return nil, nil
+func parseList(r reflect.Value) any {
+	length := r.Len()
+	res := make([]any, length)
+	for i := range length {
+		res[i] = r.Index(i).Interface()
 	}
-
-	val := reflect.ValueOf(&v).Elem().Elem()
-	typ := val.Type()
-	if isNullable(typ) && val.IsNil() {
-		return nil, nil
-	}
-	res := make(M)
-	for {
-		if typ.Kind() != reflect.Pointer {
-			break
-		}
-		if val.IsNil() {
-			return nil, nil
-		}
-		val = val.Elem()
-		typ = typ.Elem()
-	}
-	if typ.Kind() == reflect.Map {
-		if typ.Key().Kind() != reflect.String {
-			return nil, fmt.Errorf("invalid map key type")
-		}
-		for _, key := range val.MapKeys() {
-			m, err := evaluate(val.MapIndex(key).Interface())
-			if err != nil {
-				return nil, err
-			}
-			res[key.String()] = m
-		}
-		return res, nil
-	}
-	if typ.Kind() == reflect.Struct {
-		if val.Type() == reflect.TypeFor[time.Time]() {
-			return val.Interface(), nil
-		}
-	Fields:
-		for numField := range val.NumField() {
-			structField := typ.Field(numField)
-			if !structField.IsExported() {
-				continue
-			}
-
-			field := val.Field(numField)
-
-			var name string
-			if tag, ok := typ.Field(numField).Tag.Lookup("gedb"); ok {
-				if tag == "-" {
-					continue
-				}
-				parts := strings.Split(tag, ",")
-				if len(parts) > 0 {
-					if parts[0] == "" {
-						name = typ.Field(numField).Name
-					} else {
-						name = parts[0]
-					}
-					for _, flag := range parts[1:] {
-						if flag == "omitempty" && isNullable(field.Type()) && field.IsNil() {
-							continue Fields
-						}
-						if flag == "omitzero" && field.IsZero() {
-							continue Fields
-						}
-					}
-				}
-			} else {
-				name = structField.Name
-			}
-
-			fieldValue, err := evaluate(field.Interface())
-			if err != nil {
-				return nil, err
-			}
-			res[name] = fieldValue
-		}
-		return res, nil
-	}
-
-	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
-		list := make([]any, val.Len())
-		for i := range val.Len() {
-			item := val.Index(i).Interface()
-			item, err := evaluate(item)
-			if err != nil {
-				return nil, err
-			}
-			list[i] = item
-		}
-		return list, nil
-	}
-
-	return v, nil
+	return res
 }
 
 func isNullable(t reflect.Type) bool {
