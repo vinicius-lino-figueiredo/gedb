@@ -9,13 +9,15 @@ import (
 	"strings"
 	"time"
 
+	goreflect "github.com/goccy/go-reflect"
+
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
 const TagName = "gedb"
 
 var (
-	timeTyp = reflect.TypeFor[time.Time]()
+	timeTyp = goreflect.TypeOf(*new(time.Time))
 )
 
 // M implements domain.Document by using a hashed map. Duplicates replace old
@@ -31,16 +33,16 @@ func NewDocument(in any) (domain.Document, error) {
 		return doc, err
 	}
 
-	r := reflect.ValueOf(in)
+	r := goreflect.ValueNoEscapeOf(in)
 	k := r.Kind()
-	for k == reflect.Interface || k == reflect.Pointer {
+	for k == goreflect.Interface || k == reflect.Pointer {
 		if r.IsNil() {
 			return M{}, nil
 		}
 		r = r.Elem()
 		k = r.Kind()
 	}
-	if k != reflect.Struct && k != reflect.Map {
+	if k != goreflect.Struct && k != goreflect.Map {
 		return nil, fmt.Errorf("expected map or struct, got %s", r.Type().String())
 	}
 	doc, err := parseReflect(r)
@@ -99,30 +101,30 @@ func parseMap3[T any](v map[string]T) domain.Document {
 	return res
 }
 
-func parseReflect(r reflect.Value) (any, error) {
-	for r.Kind() == reflect.Pointer || r.Kind() == reflect.Interface {
+func parseReflect(r goreflect.Value) (any, error) {
+	for r.Kind() == reflect.Pointer || r.Kind() == goreflect.Interface {
 		r = r.Elem()
 	}
 	switch r.Kind() {
-	case reflect.Invalid:
+	case goreflect.Invalid:
 		return nil, fmt.Errorf("received invalid type")
-	case reflect.Array, reflect.Slice:
+	case goreflect.Array, goreflect.Slice:
 		return parseList(r), nil
-	case reflect.Struct:
+	case goreflect.Struct:
 		if r.Type() == timeTyp {
 			return r.Interface(), nil
 		}
 		return parseStruct3(r)
-	case reflect.Map:
+	case goreflect.Map:
 		return parseMapRflect(r)
-	case reflect.Chan, reflect.Func:
+	case goreflect.Chan, goreflect.Func:
 		return r.Interface(), nil
 	default:
 		return r.Interface(), nil
 	}
 }
 
-func parseStruct3(r reflect.Value) (domain.Document, error) {
+func parseStruct3(r goreflect.Value) (domain.Document, error) {
 	typ := r.Type()
 	numField := r.NumField()
 
@@ -145,7 +147,7 @@ func parseStruct3(r reflect.Value) (domain.Document, error) {
 	return res, nil
 }
 
-func parseMapRflect(v reflect.Value) (domain.Document, error) {
+func parseMapRflect(v goreflect.Value) (domain.Document, error) {
 	res := make(M, v.Len())
 	for _, k := range v.MapKeys() {
 		str := k.String()
@@ -162,7 +164,7 @@ type field struct {
 	value any
 }
 
-func parseField(r reflect.Value, typ reflect.StructField) (*field, error) {
+func parseField(r goreflect.Value, typ goreflect.StructField) (*field, error) {
 	name := typ.Name
 	var tagSegments []string
 	if tag, ok := typ.Tag.Lookup(TagName); ok {
@@ -187,7 +189,7 @@ func parseField(r reflect.Value, typ reflect.StructField) (*field, error) {
 	return &field{name: name, value: value}, nil
 }
 
-func parseList(r reflect.Value) any {
+func parseList(r goreflect.Value) any {
 	length := r.Len()
 	res := make([]any, length)
 	for i := range length {
@@ -196,7 +198,7 @@ func parseList(r reflect.Value) any {
 	return res
 }
 
-func isNullable(t reflect.Type) bool {
+func isNullable(t goreflect.Type) bool {
 	k := t.Kind()
 	return k == reflect.Pointer ||
 		k == reflect.Slice ||
