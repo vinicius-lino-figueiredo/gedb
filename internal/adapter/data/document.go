@@ -171,6 +171,9 @@ func parseField(r goreflect.Value, typ goreflect.StructField) (*field, error) {
 	name := typ.Name
 	var tagSegments []string
 	if tag, ok := typ.Tag.Lookup(TagName); ok {
+		if tag == "-" {
+			return nil, nil
+		}
 		tagSegments = strings.Split(tag, ",")
 		if tagSegments[0] != "" {
 			name = tagSegments[0]
