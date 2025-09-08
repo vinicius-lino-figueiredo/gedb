@@ -17,7 +17,8 @@ import (
 const TagName = "gedb"
 
 var (
-	timeTyp = goreflect.TypeOf(*new(time.Time))
+	timeTyp   = goreflect.TypeOf(*new(time.Time))
+	stringTyp = goreflect.TypeOf(*new(string))
 )
 
 // M implements domain.Document by using a hashed map. Duplicates replace old
@@ -162,6 +163,9 @@ func parseStruct(r goreflect.Value) (domain.Document, error) {
 }
 
 func parseMapReflect(v goreflect.Value) (domain.Document, error) {
+	if v.Type().Key() != stringTyp {
+		return nil, fmt.Errorf("parseMap: invalid map key type %s, only string keys are supported", v.Type().Key().String())
+	}
 	res := make(M, v.Len())
 	for _, k := range v.MapKeys() {
 		str := k.String()
