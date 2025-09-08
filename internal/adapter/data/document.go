@@ -30,7 +30,7 @@ func NewDocument(in any) (domain.Document, error) {
 	if in == nil {
 		return M{}, nil
 	}
-	if doc, err := parseSimple(in); err != nil && doc == nil {
+	if doc, err := parseSimple(in); err != nil || doc != nil {
 		return doc, err
 	}
 
@@ -55,8 +55,6 @@ func NewDocument(in any) (domain.Document, error) {
 
 func parseSimple(v any) (domain.Document, error) {
 	switch t := v.(type) {
-	case map[string]any:
-		return parseMap(t), nil
 	case map[string]string:
 		return parseMap(t), nil
 	case map[string]bool:
