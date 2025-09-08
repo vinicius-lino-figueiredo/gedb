@@ -132,6 +132,9 @@ func parseStruct3(r goreflect.Value) (domain.Document, error) {
 
 	for n := range numField {
 		field := typ.Field(n)
+		if field.PkgPath != "" {
+			continue
+		}
 		fieldValue := r.Field(n)
 
 		fieldInfo, err := parseField(fieldValue, field)
