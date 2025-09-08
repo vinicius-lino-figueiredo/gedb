@@ -55,45 +55,45 @@ func NewDocument(in any) (domain.Document, error) {
 func parseSimple(v any) (domain.Document, error) {
 	switch t := v.(type) {
 	case map[string]any:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]string:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]bool:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]int:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]int8:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]int16:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]int32:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]int64:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]uint:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]uint8:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]uint16:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]uint32:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]uint64:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]float32:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]float64:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]time.Time:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	case map[string]time.Duration:
-		return parseMap3(t), nil
+		return parseMap(t), nil
 	default:
 		return nil, nil
 	}
 }
 
-func parseMap3[T any](v map[string]T) domain.Document {
+func parseMap[T any](v map[string]T) domain.Document {
 	res := make(M, len(v))
 	for k, v := range v {
 		res[k] = v
@@ -114,9 +114,9 @@ func parseReflect(r goreflect.Value) (any, error) {
 		if r.Type() == timeTyp {
 			return r.Interface(), nil
 		}
-		return parseStruct3(r)
+		return parseStruct(r)
 	case goreflect.Map:
-		return parseMapRflect(r)
+		return parseMapReflect(r)
 	case goreflect.Chan, goreflect.Func:
 		return r.Interface(), nil
 	default:
@@ -124,7 +124,7 @@ func parseReflect(r goreflect.Value) (any, error) {
 	}
 }
 
-func parseStruct3(r goreflect.Value) (domain.Document, error) {
+func parseStruct(r goreflect.Value) (domain.Document, error) {
 	typ := r.Type()
 	numField := r.NumField()
 
@@ -150,7 +150,7 @@ func parseStruct3(r goreflect.Value) (domain.Document, error) {
 	return res, nil
 }
 
-func parseMapRflect(v goreflect.Value) (domain.Document, error) {
+func parseMapReflect(v goreflect.Value) (domain.Document, error) {
 	res := make(M, v.Len())
 	for _, k := range v.MapKeys() {
 		str := k.String()
