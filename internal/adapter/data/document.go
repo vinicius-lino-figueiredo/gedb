@@ -107,8 +107,13 @@ func parseReflect(r goreflect.Value) (any, error) {
 	}
 	switch r.Kind() {
 	case goreflect.Invalid:
-		return nil, fmt.Errorf("received invalid type")
-	case goreflect.Array, goreflect.Slice:
+		return nil, nil
+	case goreflect.Slice:
+		if r.IsNil() {
+			return nil, nil
+		}
+		fallthrough
+	case goreflect.Array:
 		return parseList(r), nil
 	case goreflect.Struct:
 		if r.Type() == timeTyp {
@@ -116,8 +121,14 @@ func parseReflect(r goreflect.Value) (any, error) {
 		}
 		return parseStruct(r)
 	case goreflect.Map:
+		if r.IsNil() {
+			return nil, nil
+		}
 		return parseMapReflect(r)
-	case goreflect.Chan, goreflect.Func:
+	case goreflect.Chan, goreflect.Func, goreflect.Interface:
+		if r.IsNil() {
+			return nil, nil
+		}
 		return r.Interface(), nil
 	default:
 		return r.Interface(), nil
