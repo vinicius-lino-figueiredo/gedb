@@ -2,7 +2,10 @@ package data
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"strconv"
+	"unicode/utf8"
 )
 
 type parser struct {
@@ -124,6 +127,7 @@ func (p *parser) arr() ([]any, error) {
 			return nil, errors.New("expected ',' in array")
 		}
 		p.i++
+		p.skip()
 	}
 	return out, nil
 }
@@ -161,6 +165,12 @@ func (p *parser) str() (string, error) {
 				out = append(out, '\r')
 			case 't':
 				out = append(out, '\t')
+			case 'u':
+				u, err := p.unicode()
+				if err != nil {
+					return "", err
+				}
+				out = append(out, u...)
 			default:
 				return "", errors.New("unsupported escape")
 			}
@@ -171,6 +181,31 @@ func (p *parser) str() (string, error) {
 		}
 	}
 	return "", errors.New("unterminated string")
+}
+
+func (p *parser) unicode() ([]byte, error) {
+	b := make([]byte, 4)
+	for i := range 4 {
+		if p.i++; p.i >= p.n {
+			return nil, io.ErrUnexpectedEOF
+		}
+		b[i] = p.data[p.i]
+	}
+
+	r, _ := utf8.DecodeRune(b)
+	if r == utf8.RuneError {
+		return nil, fmt.Errorf("invalid utf8 rune %v", string(r))
+	}
+
+	l := utf8.RuneLen(r)
+	if l < 0 {
+		return nil, fmt.Errorf("invalid utf8 rune %v", string(r))
+	}
+
+	res := make([]byte, l)
+	utf8.EncodeRune(res, r)
+
+	return res, nil
 }
 
 func (p *parser) num() (any, error) {
@@ -188,7 +223,7 @@ func (p *parser) num() (any, error) {
 	var err error
 	v, err = strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, errors.New("invalid number")
+		return nil, fmt.Errorf("invalid number %q", s)
 	}
 	return v, nil
 }
