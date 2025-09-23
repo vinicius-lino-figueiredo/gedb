@@ -3,8 +3,9 @@ package data
 import (
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
+	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -107,7 +108,7 @@ func (p *parser) arr() ([]any, error) {
 	var out []any
 	if p.i < p.n && p.data[p.i] == ']' {
 		p.i++
-		return out, nil
+		return []any{}, nil
 	}
 	for {
 		val, err := p.value()
@@ -136,76 +137,115 @@ func (p *parser) str() (string, error) {
 	if p.data[p.i] != '"' {
 		return "", errors.New("expected string")
 	}
-	p.i++
-	start := p.i
-	var out []byte
-	for p.i < p.n {
-		c := p.data[p.i]
-		if c == '"' {
-			out = append(out, p.data[start:p.i]...)
-			p.i++
-			return string(out), nil
-		}
-		if c == '\\' {
-			out = append(out, p.data[start:p.i]...)
-			p.i++
-			if p.i >= p.n {
-				return "", errors.New("unterminated escape")
+	for i := p.i + 1; i < p.n; i++ {
+		c := p.data[i]
+		switch c {
+		case '\\':
+			i++
+		case '"':
+			unquoted := p.data[p.i+1 : i]
+			s, err := p.decodeString(unquoted)
+			if err != nil {
+				return "", err
 			}
-			switch p.data[p.i] {
-			case '"', '\\', '/':
-				out = append(out, p.data[p.i])
-			case 'b':
-				out = append(out, '\b')
-			case 'f':
-				out = append(out, '\f')
-			case 'n':
-				out = append(out, '\n')
-			case 'r':
-				out = append(out, '\r')
-			case 't':
-				out = append(out, '\t')
-			case 'u':
-				u, err := p.unicode()
-				if err != nil {
-					return "", err
-				}
-				out = append(out, u...)
-			default:
-				return "", errors.New("unsupported escape")
-			}
-			p.i++
-			start = p.i
-		} else {
-			p.i++
+			p.i = i + 1
+			return s, nil
+		default:
 		}
 	}
 	return "", errors.New("unterminated string")
 }
 
-func (p *parser) unicode() ([]byte, error) {
-	b := make([]byte, 4)
-	for i := range 4 {
-		if p.i++; p.i >= p.n {
-			return nil, io.ErrUnexpectedEOF
+func (p *parser) decodeString(b []byte) (string, error) {
+
+	out := make([]byte, len(b)+2*utf8.UTFMax)
+
+	i := 0 // current byte
+	w := 0 // written
+
+	for i < len(b) {
+		if w >= len(out)-2*utf8.UTFMax {
+			nb := make([]byte, (len(out)+utf8.UTFMax)*2)
+			copy(nb, out[0:w])
+			out = nb
 		}
-		b[i] = p.data[p.i]
+		switch c := b[i]; {
+		case c == '\\':
+			i++
+			switch b[i] {
+			case '"', '\\', '/', '\'':
+				out[w] = b[i]
+				i++
+				w++
+			case 'b':
+				out[w] = '\b'
+				i++
+				w++
+			case 'f':
+				out[w] = '\f'
+				i++
+				w++
+			case 'n':
+				out[w] = '\n'
+				i++
+				w++
+			case 'r':
+				out[w] = '\r'
+				i++
+				w++
+			case 't':
+				out[w] = '\t'
+				i++
+				w++
+			case 'u':
+				i--
+				rr := p.getUft(b[i:])
+				if rr < 0 {
+					return "", errors.New("invalid utf8 char")
+				}
+				i += 6
+				if utf16.IsSurrogate(rr) {
+					rr1 := p.getUft(b[i:])
+					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+						i += 6
+						w += utf8.EncodeRune(out[w:], dec)
+						break
+					}
+					rr = unicode.ReplacementChar
+				}
+				w += utf8.EncodeRune(out[w:], rr)
+			default:
+				return "", fmt.Errorf("unknown escape character %q", c)
+			}
+
+		case c < ' ':
+			return "", errors.New("invalid control char")
+
+		case c < utf8.RuneSelf:
+			out[w] = c
+			i++
+			w++
+
+		default:
+			rr, size := utf8.DecodeRune(b[i:])
+			i += size
+			w += utf8.EncodeRune(out[w:], rr)
+		}
+	}
+	return string(out[0:w]), nil
+}
+
+func (p *parser) getUft(b []byte) rune {
+	if len(b) < 6 || b[0] != '\\' || b[1] != 'u' {
+		return -1
 	}
 
-	r, _ := utf8.DecodeRune(b)
-	if r == utf8.RuneError {
-		return nil, fmt.Errorf("invalid utf8 rune %v", string(r))
+	r, err := strconv.ParseInt(string(b[2:6]), 16, 64)
+	if err != nil {
+		return -1
 	}
+	return rune(r)
 
-	l := utf8.RuneLen(r)
-	if l < 0 {
-		return nil, fmt.Errorf("invalid utf8 rune %v", string(r))
-	}
-
-	res := make([]byte, l)
-	utf8.EncodeRune(res, r)
-
-	return res, nil
 }
 
 func (p *parser) num() (any, error) {
