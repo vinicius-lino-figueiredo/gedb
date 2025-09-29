@@ -124,10 +124,7 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 		}
 	}
 
-	values := make([]domain.Document, len(res))
-	for n, doc := range res {
-		values[n] = doc
-	}
+	values := slices.Clone(res)
 
 	cur.data = values
 
