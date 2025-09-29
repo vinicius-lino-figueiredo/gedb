@@ -188,16 +188,27 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 }
 
 func (m *Matcher) matchQueryPart(obj domain.Document, queryKey string, queryValue any, treatObjAsValue bool) (bool, error) {
-	objValues, fieldExists, err := m.fieldGetter.GetField(obj, queryKey)
+	addr, err := m.fieldGetter.GetAddress(queryKey)
 	if err != nil {
 		return false, err
 	}
-	if !fieldExists {
-		return false, nil
+	objValues, _, err := m.fieldGetter.GetField(obj, addr...)
+	if err != nil {
+		return false, err
 	}
-	objValue := any(objValues)
+	var objValue any
 	if len(objValues) == 1 {
-		objValue = objValues[0]
+		val, isSet := objValues[0].Get()
+		if !isSet {
+			return false, nil
+		}
+		objValue = val
+	} else {
+		values := make([]any, len(objValues))
+		for n, value := range objValues {
+			values[n], _ = value.Get()
+		}
+		objValue = values
 	}
 	if objValueArray, ok := objValue.([]any); ok && !treatObjAsValue {
 		if _, ok := queryValue.([]any); ok {

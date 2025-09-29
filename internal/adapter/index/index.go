@@ -121,15 +121,29 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 		k := make(data.M)
 		for _, field := range i._fields {
 
-			key, ok, err := i.fieldGetter.GetField(doc, field)
+			addr, err := i.fieldGetter.GetAddress(field)
 			if err != nil {
 				return nil, err
 			}
 
+			key, _, err := i.fieldGetter.GetField(doc, addr...)
+			if err != nil {
+				return nil, err
+			}
+
+			k[field] = nil
+			values := make([]any, len(key))
+			ok := false
+			for n, v := range key {
+				value, isSet := v.Get()
+				if isSet && !ok {
+					ok = true
+				}
+				values[n] = value
+			}
+
 			if ok { // if undefined, treat as nil
-				k[field] = key[0]
-			} else {
-				k[field] = nil
+				k[field] = values[0]
 			}
 
 			containsKey = containsKey || k[field] != nil
@@ -140,9 +154,24 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 		return []any{k}, nil
 	}
 
-	keysAlt, ok, err := i.fieldGetter.GetField(doc, i._fields[0])
+	addr, err := i.fieldGetter.GetAddress(i._fields[0])
 	if err != nil {
 		return nil, err
+	}
+
+	fieldValues, _, err := i.fieldGetter.GetField(doc, addr...)
+	if err != nil {
+		return nil, err
+	}
+
+	keysAlt := make([]any, len(fieldValues))
+	ok := false
+	for n, fieldValue := range fieldValues {
+		keyAlt, isSet := fieldValue.Get()
+		if isSet && !ok {
+			ok = true
+		}
+		keysAlt[n] = keyAlt
 	}
 
 	if i.sparse && !ok {
@@ -229,20 +258,29 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 		var keys []any
 		NoValid := false
 		for _, field := range i._fields {
-			key, ok, err := i.fieldGetter.GetField(d, field)
+			addr, err := i.fieldGetter.GetAddress(field)
+			if err != nil {
+				return err
+			}
+			key, _, err := i.fieldGetter.GetField(d, addr...)
 			if err != nil {
 				return err
 			}
 
+			hasAnyField := false
 			for _, k := range key {
-				if kl, ok := k.([]any); ok {
+				value, isSet := k.Get()
+				if isSet {
+					hasAnyField = true
+				}
+				if kl, ok := value.([]any); ok {
 					keys = append(keys, kl...)
 				} else {
-					keys = append(keys, k)
+					keys = append(keys, value)
 				}
 			}
 
-			NoValid = NoValid || ok
+			NoValid = NoValid || hasAnyField
 		}
 
 		if i.sparse && NoValid {

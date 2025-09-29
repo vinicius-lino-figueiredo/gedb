@@ -135,18 +135,34 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 }
 
 func (c *Cursor) addField(doc map[string]any, candidate domain.Document, proj string) error {
-	projFields := strings.Split(proj, ".")
-	val, ok, err := c.fieldGetter.GetField(candidate, proj)
+	projFields, err := c.fieldGetter.GetAddress(proj)
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return nil
+	fieldValues, expanded, err := c.fieldGetter.GetField(candidate, projFields...)
+	if err != nil {
+		return err
 	}
+
+	if !expanded {
+		if _, isSet := fieldValues[0].Get(); !isSet {
+			return nil
+		}
+	}
+
+	values := make([]any, len(fieldValues))
+	for n, fieldValue := range fieldValues {
+		value, isSet := fieldValue.Get()
+		if !expanded && !isSet {
+			return nil
+		}
+		values[n] = value
+	}
+
 	curr := doc
 	for i, field := range projFields {
 		if i == len(projFields)-1 {
-			curr[field] = val
+			curr[field] = values
 			break
 		}
 		inner, ok := curr[field]
@@ -179,15 +195,22 @@ func (c *Cursor) asMap(doc domain.Document) map[string]any {
 }
 
 func (c *Cursor) compareByCriterion(a, b domain.Document, comparer domain.Comparer, criterion string, direction int) (int, error) {
-	criterionA, _, err := c.fieldGetter.GetField(a, criterion)
+
+	addr, err := c.fieldGetter.GetAddress(criterion)
+
+	criterionA, _, err := c.fieldGetter.GetField(a, addr...)
 	if err != nil {
 		return 0, err
 	}
-	criterionB, _, err := c.fieldGetter.GetField(b, criterion)
+	criterionB, _, err := c.fieldGetter.GetField(b, addr...)
 	if err != nil {
 		return 0, err
 	}
-	comp, err := comparer.Compare(criterionA, criterionB)
+
+	critA := c.listFields(criterionA)
+	critB := c.listFields(criterionB)
+
+	comp, err := comparer.Compare(critA, critB)
 	if err != nil {
 		return 0, err
 	}
@@ -381,4 +404,12 @@ func (c *Cursor) sort(candidates []domain.Document, options domain.CursorOptions
 	}
 
 	return res, nil
+}
+
+func (c *Cursor) listFields(g []domain.GetSetter) []any {
+	res := make([]any, len(g))
+	for n, v := range g {
+		res[n] = v
+	}
+	return res
 }

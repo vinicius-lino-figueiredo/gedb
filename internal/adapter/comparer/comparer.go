@@ -40,6 +40,19 @@ func (c *Comparer) Comparable(a, b any) bool {
 // Compare implements domain.Comparer.
 func (c *Comparer) Compare(a any, b any) (int, error) {
 
+	// [domain.Getter]
+	if !c.isSet(a) {
+		if !c.isSet(b) {
+			return 0, nil
+		}
+		return -1, nil
+	}
+	if !c.isSet(b) {
+		return 1, nil
+	}
+
+	a, b = c.getVal(a), c.getVal(b)
+
 	// nil (undefined/null)
 	if a == nil {
 		if b == nil {
@@ -205,4 +218,20 @@ func (c *Comparer) asNumber(v any) (*big.Float, bool) {
 		return nil, false
 	}
 	return r, true
+}
+
+func (c *Comparer) isSet(v any) bool {
+	if g, ok := v.(domain.GetSetter); ok {
+		_, isSet := g.Get()
+		return isSet
+	}
+	return true
+}
+
+func (c *Comparer) getVal(v any) any {
+	if g, ok := v.(domain.GetSetter); ok {
+		val, _ := g.Get()
+		return val
+	}
+	return v
 }

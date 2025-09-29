@@ -63,17 +63,41 @@ type TimeGetter interface {
 	GetTime() time.Time
 }
 
+// Getter represents a value that can be treated as undefined.
+type Getter interface {
+	// Get returns the value for the given address and a bool that indicates
+	// whether the value counts as defined or not. Unset values are
+	// inaccessible for some reason. If an address points to an unset key in
+	// a document, or an out of bounds index in an array or any address
+	// within a primitive value ([string], [bool], etc.), it counts as
+	// undefined. If a value is explicitly [nil], it will not count as
+	// undefined.
+	Get() (value any, defined bool)
+}
+
+// GetSetter represents a value in a [Document]. It will be returned by
+// [FieldGetter] so things like identifying unset values and appending to nested
+// arrays becomes easier. Default GetSetter IS NOT concurrency safe, but other
+// implementations might be.
+type GetSetter interface {
+	// GetSetter implements [Getter]. Undefined values can neither be set
+	// nor unset.
+	Getter
+	// Set will set a new value for the address.
+	Set(any)
+	// Unset removes the given value from the parent item (object or array).
+	Unset()
+}
+
 // FieldGetter provides field access operations with dot notation support.
 type FieldGetter interface {
-	// GetField extracts values from nested document fields using string
-	// notation.
-	GetField(any, string) ([]any, bool, error)
+	// GetField extracts values from nested document, following path parts.
+	GetField(any, ...string) ([]GetSetter, bool, error)
 	// GetAddress extracts nested path from the string address using the
 	// expected notation.
 	GetAddress(field string) ([]string, error)
-	// GetField extracts values from nested document.
-	GetFieldFromParts(any, ...string) ([]any, bool, error)
-	// SplitFields parses compound field names into individual field components.
+	// SplitFields parses compound field names into individual field
+	// components.
 	SplitFields(string) ([]string, error)
 }
 

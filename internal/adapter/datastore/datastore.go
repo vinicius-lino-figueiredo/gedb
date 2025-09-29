@@ -101,7 +101,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 			domain.WithMatcherFieldGetter(fg),
 		),
 		CursorFactory: cursor.NewCursor,
-		Modifier:      modifier.NewModifier(docFac, comp),
+		Modifier:      modifier.NewModifier(docFac, comp, fg),
 		TimeGetter:    timegetter.NewTimeGetter(),
 		Hasher:        hasher.NewHasher(),
 		FieldGetter:   fg,

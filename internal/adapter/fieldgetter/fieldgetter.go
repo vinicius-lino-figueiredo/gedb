@@ -21,15 +21,14 @@ func (fg *FieldGetter) GetAddress(field string) ([]string, error) {
 }
 
 // GetField implements [domain.FieldGetter].
-func (fg *FieldGetter) GetField(obj any, field string) ([]any, bool, error) {
-	fieldParts, _ := fg.GetAddress(field)
-	return fg.GetFieldFromParts(obj, fieldParts...)
-}
-
-// GetFieldFromParts implements [domain.FieldGetter].
-func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, bool, error) {
+func (fg *FieldGetter) GetField(obj any, fieldParts ...string) ([]domain.GetSetter, bool, error) {
+	invalid := []domain.GetSetter{NewGetSetterEmpty()}
 	if obj == nil {
-		return nil, false, nil
+		return invalid, false, nil
+	}
+
+	if len(fieldParts) == 0 {
+		return invalid, false, nil
 	}
 
 	type V struct {
@@ -44,7 +43,12 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 		expanded = false
 	)
 
-	for _, part := range fieldParts {
+	var res []domain.GetSetter
+
+	for partIdx, part := range fieldParts {
+		if partIdx == len(fieldParts)-1 {
+			res = make([]domain.GetSetter, len(curr))
+		}
 		for n := 0; ; n++ {
 			if n > len(curr)-1 {
 				break
@@ -55,8 +59,11 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 			switch t := item.v.(type) {
 			case domain.Document:
 				curr[n] = V{v: t.Get(part), expandable: true}
+				if partIdx == len(fieldParts)-1 {
+					res[n] = NewGetSetterWithDoc(t, part)
+				}
 				if !expanded && !t.Has(part) {
-					return nil, false, nil
+					return invalid, false, nil
 				}
 			case []any:
 				i, err := strconv.Atoi(part)
@@ -64,8 +71,8 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 					expanded = true
 
 					if !item.expandable {
-						// curr = slices.Delete(curr, n, n+1)
 						curr[n] = V{v: nil, expandable: true}
+						res[n] = NewGetSetterEmpty()
 						n--
 						continue
 					}
@@ -86,33 +93,47 @@ func (fg *FieldGetter) GetFieldFromParts(obj any, fieldParts ...string) ([]any, 
 					// expanding t
 					curr = append(append(start, tv...), end...)
 
+					// resizing result slice to match curr
+					newRes := make([]domain.GetSetter, len(curr))
+					_ = copy(newRes, res)
+					res = newRes
+
 					// rerunning current index because the
 					// order was changed by removal
 					n--
 
-				} else if i >= 0 && i < len(t) {
-					curr[n] = V{v: t[i], expandable: true}
-				} else if expanded {
-					curr[n] = V{v: nil, expandable: true}
 				} else {
-					return nil, false, nil
+					if partIdx == len(fieldParts)-1 {
+						res[n] = NewGetSetterWithArrayIndex(t, i)
+					}
+
+					// valid index (within range)
+					if i >= 0 && i < len(t) {
+						curr[n] = V{v: t[i], expandable: true}
+						continue
+					}
+
+					// invalid but expanded
+					if expanded {
+						curr[n] = V{v: nil, expandable: true}
+					}
+
+					// invalid and not expanded
+					res := []domain.GetSetter{NewGetSetterEmpty()}
+					return res, false, nil
 				}
 			default:
 				curr[n].v = nil
+				res[n] = NewGetSetterEmpty()
 				if !expanded {
-					return nil, false, nil
+					return invalid, false, nil
 				}
 			}
 
 		}
 	}
 
-	res := make([]any, len(curr))
-	for n, v := range curr {
-		res[n] = v.v
-	}
-
-	return res, true, nil
+	return res, expanded, nil
 }
 
 // SplitFields implements [domain.FieldGetter].
