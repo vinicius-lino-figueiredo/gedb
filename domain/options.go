@@ -213,10 +213,10 @@ func WithCursorComparer(c Comparer) CursorOption {
 	}
 }
 
-// WithCursorFieldGetter sets the field getter for accessing document fields.
-func WithCursorFieldGetter(f FieldGetter) CursorOption {
+// WithCursorFieldNavigator sets the field getter for accessing document fields.
+func WithCursorFieldNavigator(f FieldNavigator) CursorOption {
 	return func(co *CursorOptions) {
-		co.FieldGetter = f
+		co.FieldNavigator = f
 	}
 }
 
@@ -244,8 +244,8 @@ type CursorOptions struct {
 	DocumentFactory func(any) (Document, error)
 	// Comparer provides sorting operations.
 	Comparer Comparer
-	// FieldGetter provides field access operations.
-	FieldGetter FieldGetter
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
 }
 
 // WithMatcherDocumentFactory sets the document factory for creating documents
@@ -264,11 +264,11 @@ func WithMatcherComparer(c Comparer) MatcherOption {
 	}
 }
 
-// WithMatcherFieldGetter sets the field getter for accessing document fields
+// WithMatcherFieldNavigator sets the field getter for accessing document fields
 // during matching.
-func WithMatcherFieldGetter(f FieldGetter) MatcherOption {
+func WithMatcherFieldNavigator(f FieldNavigator) MatcherOption {
 	return func(mo *MatcherOptions) {
-		mo.FieldGetter = f
+		mo.FieldNavigator = f
 	}
 }
 
@@ -283,8 +283,8 @@ type MatcherOptions struct {
 	DocumentFactory func(any) (Document, error)
 	// Comparer provides value comparison operations.
 	Comparer Comparer
-	// FieldGetter provides field access operations.
-	FieldGetter FieldGetter
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
 }
 
 // WithPersistenceFilename sets the database filename for persistence.
@@ -377,11 +377,11 @@ func WithPersistenceHasher(h Hasher) PersistenceOption {
 	}
 }
 
-// WithPersistenceFieldGetter sets the field getter for accessing document
+// WithPersistenceFieldNavigator sets the field getter for accessing document
 // fields.
-func WithPersistenceFieldGetter(f FieldGetter) PersistenceOption {
+func WithPersistenceFieldNavigator(f FieldNavigator) PersistenceOption {
 	return func(po *PersistenceOptions) {
-		po.FieldGetter = f
+		po.FieldNavigator = f
 	}
 }
 
@@ -415,8 +415,8 @@ type PersistenceOptions struct {
 	DocumentFactory func(any) (Document, error)
 	// Hasher generates hash values for data.
 	Hasher Hasher
-	// FieldGetter provides field access operations.
-	FieldGetter FieldGetter
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
 }
 
 // WithIndexFieldName sets the field name for the index.
@@ -468,10 +468,11 @@ func WithIndexHasher(h Hasher) IndexOption {
 	}
 }
 
-// WithIndexFieldGetter sets the field getter for accessing document fields during indexing.
-func WithIndexFieldGetter(f FieldGetter) IndexOption {
+// WithIndexFieldNavigator sets the field getter for accessing document fields
+// during indexing.
+func WithIndexFieldNavigator(f FieldNavigator) IndexOption {
 	return func(io *IndexOptions) {
-		io.FieldGetter = f
+		io.FieldNavigator = f
 	}
 }
 
@@ -494,8 +495,8 @@ type IndexOptions struct {
 	Comparer Comparer
 	// Hasher generates hash values for index operations.
 	Hasher Hasher
-	// FieldGetter provides field access operations.
-	FieldGetter FieldGetter
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
 }
 
 // WithDatastoreFilename sets the database filename for the datastore.
@@ -631,10 +632,10 @@ func WithDatastoreHasher(h Hasher) DatastoreOption {
 	}
 }
 
-// WithDatastoreFieldGetter sets the field getter for accessing document fields.
-func WithDatastoreFieldGetter(f FieldGetter) DatastoreOption {
+// WithDatastoreFieldNavigator sets the field getter for accessing document fields.
+func WithDatastoreFieldNavigator(f FieldNavigator) DatastoreOption {
 	return func(dso *DatastoreOptions) {
-		dso.FieldGetter = f
+		dso.FieldNavigator = f
 	}
 }
 
@@ -681,6 +682,6 @@ type DatastoreOptions struct {
 	TimeGetter TimeGetter
 	// Hasher generates hash values for data.
 	Hasher Hasher
-	// FieldGetter provides field access operations.
-	FieldGetter FieldGetter
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
 }

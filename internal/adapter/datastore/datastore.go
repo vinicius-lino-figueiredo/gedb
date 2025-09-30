@@ -18,7 +18,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldgetter"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/index"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
@@ -59,7 +59,7 @@ type Datastore struct {
 	modifier              domain.Modifier
 	timeGetter            domain.TimeGetter
 	hasher                domain.Hasher
-	fieldGetter           domain.FieldGetter
+	fieldNavigator        domain.FieldNavigator
 }
 
 // LoadDatastore creates a new domain.GEDB and loads the database.
@@ -80,7 +80,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 	comp := comparer.NewComparer()
 	docFac := data.NewDocument
 	dec := decoder.NewDecoder()
-	fg := fieldgetter.NewFieldGetter()
+	fn := fieldnavigator.NewFieldNavigator(docFac)
 	opts := domain.DatastoreOptions{
 		Filename:              "",
 		TimestampData:         false,
@@ -98,13 +98,13 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		Matcher: matcher.NewMatcher(
 			domain.WithMatcherDocumentFactory(docFac),
 			domain.WithMatcherComparer(comp),
-			domain.WithMatcherFieldGetter(fg),
+			domain.WithMatcherFieldNavigator(fn),
 		),
-		CursorFactory: cursor.NewCursor,
-		Modifier:      modifier.NewModifier(docFac, comp, fg),
-		TimeGetter:    timegetter.NewTimeGetter(),
-		Hasher:        hasher.NewHasher(),
-		FieldGetter:   fg,
+		CursorFactory:  cursor.NewCursor,
+		Modifier:       modifier.NewModifier(docFac, comp, fn),
+		TimeGetter:     timegetter.NewTimeGetter(),
+		Hasher:         hasher.NewHasher(),
+		FieldNavigator: fn,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -123,7 +123,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 			domain.WithPersistenceStorage(opts.Storage),
 			domain.WithPersistenceDecoder(opts.Decoder),
 			domain.WithPersistenceHasher(opts.Hasher),
-			domain.WithPersistenceFieldGetter(opts.FieldGetter),
+			domain.WithPersistenceFieldNavigator(opts.FieldNavigator),
 		}
 		opts.Persistence, err = persistence.NewPersistence(persistenceOptions...)
 		if err != nil {
@@ -156,7 +156,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		modifier:              opts.Modifier,
 		timeGetter:            opts.TimeGetter,
 		hasher:                opts.Hasher,
-		fieldGetter:           opts.FieldGetter,
+		fieldNavigator:        opts.FieldNavigator,
 		matcher:               opts.Matcher,
 	}, nil
 }
@@ -581,7 +581,7 @@ func (d *Datastore) getRawCandidates(ctx context.Context, query domain.Document)
 
 IndexesLoop:
 	for idxName, idx := range d.indexes {
-		parts, err := d.fieldGetter.SplitFields(idxName)
+		parts, err := d.fieldNavigator.SplitFields(idxName)
 		if err != nil {
 			return nil, err
 		}

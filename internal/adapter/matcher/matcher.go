@@ -9,23 +9,24 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldgetter"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 )
 
 // Matcher implements domain.Matcher.
 type Matcher struct {
 	documentFactory func(any) (domain.Document, error)
 	comparer        domain.Comparer
-	fieldGetter     domain.FieldGetter
+	fieldNavigator  domain.FieldNavigator
 }
 
 // NewMatcher returns a new implementation of domain.Matcher.
 func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 
+	docFac := data.NewDocument
 	opts := domain.MatcherOptions{
-		DocumentFactory: data.NewDocument,
+		DocumentFactory: docFac,
 		Comparer:        comparer.NewComparer(),
-		FieldGetter:     fieldgetter.NewFieldGetter(),
+		FieldNavigator:  fieldnavigator.NewFieldNavigator(docFac),
 	}
 	for _, option := range options {
 		option(&opts)
@@ -34,7 +35,7 @@ func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 	return &Matcher{
 		documentFactory: opts.DocumentFactory,
 		comparer:        opts.Comparer,
-		fieldGetter:     opts.FieldGetter,
+		fieldNavigator:  opts.FieldNavigator,
 	}
 }
 
@@ -188,11 +189,11 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 }
 
 func (m *Matcher) matchQueryPart(obj domain.Document, queryKey string, queryValue any, treatObjAsValue bool) (bool, error) {
-	addr, err := m.fieldGetter.GetAddress(queryKey)
+	addr, err := m.fieldNavigator.GetAddress(queryKey)
 	if err != nil {
 		return false, err
 	}
-	objValues, _, err := m.fieldGetter.GetField(obj, addr...)
+	objValues, _, err := m.fieldNavigator.GetField(obj, addr...)
 	if err != nil {
 		return false, err
 	}

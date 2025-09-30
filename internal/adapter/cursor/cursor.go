@@ -12,22 +12,22 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldgetter"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
 )
 
 // Cursor implements domain.Cursor.
 type Cursor struct {
-	data        []domain.Document
-	ctx         context.Context
-	mu          *ctxsync.Mutex
-	dec         domain.Decoder
-	once        sync.Once
-	started     bool
-	closed      bool
-	storedErr   error
-	fieldGetter domain.FieldGetter
+	data           []domain.Document
+	ctx            context.Context
+	mu             *ctxsync.Mutex
+	dec            domain.Decoder
+	once           sync.Once
+	started        bool
+	closed         bool
+	storedErr      error
+	fieldNavigator domain.FieldNavigator
 }
 
 // NewCursor returns a new implementation of Cursor
@@ -38,16 +38,16 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 	default:
 	}
 
-	fg := fieldgetter.NewFieldGetter()
 	docFac := data.NewDocument
+	fn := fieldnavigator.NewFieldNavigator(docFac)
 	comp := comparer.NewComparer()
 	m := matcher.NewMatcher(
 		domain.WithMatcherDocumentFactory(docFac),
 		domain.WithMatcherComparer(comp),
-		domain.WithMatcherFieldGetter(fg),
+		domain.WithMatcherFieldNavigator(fn),
 	)
 	opts := domain.CursorOptions{
-		FieldGetter:     fg,
+		FieldNavigator:  fn,
 		Matcher:         m,
 		Decoder:         decoder.NewDecoder(),
 		DocumentFactory: docFac,
@@ -93,10 +93,10 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 		}
 	}
 	cur := &Cursor{
-		ctx:         ctx,
-		mu:          ctxsync.NewMutex(),
-		dec:         opts.Decoder,
-		fieldGetter: opts.FieldGetter,
+		ctx:            ctx,
+		mu:             ctxsync.NewMutex(),
+		dec:            opts.Decoder,
+		fieldNavigator: opts.FieldNavigator,
 	}
 
 	if len(opts.Sort) != 0 && len(res) != 0 {
@@ -132,11 +132,11 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 }
 
 func (c *Cursor) addField(doc map[string]any, candidate domain.Document, proj string) error {
-	projFields, err := c.fieldGetter.GetAddress(proj)
+	projFields, err := c.fieldNavigator.GetAddress(proj)
 	if err != nil {
 		return err
 	}
-	fieldValues, expanded, err := c.fieldGetter.GetField(candidate, projFields...)
+	fieldValues, expanded, err := c.fieldNavigator.GetField(candidate, projFields...)
 	if err != nil {
 		return err
 	}
@@ -193,13 +193,13 @@ func (c *Cursor) asMap(doc domain.Document) map[string]any {
 
 func (c *Cursor) compareByCriterion(a, b domain.Document, comparer domain.Comparer, criterion string, direction int) (int, error) {
 
-	addr, err := c.fieldGetter.GetAddress(criterion)
+	addr, err := c.fieldNavigator.GetAddress(criterion)
 
-	criterionA, _, err := c.fieldGetter.GetField(a, addr...)
+	criterionA, _, err := c.fieldNavigator.GetField(a, addr...)
 	if err != nil {
 		return 0, err
 	}
-	criterionB, _, err := c.fieldGetter.GetField(b, addr...)
+	criterionB, _, err := c.fieldNavigator.GetField(b, addr...)
 	if err != nil {
 		return 0, err
 	}

@@ -1,4 +1,4 @@
-package fieldgetter
+package fieldnavigator
 
 import "github.com/vinicius-lino-figueiredo/gedb/domain"
 

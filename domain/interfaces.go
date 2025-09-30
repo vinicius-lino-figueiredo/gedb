@@ -76,9 +76,9 @@ type Getter interface {
 }
 
 // GetSetter represents a value in a [Document]. It will be returned by
-// [FieldGetter] so things like identifying unset values and appending to nested
-// arrays becomes easier. Default GetSetter IS NOT concurrency safe, but other
-// implementations might be.
+// [FieldNavigator] so things like identifying unset values and appending to
+// nested arrays becomes easier. Default GetSetter IS NOT concurrency safe, but
+// other implementations might be.
 type GetSetter interface {
 	// GetSetter implements [Getter]. Undefined values can neither be set
 	// nor unset.
@@ -89,10 +89,11 @@ type GetSetter interface {
 	Unset()
 }
 
-// FieldGetter provides field access operations with dot notation support.
-type FieldGetter interface {
+// FieldNavigator provides field access operations with dot notation support.
+type FieldNavigator interface {
 	// GetField extracts values from nested document, following path parts.
 	GetField(any, ...string) ([]GetSetter, bool, error)
+	EnsureField(any, ...string) ([]GetSetter, error)
 	// GetAddress extracts nested path from the string address using the
 	// expected notation.
 	GetAddress(field string) ([]string, error)

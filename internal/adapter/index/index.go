@@ -9,7 +9,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldgetter"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparablemap"
 )
@@ -22,11 +22,11 @@ type Index struct {
 	sparse    bool
 	// Exported to allow testing. Should not be a problem because Index is
 	// used as interface.
-	Tree        *bst.BinarySearchTree
-	treeOptions bst.Options
-	comparer    domain.Comparer
-	hasher      domain.Hasher
-	fieldGetter domain.FieldGetter
+	Tree           *bst.BinarySearchTree
+	treeOptions    bst.Options
+	comparer       domain.Comparer
+	hasher         domain.Hasher
+	fieldNavigator domain.FieldNavigator
 }
 
 // FieldName implements domain.Index.
@@ -47,15 +47,16 @@ func (i *Index) Unique() bool {
 // NewIndex returns a new implementation of domain.Index.
 func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 
+	docFac := data.NewDocument
 	opts := domain.IndexOptions{
 		FieldName:       "",
 		Unique:          false,
 		Sparse:          false,
 		ExpireAfter:     0,
-		DocumentFactory: data.NewDocument,
+		DocumentFactory: docFac,
 		Comparer:        comparer.NewComparer(),
 		Hasher:          hasher.NewHasher(),
-		FieldGetter:     fieldgetter.NewFieldGetter(),
+		FieldNavigator:  fieldnavigator.NewFieldNavigator(docFac),
 	}
 	for _, option := range options {
 		option(&opts)
@@ -78,24 +79,24 @@ func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 	if opts.Hasher == nil {
 		opts.Hasher = hasher.NewHasher()
 	}
-	if opts.FieldGetter == nil {
-		opts.FieldGetter = fieldgetter.NewFieldGetter()
+	if opts.FieldNavigator == nil {
+		opts.FieldNavigator = fieldnavigator.NewFieldNavigator(opts.DocumentFactory)
 	}
 	// fields := strings.Split(options.FieldName, ",")
-	fields, err := opts.FieldGetter.SplitFields(opts.FieldName)
+	fields, err := opts.FieldNavigator.SplitFields(opts.FieldName)
 	if err != nil {
 		return nil, err
 	}
 	return &Index{
-		fieldName:   opts.FieldName,
-		_fields:     fields,
-		unique:      opts.Unique,
-		sparse:      opts.Sparse,
-		treeOptions: treeOptions,
-		Tree:        bst.NewBinarySearchTree(treeOptions),
-		comparer:    opts.Comparer,
-		hasher:      opts.Hasher,
-		fieldGetter: opts.FieldGetter,
+		fieldName:      opts.FieldName,
+		_fields:        fields,
+		unique:         opts.Unique,
+		sparse:         opts.Sparse,
+		treeOptions:    treeOptions,
+		Tree:           bst.NewBinarySearchTree(treeOptions),
+		comparer:       opts.Comparer,
+		hasher:         opts.Hasher,
+		fieldNavigator: opts.FieldNavigator,
 	}, nil
 }
 
@@ -121,12 +122,12 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 		k := make(data.M)
 		for _, field := range i._fields {
 
-			addr, err := i.fieldGetter.GetAddress(field)
+			addr, err := i.fieldNavigator.GetAddress(field)
 			if err != nil {
 				return nil, err
 			}
 
-			key, _, err := i.fieldGetter.GetField(doc, addr...)
+			key, _, err := i.fieldNavigator.GetField(doc, addr...)
 			if err != nil {
 				return nil, err
 			}
@@ -154,12 +155,12 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 		return []any{k}, nil
 	}
 
-	addr, err := i.fieldGetter.GetAddress(i._fields[0])
+	addr, err := i.fieldNavigator.GetAddress(i._fields[0])
 	if err != nil {
 		return nil, err
 	}
 
-	fieldValues, _, err := i.fieldGetter.GetField(doc, addr...)
+	fieldValues, _, err := i.fieldNavigator.GetField(doc, addr...)
 	if err != nil {
 		return nil, err
 	}
@@ -258,11 +259,11 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 		var keys []any
 		NoValid := false
 		for _, field := range i._fields {
-			addr, err := i.fieldGetter.GetAddress(field)
+			addr, err := i.fieldNavigator.GetAddress(field)
 			if err != nil {
 				return err
 			}
-			key, _, err := i.fieldGetter.GetField(d, addr...)
+			key, _, err := i.fieldNavigator.GetField(d, addr...)
 			if err != nil {
 				return err
 			}

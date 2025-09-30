@@ -16,7 +16,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldgetter"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
@@ -67,7 +67,7 @@ func NewPersistence(options ...domain.PersistenceOption) (domain.Persistence, er
 		Decoder:               dec,
 		DocumentFactory:       docFac,
 		Hasher:                hasher.NewHasher(),
-		FieldGetter:           fieldgetter.NewFieldGetter(),
+		FieldNavigator:        fieldnavigator.NewFieldNavigator(docFac),
 	}
 	for _, option := range options {
 		option(&opts)

@@ -33,8 +33,8 @@ type Comparer = domain.Comparer
 // TimeGetter provides current time for timestamping operations.
 type TimeGetter = domain.TimeGetter
 
-// FieldGetter provides field access operations with dot notation support.
-type FieldGetter = domain.FieldGetter
+// FieldNavigator provides field access operations with dot notation support.
+type FieldNavigator = domain.FieldNavigator
 
 // Hasher generates hash values for data deduplication and indexing.
 type Hasher = domain.Hasher

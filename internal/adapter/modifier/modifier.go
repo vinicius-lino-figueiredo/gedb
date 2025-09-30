@@ -12,15 +12,15 @@ import (
 type Modifier struct {
 	documentFactory func(any) (domain.Document, error)
 	comp            domain.Comparer
-	fieldGetter     domain.FieldGetter
+	fieldNavigator  domain.FieldNavigator
 }
 
 // NewModifier returns a new implementation of domain.Modifier.
-func NewModifier(documentFactory func(any) (domain.Document, error), comp domain.Comparer, fieldGetter domain.FieldGetter) domain.Modifier {
+func NewModifier(documentFactory func(any) (domain.Document, error), comp domain.Comparer, fieldNavigator domain.FieldNavigator) domain.Modifier {
 	return &Modifier{
 		documentFactory: documentFactory,
 		comp:            comp,
-		fieldGetter:     fieldGetter,
+		fieldNavigator:  fieldNavigator,
 	}
 }
 
@@ -91,7 +91,7 @@ func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (dom
 				return nil, fmt.Errorf("modifier %s's argument must be an object", mod)
 			}
 			for k := range modDoc.Iter() {
-				addr, err := m.fieldGetter.GetAddress(k)
+				addr, err := m.fieldNavigator.GetAddress(k)
 				if err != nil {
 					return nil, err
 				}

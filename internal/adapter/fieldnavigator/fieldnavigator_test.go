@@ -1,4 +1,4 @@
-package fieldgetter
+package fieldnavigator
 
 import (
 	"testing"
@@ -8,16 +8,16 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 )
 
-type FieldGetterTestSuite struct {
+type FieldNavigatorTestSuite struct {
 	suite.Suite
-	fg *FieldGetter
+	fn *FieldNavigator
 }
 
-func (s *FieldGetterTestSuite) SetupTest() {
-	s.fg = NewFieldGetter().(*FieldGetter)
+func (s *FieldNavigatorTestSuite) SetupTest() {
+	s.fn = NewFieldNavigator(data.NewDocument).(*FieldNavigator)
 }
 
-func (s *FieldGetterTestSuite) TestFirstLevel() {
+func (s *FieldNavigatorTestSuite) TestFirstLevel() {
 	doc := data.M{
 		"hello": "world",
 		"type": data.M{
@@ -26,7 +26,7 @@ func (s *FieldGetterTestSuite) TestFirstLevel() {
 		},
 	}
 
-	dv, expanded, err := s.fg.GetField(doc, "hello")
+	dv, expanded, err := s.fn.GetField(doc, "hello")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -34,7 +34,7 @@ func (s *FieldGetterTestSuite) TestFirstLevel() {
 	s.True(isSet)
 	s.Equal("world", value)
 
-	dv, expanded, err = s.fg.GetField(doc, "type", "planet")
+	dv, expanded, err = s.fn.GetField(doc, "type", "planet")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -43,7 +43,7 @@ func (s *FieldGetterTestSuite) TestFirstLevel() {
 	s.Equal(true, value)
 }
 
-func (s *FieldGetterTestSuite) TestNotOk() {
+func (s *FieldNavigatorTestSuite) TestNotOk() {
 	doc := data.M{
 		"hello": "world",
 		"type": data.M{
@@ -52,14 +52,14 @@ func (s *FieldGetterTestSuite) TestNotOk() {
 		},
 	}
 
-	dv, expanded, err := s.fg.GetField(doc, "helloo")
+	dv, expanded, err := s.fn.GetField(doc, "helloo")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
 	_, isSet := dv[0].Get()
 	s.False(isSet)
 
-	dv, expanded, err = s.fg.GetField(doc, "type", "plane")
+	dv, expanded, err = s.fn.GetField(doc, "type", "plane")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -67,7 +67,7 @@ func (s *FieldGetterTestSuite) TestNotOk() {
 	s.False(isSet)
 }
 
-func (s *FieldGetterTestSuite) TestArray() {
+func (s *FieldNavigatorTestSuite) TestArray() {
 	doc := data.M{
 		"data": data.M{
 			"planets": []any{
@@ -89,28 +89,28 @@ func (s *FieldGetterTestSuite) TestArray() {
 	}
 
 	// simple
-	dv, expanded, err := s.fg.GetField(doc, "planets", "name")
+	dv, expanded, err := s.fn.GetField(doc, "planets", "name")
 	s.NoError(err)
 	s.True(expanded)
 	s.Len(dv, 3)
 	s.Equal([]any{"Earth", "Mars", "Pluton"}, s.ListGetSetter(dv))
 
 	// nested
-	dv, expanded, err = s.fg.GetField(doc, "data", "planets", "number")
+	dv, expanded, err = s.fn.GetField(doc, "data", "planets", "number")
 	s.NoError(err)
 	s.True(expanded)
 	s.Len(dv, 3)
 	s.Equal([]any{3, 4, 9}, s.ListGetSetter(dv))
 
 	// nested arrays (should not concat)
-	dv, expanded, err = s.fg.GetField(doc, "planetsMultiNumber", "number")
+	dv, expanded, err = s.fn.GetField(doc, "planetsMultiNumber", "number")
 	s.NoError(err)
 	s.True(expanded)
 	s.Len(dv, 3)
 	s.Equal([]any{[]any{1, 3}, []any{7}, []any{9, 5, 1}}, s.ListGetSetter(dv))
 }
 
-func (s *FieldGetterTestSuite) TestIndex() {
+func (s *FieldNavigatorTestSuite) TestIndex() {
 	doc := data.M{
 		"planets": []any{
 			data.M{"name": "Earth", "number": 3},
@@ -127,14 +127,14 @@ func (s *FieldGetterTestSuite) TestIndex() {
 	}
 
 	// simple
-	dv, expanded, err := s.fg.GetField(doc, "planets", "1")
+	dv, expanded, err := s.fn.GetField(doc, "planets", "1")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
 	s.Equal(data.M{"name": "Mars", "number": 4}, s.ListGetSetter(dv)[0])
 
 	// out of bounds
-	dv, expanded, err = s.fg.GetField(doc, "planets", "3")
+	dv, expanded, err = s.fn.GetField(doc, "planets", "3")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -142,14 +142,14 @@ func (s *FieldGetterTestSuite) TestIndex() {
 	s.False(isSet)
 
 	// nested list
-	dv, expanded, err = s.fg.GetField(doc, "data", "planets", "2")
+	dv, expanded, err = s.fn.GetField(doc, "data", "planets", "2")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
 	s.Equal(data.M{"name": "Pluton", "number": 9}, s.ListGetSetter(dv)[0])
 
 	// index in middle
-	dv, expanded, err = s.fg.GetField(doc, "data", "planets", "0", "name")
+	dv, expanded, err = s.fn.GetField(doc, "data", "planets", "0", "name")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -157,16 +157,16 @@ func (s *FieldGetterTestSuite) TestIndex() {
 
 }
 
-func (s *FieldGetterTestSuite) TestEmptyObject() {
+func (s *FieldNavigatorTestSuite) TestEmptyObject() {
 
-	dv, expanded, err := s.fg.GetField(nil, "planets", "0")
+	dv, expanded, err := s.fn.GetField(nil, "planets", "0")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
 
 }
 
-func (s *FieldGetterTestSuite) TestUnsetFieldInList() {
+func (s *FieldNavigatorTestSuite) TestUnsetFieldInList() {
 	doc := data.M{
 		"planets": []any{
 			nil,
@@ -175,7 +175,7 @@ func (s *FieldGetterTestSuite) TestUnsetFieldInList() {
 		},
 	}
 
-	dv, expanded, err := s.fg.GetField(doc, "planets", "name")
+	dv, expanded, err := s.fn.GetField(doc, "planets", "name")
 	s.NoError(err)
 	s.True(expanded)
 	s.Len(dv, 3)
@@ -186,14 +186,14 @@ func (s *FieldGetterTestSuite) TestUnsetFieldInList() {
 	}
 }
 
-func (s *FieldGetterTestSuite) TestNestedInPrimitive() {
+func (s *FieldNavigatorTestSuite) TestNestedInPrimitive() {
 	doc := data.M{
 		"data": data.M{
 			"planets": "Not an object",
 		},
 	}
 
-	dv, expnded, err := s.fg.GetField(doc, "data", "planets", "name")
+	dv, expnded, err := s.fn.GetField(doc, "data", "planets", "name")
 	s.NoError(err)
 	s.False(expnded)
 	s.Len(dv, 1)
@@ -203,7 +203,7 @@ func (s *FieldGetterTestSuite) TestNestedInPrimitive() {
 }
 
 // should always return defined when expanding list values
-func (s *FieldGetterTestSuite) TestReturnDefinedOnLists() {
+func (s *FieldNavigatorTestSuite) TestReturnDefinedOnLists() {
 	doc := data.M{
 		"planets": []any{
 			"Not an object 1",
@@ -212,7 +212,7 @@ func (s *FieldGetterTestSuite) TestReturnDefinedOnLists() {
 		},
 	}
 
-	dv, expanded, err := s.fg.GetField(doc, "planets", "name")
+	dv, expanded, err := s.fn.GetField(doc, "planets", "name")
 	s.NoError(err)
 	s.True(expanded)
 	s.Len(dv, 3)
@@ -224,7 +224,7 @@ func (s *FieldGetterTestSuite) TestReturnDefinedOnLists() {
 }
 
 // Out of bounds wont be undefined if search has been expanded.
-func (s *FieldGetterTestSuite) TestExpandedOutOfBounds() {
+func (s *FieldNavigatorTestSuite) TestExpandedOutOfBounds() {
 	doc := data.M{
 		"planets": []any{
 			data.M{
@@ -237,7 +237,7 @@ func (s *FieldGetterTestSuite) TestExpandedOutOfBounds() {
 		},
 	}
 
-	dv, expanded, err := s.fg.GetField(doc, "planets", "value", "5")
+	dv, expanded, err := s.fn.GetField(doc, "planets", "value", "5")
 	s.NoError(err)
 	s.False(expanded)
 	s.Len(dv, 1)
@@ -246,7 +246,7 @@ func (s *FieldGetterTestSuite) TestExpandedOutOfBounds() {
 	s.False(isSet)
 }
 
-func (s *FieldGetterTestSuite) TestStopExpansion() {
+func (s *FieldNavigatorTestSuite) TestStopExpansion() {
 	doc := data.M{
 		"ducks": []any{
 			[]any{
@@ -265,19 +265,19 @@ func (s *FieldGetterTestSuite) TestStopExpansion() {
 			},
 		},
 	}
-	dv, expanded, err := s.fg.GetField(doc, "ducks", "name")
+	dv, expanded, err := s.fn.GetField(doc, "ducks", "name")
 	s.NoError(err)
 	s.True(expanded)
 	s.Equal([]any{nil, "Donald"}, s.ListGetSetter(dv))
 
-	dv, expanded, err = s.fg.GetField(doc, "ducks", "nope")
+	dv, expanded, err = s.fn.GetField(doc, "ducks", "nope")
 	s.NoError(err)
 	s.True(expanded)
 	s.Equal([]any{nil, nil}, s.ListGetSetter(dv))
 
 }
 
-func (s *FieldGetterTestSuite) ListGetSetter(gsl []domain.GetSetter) []any {
+func (s *FieldNavigatorTestSuite) ListGetSetter(gsl []domain.GetSetter) []any {
 	res := make([]any, len(gsl))
 	for n, gs := range gsl {
 		res[n], _ = gs.Get()
@@ -285,6 +285,6 @@ func (s *FieldGetterTestSuite) ListGetSetter(gsl []domain.GetSetter) []any {
 	return res
 }
 
-func TestFieldGetterTestSuite(t *testing.T) {
-	suite.Run(t, new(FieldGetterTestSuite))
+func TestFieldNavigatorTestSuite(t *testing.T) {
+	suite.Run(t, new(FieldNavigatorTestSuite))
 }
