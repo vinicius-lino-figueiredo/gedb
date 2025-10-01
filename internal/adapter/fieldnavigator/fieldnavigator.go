@@ -58,7 +58,7 @@ func (fn *FieldNavigator) getField(obj any, fieldParts []string, ensure bool) ([
 		expanded = false
 	)
 
-	for _, part := range fieldParts {
+	for idx, part := range fieldParts {
 		for n := 0; ; n++ {
 			if n > len(curr)-1 {
 				break
@@ -74,13 +74,16 @@ func (fn *FieldNavigator) getField(obj any, fieldParts []string, ensure bool) ([
 					if !ensure {
 						return invalid, false, nil
 					}
+					if idx < len(fieldParts)-1 {
+						newDoc, err := fn.docFac(nil)
+						if err != nil {
+							return nil, false, err
+						}
 
-					newDoc, err := fn.docFac(nil)
-					if err != nil {
-						return nil, false, err
+						t.Set(part, newDoc)
+					} else {
+						t.Set(part, nil)
 					}
-
-					t.Set(part, newDoc)
 
 				}
 				curr[n] = V{
