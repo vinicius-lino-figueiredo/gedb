@@ -2,142 +2,154 @@ package modifier
 
 import (
 	"fmt"
+	"maps"
 	"math/big"
 	"strings"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// Modifier implements domain.Modifier.
+type modFunc func(domain.Document, []string, any) error
+
+// Modifier implements [domain.Modifier].
 type Modifier struct {
-	documentFactory func(any) (domain.Document, error)
-	comp            domain.Comparer
-	fieldNavigator  domain.FieldNavigator
+	comp           domain.Comparer
+	docFac         func(any) (domain.Document, error)
+	fieldNavigator domain.FieldNavigator
+	mods           map[string]modFunc
 }
 
-// NewModifier returns a new implementation of domain.Modifier.
-func NewModifier(documentFactory func(any) (domain.Document, error), comp domain.Comparer, fieldNavigator domain.FieldNavigator) domain.Modifier {
-	return &Modifier{
-		documentFactory: documentFactory,
-		comp:            comp,
-		fieldNavigator:  fieldNavigator,
+// NewModifier implements [domain.Modifier].
+func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer, fn domain.FieldNavigator) domain.Modifier {
+	m := &Modifier{
+		comp:           comp,
+		docFac:         docFac,
+		fieldNavigator: fn,
 	}
+
+	m.mods = map[string]modFunc{
+		"$set":   m.set,
+		"$unset": m.unset,
+		"$inc":   m.inc,
+	}
+
+	return m
 }
 
-func (m *Modifier) modifierFunc(mod string, obj domain.Document, fields []string, value any) error {
-	curr := obj
-	last := len(fields) - 1
-	for n, field := range fields {
-		if n == last {
-			return m.lastStepModifierFunc(mod, curr, field, value)
-		}
+// Modify implements [domain.Modifier].
+func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (domain.Document, error) {
+	modQry, replace, err := m.modQuery(obj, updateQuery)
+	if err != nil {
+		return nil, err
+	}
 
-		subObj := curr.D(field)
-		if subObj != nil {
-			curr = subObj
-		} else if !curr.Has(field) {
-			newDoc, err := m.documentFactory(nil)
-			if err != nil {
-				return err
-			}
-			curr.Set(field, newDoc)
-			curr = newDoc
-		} else {
-			return nil
+	if replace {
+		return m.replaceMod(obj, modQry)
+	}
+
+	return m.dollarMod(obj, modQry)
+}
+
+func (m *Modifier) modQuery(obj domain.Document, updateQuery domain.Document) (map[string]any, bool, error) {
+	dollarFields, total := 0, 0
+
+	query := make(map[string]any, updateQuery.Len())
+	for k, v := range updateQuery.Iter() {
+		total++
+		if err := m.checkMod(obj, k, v); err != nil {
+			return nil, false, err
 		}
+		if strings.HasPrefix(k, "$") {
+			dollarFields++
+		}
+		if dollarFields != 0 && dollarFields != total {
+			return nil, false, fmt.Errorf("you cannot mix modifiers and normal fields")
+		}
+		query[k] = v
+	}
+	return query, dollarFields == 0, nil
+}
+
+func (m *Modifier) checkMod(obj domain.Document, key string, value any) error {
+	if key != "_id" {
+		return nil
+	}
+	c, err := m.comp.Compare(value, obj.ID())
+	if err != nil {
+		return err
+	}
+	if c != 0 {
+		return fmt.Errorf("you cannot change a document's _id")
 	}
 	return nil
 }
 
-// Modify implements domain.Modifier.
-func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (domain.Document, error) {
-
-	var dollarFisrtChars, firstChars int
-	modifiers := make(map[string]any, updateQuery.Len())
-	for item, value := range updateQuery.Iter() {
-		if item == "_id" {
-			c, err := m.comp.Compare(value, obj.ID())
-			if err != nil {
-				return nil, err
-			}
-			if c != 0 {
-				return nil, fmt.Errorf("you cannot change a document's _id")
-			}
-		}
-		firstChars++
-		if strings.HasPrefix(item, "$") {
-			dollarFisrtChars++
-		}
-		if dollarFisrtChars > 0 && dollarFisrtChars != firstChars {
-			return nil, fmt.Errorf("you cannot mix modifiers and normal fields")
-		}
-		modifiers[item] = value
+func (m *Modifier) replaceMod(obj domain.Document, qry map[string]any) (domain.Document, error) {
+	newDoc, err := m.docFac(nil)
+	if err != nil {
+		return nil, err
 	}
 
-	var newDoc domain.Document
-	var err error
-	if dollarFisrtChars == 0 {
-		if newDoc, err = m.deepCopy(updateQuery); err != nil {
-			return nil, err
-		}
-		newDoc.Set("_id", obj.ID())
-	} else {
-		if newDoc, err = m.deepCopy(obj); err != nil {
-			return nil, err
-		}
-		for mod, modifier := range modifiers {
-			modDoc, ok := modifier.(domain.Document)
-			if !ok {
-				return nil, fmt.Errorf("modifier %s's argument must be an object", mod)
-			}
-			for k := range modDoc.Iter() {
-				addr, err := m.fieldNavigator.GetAddress(k)
-				if err != nil {
-					return nil, err
-				}
-				if err := m.modifierFunc(mod, newDoc, addr, modDoc.Get(k)); err != nil {
-					return nil, err
-				}
-			}
-		}
+	for k, v := range qry {
+		newDoc.Set(k, v)
 	}
-	// TODO: add obj check
-	if obj.ID() != newDoc.ID() {
-		return nil, fmt.Errorf("you can't change a document's _id")
-	}
+
+	newDoc.Set("_id", obj.ID())
+
 	return newDoc, nil
 }
 
-func (m *Modifier) lastStepModifierFunc(mod string, obj domain.Document, field string, value any) error {
-	switch mod {
-	case "$set":
-		obj.Set(field, value)
-	case "$unset":
-		obj.Unset(field)
-	case "$inc":
-		valueNum, ok := m.asNumber(value)
-		if !ok {
-			return fmt.Errorf("%v must be a number", value)
-		}
-		if !obj.Has(field) {
-			f, _ := valueNum.Float64()
-			obj.Set(field, f)
-			return nil
-		}
-		objValNum, ok := m.asNumber(obj.Get(field))
-		if !ok {
-			return fmt.Errorf("don't use the $inc modifier on non-number")
-		}
-		f, _ := objValNum.Add(objValNum, valueNum).Float64()
-		obj.Set(field, f)
-	default:
-		return fmt.Errorf("unknown modifier %s", mod)
+func (m *Modifier) dollarMod(obj domain.Document, qry map[string]any) (domain.Document, error) {
+
+	type modCall struct {
+		fn   modFunc
+		args map[string]any
 	}
-	return nil
+
+	calls := make(map[string]modCall, len(qry))
+
+	for modName, arg := range qry {
+		mod, ok := m.mods[modName]
+		if !ok {
+			return nil, fmt.Errorf("unknown modifier %s", modName)
+		}
+		d, ok := arg.(domain.Document)
+		if !ok {
+			return nil, fmt.Errorf("Modifier %s's argument must be an object", modName)
+		}
+
+		calls[modName] = modCall{
+			fn:   mod,
+			args: maps.Collect(d.Iter()),
+		}
+	}
+
+	docCopy, err := m.copyDoc(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, call := range calls {
+		for key, arg := range call.args {
+			addr, err := m.fieldNavigator.GetAddress(key)
+			if err != nil {
+				return nil, err
+			}
+			if err := call.fn(docCopy, addr, arg); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if obj.ID() != docCopy.ID() {
+		return nil, fmt.Errorf("you can't change a document's _id")
+	}
+
+	return docCopy, nil
 }
 
-func (m *Modifier) deepCopy(doc domain.Document) (domain.Document, error) {
-	res, err := m.documentFactory(nil)
+func (m *Modifier) copyDoc(doc domain.Document) (domain.Document, error) {
+	res, err := m.docFac(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +170,7 @@ func (m *Modifier) deepCopy(doc domain.Document) (domain.Document, error) {
 func (m *Modifier) copyAny(v any) (any, error) {
 	switch t := v.(type) {
 	case domain.Document:
-		return m.deepCopy(t)
+		return m.copyDoc(t)
 	case []any:
 		newList := make([]any, len(t))
 		for n, itm := range t {
@@ -205,4 +217,58 @@ func (m *Modifier) asNumber(v any) (*big.Float, bool) {
 		return nil, false
 	}
 	return r, true
+}
+
+func (m *Modifier) set(obj domain.Document, addr []string, arg any) error {
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+	for _, field := range fields {
+		if _, defined := field.Get(); defined {
+			field.Set(arg)
+		}
+	}
+	return nil
+}
+
+func (m *Modifier) unset(obj domain.Document, addr []string, _ any) error {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return err
+	}
+	for _, field := range fields {
+		if _, defined := field.Get(); defined {
+			field.Unset()
+		}
+	}
+	return nil
+}
+
+func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
+	incNum, ok := m.asNumber(v)
+	if !ok {
+		return fmt.Errorf("%v must be a number", v)
+	}
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+	for _, field := range fields {
+		value, defined := field.Get()
+		if !defined {
+			continue
+		}
+		if value == nil { // nil can be incremented too
+			value = 0.0
+		}
+		num, ok := m.asNumber(value)
+		if !ok {
+			return fmt.Errorf("Don't use the $inc modifier on non-number fields")
+		}
+		sum := num.Add(num, incNum)
+		sumFloat, _ := sum.Float64()
+		field.Set(sumFloat)
+	}
+	return nil
 }
