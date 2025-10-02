@@ -12,9 +12,11 @@ import (
 type modFunc func(domain.Document, []string, any) error
 
 type sliceProps struct {
-	each     []any
-	slice    int
-	hasSlice bool
+	each       []any
+	hasEach    bool
+	slice      int
+	hasSlice   bool
+	usedFields int
 }
 
 // Modifier implements [domain.Modifier].
@@ -34,10 +36,11 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 	}
 
 	m.mods = map[string]modFunc{
-		"$set":   m.set,
-		"$unset": m.unset,
-		"$inc":   m.inc,
-		"$push":  m.push,
+		"$set":      m.set,
+		"$unset":    m.unset,
+		"$inc":      m.inc,
+		"$push":     m.push,
+		"$addToSet": m.addToSet,
 	}
 
 	return m
@@ -313,13 +316,16 @@ func (m *Modifier) push(obj domain.Document, addr []string, v any) error {
 }
 
 func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
-	usedFields := 0
 
-	res := &sliceProps{}
+	res := &sliceProps{
+		hasEach:  d.Has("$each"),
+		hasSlice: d.Has("$slice"),
+	}
 
-	var each any = []any{}
-	if d.Has("$each") {
-		usedFields++
+	var each any = []any{d}
+	if res.hasEach {
+		res.usedFields++
+		res.hasEach = true
 		each = d.Get("$each")
 	}
 
@@ -329,21 +335,15 @@ func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
 	}
 
 	if s, ok := m.asNumber(d.Get("$slice")); ok && s.IsInt() {
-		usedFields++
+		res.usedFields++
 		s, _ := s.Int64()
 		res = &sliceProps{
-			each:     res.each,
-			slice:    int(s),
-			hasSlice: true,
+			each:       res.each,
+			hasEach:    res.hasEach,
+			slice:      int(s),
+			hasSlice:   true,
+			usedFields: res.usedFields,
 		}
-	}
-
-	if usedFields == 0 {
-		return res, nil
-	}
-
-	if d.Len() > usedFields {
-		return nil, fmt.Errorf("Can only use $slice in cunjunction with $each when $push to array")
 	}
 
 	return res, nil
@@ -353,6 +353,10 @@ func (m *Modifier) getPushItems(d domain.Document, array []any) ([]any, error) {
 	props, err := m.getSliceProperties(d)
 	if err != nil {
 		return nil, err
+	}
+
+	if d.Len() > props.usedFields {
+		return nil, fmt.Errorf("Can only use $slice in cunjunction with $each when $push to array")
 	}
 
 	res := append(array, props.each...)
@@ -368,4 +372,56 @@ func (m *Modifier) getPushItems(d domain.Document, array []any) ([]any, error) {
 	slice := max(props.slice, -len(res))
 
 	return res[len(res)+slice:], nil
+}
+
+func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+
+	for _, field := range fields {
+		value, defined := field.Get()
+		if !defined {
+			continue
+		}
+		if value == nil {
+			value = []any{}
+		}
+		array, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("Can't $addToSet an element on non-array values")
+		}
+		values := []any{v}
+		if d, ok := v.(domain.Document); ok {
+			props, err := m.getSliceProperties(d)
+			if err != nil {
+				return err
+			}
+			if props.hasEach && d.Len() > 1 {
+				return fmt.Errorf("Can't use another field in conjunction with $each")
+			}
+			values = props.each
+		}
+
+		for _, value := range values {
+			shouldAdd := true
+			for _, item := range array {
+				c, err := m.comp.Compare(value, item)
+				if err != nil {
+					return err
+				}
+				if c == 0 {
+					shouldAdd = false
+					break
+				}
+			}
+			if shouldAdd {
+				array = append(array, value)
+			}
+		}
+		field.Set(array)
+	}
+
+	return nil
 }
