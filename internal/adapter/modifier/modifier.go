@@ -11,6 +11,12 @@ import (
 
 type modFunc func(domain.Document, []string, any) error
 
+type sliceProps struct {
+	each     []any
+	slice    int
+	hasSlice bool
+}
+
 // Modifier implements [domain.Modifier].
 type Modifier struct {
 	comp           domain.Comparer
@@ -31,6 +37,7 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 		"$set":   m.set,
 		"$unset": m.unset,
 		"$inc":   m.inc,
+		"$push":  m.push,
 	}
 
 	return m
@@ -271,4 +278,94 @@ func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
 		field.Set(sumFloat)
 	}
 	return nil
+}
+
+func (m *Modifier) push(obj domain.Document, addr []string, v any) error {
+
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+	for _, field := range fields {
+		value, defined := field.Get()
+		if !defined {
+			continue
+		}
+		if value == nil {
+			value = []any{}
+		}
+		array, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("Can't $push an element on non-array values")
+		}
+
+		values := append(array, v)
+		if d, ok := v.(domain.Document); ok {
+			values, err = m.getPushItems(d, array)
+			if err != nil {
+				return err
+			}
+		}
+
+		field.Set(values)
+	}
+	return nil
+}
+
+func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
+	usedFields := 0
+
+	res := &sliceProps{}
+
+	var each any = []any{}
+	if d.Has("$each") {
+		usedFields++
+		each = d.Get("$each")
+	}
+
+	var ok bool
+	if res.each, ok = each.([]any); !ok {
+		return nil, fmt.Errorf("$each requires an array value")
+	}
+
+	if s, ok := m.asNumber(d.Get("$slice")); ok && s.IsInt() {
+		usedFields++
+		s, _ := s.Int64()
+		res = &sliceProps{
+			each:     res.each,
+			slice:    int(s),
+			hasSlice: true,
+		}
+	}
+
+	if usedFields == 0 {
+		return res, nil
+	}
+
+	if d.Len() > usedFields {
+		return nil, fmt.Errorf("Can only use $slice in cunjunction with $each when $push to array")
+	}
+
+	return res, nil
+}
+
+func (m *Modifier) getPushItems(d domain.Document, array []any) ([]any, error) {
+	props, err := m.getSliceProperties(d)
+	if err != nil {
+		return nil, err
+	}
+
+	res := append(array, props.each...)
+
+	if !props.hasSlice {
+		return res, nil
+	}
+
+	if props.slice >= 0 {
+		return res[:min(props.slice, len(res))], nil
+	}
+
+	slice := max(props.slice, -len(res))
+
+	return res[len(res)+slice:], nil
 }
