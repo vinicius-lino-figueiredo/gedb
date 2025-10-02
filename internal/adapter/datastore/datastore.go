@@ -81,6 +81,11 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 	docFac := data.NewDocument
 	dec := decoder.NewDecoder()
 	fn := fieldnavigator.NewFieldNavigator(docFac)
+	matchr := matcher.NewMatcher(
+		domain.WithMatcherDocumentFactory(docFac),
+		domain.WithMatcherComparer(comp),
+		domain.WithMatcherFieldNavigator(fn),
+	)
 	opts := domain.DatastoreOptions{
 		Filename:              "",
 		TimestampData:         false,
@@ -95,16 +100,12 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		IndexFactory:          index.NewIndex,
 		DocumentFactory:       docFac,
 		Decoder:               dec,
-		Matcher: matcher.NewMatcher(
-			domain.WithMatcherDocumentFactory(docFac),
-			domain.WithMatcherComparer(comp),
-			domain.WithMatcherFieldNavigator(fn),
-		),
-		CursorFactory:  cursor.NewCursor,
-		Modifier:       modifier.NewModifier(docFac, comp, fn),
-		TimeGetter:     timegetter.NewTimeGetter(),
-		Hasher:         hasher.NewHasher(),
-		FieldNavigator: fn,
+		Matcher:               matchr,
+		CursorFactory:         cursor.NewCursor,
+		Modifier:              modifier.NewModifier(docFac, comp, fn, matchr),
+		TimeGetter:            timegetter.NewTimeGetter(),
+		Hasher:                hasher.NewHasher(),
+		FieldNavigator:        fn,
 	}
 	for _, option := range options {
 		option(&opts)

@@ -24,15 +24,17 @@ type Modifier struct {
 	comp           domain.Comparer
 	docFac         func(any) (domain.Document, error)
 	fieldNavigator domain.FieldNavigator
+	matcher        domain.Matcher
 	mods           map[string]modFunc
 }
 
 // NewModifier implements [domain.Modifier].
-func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer, fn domain.FieldNavigator) domain.Modifier {
+func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer, fn domain.FieldNavigator, matcher domain.Matcher) domain.Modifier {
 	m := &Modifier{
 		comp:           comp,
 		docFac:         docFac,
 		fieldNavigator: fn,
+		matcher:        matcher,
 	}
 
 	m.mods = map[string]modFunc{
@@ -42,6 +44,7 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 		"$push":     m.push,
 		"$addToSet": m.addToSet,
 		"$pop":      m.pop,
+		"$pull":     m.pull,
 	}
 
 	return m
@@ -464,6 +467,36 @@ func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
 		}
 
 		field.Set(l[start:end])
+	}
+	return nil
+}
+
+func (m *Modifier) pull(obj domain.Document, addr []string, v any) error {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return err
+	}
+
+	for _, field := range fields {
+		value, _ := field.Get()
+
+		l, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("Can't $pop an element from non-array values")
+		}
+
+		res := make([]any, 0, len(l))
+		for _, item := range l {
+			matches, err := m.matcher.Match(item, v)
+			if err != nil {
+				return err
+			}
+			if !matches {
+				res = append(res, item)
+			}
+		}
+		field.Set(res)
+
 	}
 	return nil
 }
