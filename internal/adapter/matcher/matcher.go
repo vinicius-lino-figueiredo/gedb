@@ -147,7 +147,7 @@ func (m *Matcher) lte(_ domain.Document, a any, _ string, b any) (bool, error) {
 }
 
 // Match implements domain.Matcher.
-func (m *Matcher) Match(o domain.Document, q domain.Document) (bool, error) {
+func (m *Matcher) Match(o any, q any) (bool, error) {
 	return m.match(o, q)
 }
 
@@ -157,19 +157,13 @@ func (m *Matcher) match(o any, q any) (bool, error) {
 	}
 	obj, okObj := o.(domain.Document)
 	query, okQuery := q.(domain.Document)
-	if !okObj {
+	if !okObj || !okQuery {
 		var err error
-		obj, err = m.documentFactory(map[string]any{"needAKey": obj})
+		obj, err = m.documentFactory(map[string]any{"needAKey": o})
 		if err != nil {
 			return false, err
 		}
-	}
-	if !okQuery {
-		var err error
-		query, err = m.documentFactory(query)
-		if err != nil {
-			return false, err
-		}
+		return m.matchQueryPart(obj, "needAKey", q, false)
 	}
 	for queryKey, queryValue := range query.Iter() {
 		if !strings.HasPrefix(queryKey, "$") {

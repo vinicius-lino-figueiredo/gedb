@@ -136,10 +136,10 @@ type Document interface {
 	Len() int
 }
 
-// Matcher evaluates whether documents match query criteria.
+// Matcher evaluates whether values match query criteria.
 type Matcher interface {
-	// Match returns true if the document matches the query.
-	Match(Document, Document) (bool, error)
+	// Match returns true if the value matches the query.
+	Match(any, any) (bool, error)
 }
 
 // Modifier applies update operations to documents.
