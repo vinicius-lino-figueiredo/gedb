@@ -41,6 +41,7 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 		"$inc":      m.inc,
 		"$push":     m.push,
 		"$addToSet": m.addToSet,
+		"$pop":      m.pop,
 	}
 
 	return m
@@ -423,5 +424,46 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 		field.Set(array)
 	}
 
+	return nil
+}
+
+func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
+
+	bigN, ok := m.asNumber(v)
+	if !ok || !bigN.IsInt() {
+		return fmt.Errorf("%v isn't an integer, can't use it with $pop", v)
+	}
+
+	num64, _ := bigN.Int64()
+
+	if num64 == 0 {
+		return nil
+	}
+
+	num := int(num64)
+
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return err
+	}
+
+	for _, field := range fields {
+		value, _ := field.Get()
+
+		// not checking defined because unset fields should fail too
+
+		l, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("Can't $pop an element from non-array values")
+		}
+
+		start, end := 0, max(0, len(l)-1) // do not grow larger than l
+		if num < 0 {
+			// do not start after l end s
+			start, end = min(1, len(l)), len(l)
+		}
+
+		field.Set(l[start:end])
+	}
 	return nil
 }
