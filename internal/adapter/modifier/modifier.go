@@ -45,6 +45,7 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 		"$addToSet": m.addToSet,
 		"$pop":      m.pop,
 		"$pull":     m.pull,
+		"$max":      m.max,
 	}
 
 	return m
@@ -498,5 +499,24 @@ func (m *Modifier) pull(obj domain.Document, addr []string, v any) error {
 		field.Set(res)
 
 	}
+	return nil
+}
+
+func (m *Modifier) max(obj domain.Document, addr []string, v any) error {
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+
+	for _, field := range fields {
+		comp, err := m.comp.Compare(field, v)
+		if err != nil {
+			return err
+		}
+		if comp < 0 {
+			field.Set(v)
+		}
+	}
+
 	return nil
 }
