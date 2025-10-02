@@ -46,6 +46,7 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 		"$pop":      m.pop,
 		"$pull":     m.pull,
 		"$max":      m.max,
+		"$min":      m.min,
 	}
 
 	return m
@@ -514,6 +515,33 @@ func (m *Modifier) max(obj domain.Document, addr []string, v any) error {
 			return err
 		}
 		if comp < 0 {
+			field.Set(v)
+		}
+	}
+
+	return nil
+}
+
+func (m *Modifier) min(obj domain.Document, addr []string, v any) error {
+	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
+	if err != nil {
+		return err
+	}
+
+	for _, field := range fields {
+		value, _ := field.Get()
+		if value == nil {
+			// if the value is new (created as nil by EnsureField)
+			// or it was already nil before ensuring, we can replace
+			// it either way
+			field.Set(v)
+			continue
+		}
+		comp, err := m.comp.Compare(value, v)
+		if err != nil {
+			return err
+		}
+		if comp > 0 {
 			field.Set(v)
 		}
 	}
