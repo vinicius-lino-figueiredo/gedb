@@ -41,7 +41,7 @@ func (s deserializeFunc) Deserialize(ctx context.Context, b []byte, v any) error
 var p *Persistence
 
 type testStorage struct {
-	storage.Storage
+	*storage.Storage
 }
 
 func (ts testStorage) EnsureFileDoesntExist(filename string) error {
@@ -66,6 +66,7 @@ type PersistenceTestSuite struct {
 }
 
 func (s *PersistenceTestSuite) SetupTest() {
+	s.storage.Storage = storage.NewStorage().(*storage.Storage)
 	s.comparer = comparer.NewComparer()
 
 	s.serializer = serializer.NewSerializer(s.comparer, data.NewDocument)

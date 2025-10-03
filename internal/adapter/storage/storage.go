@@ -10,16 +10,20 @@ import (
 )
 
 // Storage implements domain.Storage.
-type Storage struct{}
+type Storage struct {
+	osOpts osOps
+}
 
 // NewStorage returns a new implementation of domain.Storage.
 func NewStorage() domain.Storage {
-	return &Storage{}
+	return &Storage{
+		osOpts: &osImpl{},
+	}
 }
 
 // AppendFile implements domain.Storage.
 func (d *Storage) AppendFile(filename string, mode os.FileMode, data []byte) (int, error) {
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, mode)
+	f, err := d.osOpts.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, mode)
 	if err != nil {
 		return 0, err
 	}
@@ -83,9 +87,9 @@ func (d *Storage) EnsureDatafileIntegrity(filename string, mode os.FileMode) err
 	}
 	// New database
 	if !oldFilenameExists {
-		return os.WriteFile(filename, nil, mode)
+		return d.osOpts.WriteFile(filename, nil, mode)
 	}
-	return os.Rename(tempFilename, filename)
+	return d.osOpts.Rename(tempFilename, filename)
 }
 
 // EnsureParentDirectoryExists implements domain.Storage.
@@ -97,16 +101,16 @@ func (d *Storage) EnsureParentDirectoryExists(filename string, mode os.FileMode)
 	}
 	root := filepath.VolumeName(parsedDir) + string(os.PathSeparator)
 	if runtime.GOOS != "windows" || parsedDir != root || filepath.Base(parsedDir) != "" {
-		return os.MkdirAll(parsedDir, mode)
+		return d.osOpts.MkdirAll(parsedDir, mode)
 	}
 	return nil
 }
 
 // Exists implements domain.Storage.
 func (d *Storage) Exists(filename string) (bool, error) {
-	_, err := os.Stat(filename)
+	_, err := d.osOpts.Stat(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if d.osOpts.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
@@ -120,7 +124,7 @@ func (d *Storage) flushToStorage(filename string, isDir bool, mode os.FileMode) 
 		flags = os.O_RDONLY
 	}
 
-	fileHandle, err := os.OpenFile(filename, flags, mode)
+	fileHandle, err := d.osOpts.OpenFile(filename, flags, mode)
 	if err != nil {
 		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
@@ -138,11 +142,11 @@ func (d *Storage) flushToStorage(filename string, isDir bool, mode os.FileMode) 
 
 // ReadFileStream implements domain.Storage.
 func (d *Storage) ReadFileStream(filename string, mode os.FileMode) (io.ReadCloser, error) {
-	return os.OpenFile(filename, os.O_RDONLY, mode)
+	return d.osOpts.OpenFile(filename, os.O_RDONLY, mode)
 }
 
 func (d *Storage) rename(oldPath string, newPath string) error {
-	return os.Rename(oldPath, newPath)
+	return d.osOpts.Rename(oldPath, newPath)
 }
 
 func (d *Storage) writeFileLines(filename string, lines [][]byte, mode os.FileMode) error {
@@ -160,10 +164,10 @@ func (d *Storage) writeFileLines(filename string, lines [][]byte, mode os.FileMo
 }
 
 func (d *Storage) writeFileStream(filename string, mode os.FileMode) (io.WriteCloser, error) {
-	return os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	return d.osOpts.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 }
 
 // Remove implements domain.Storage.
 func (d *Storage) Remove(filename string) error {
-	return os.Remove(filename)
+	return d.osOpts.Remove(filename)
 }
