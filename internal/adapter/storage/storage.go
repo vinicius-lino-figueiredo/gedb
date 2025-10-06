@@ -4,10 +4,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
+
+var osSpecificEnsureDir = func(o osOps, dir string, mode os.FileMode) error {
+	// default behavior for ensuring a dir is to always create the dir. On
+	// windows, we do not ensure if it is root.
+	return o.MkdirAll(dir, mode)
+}
 
 // Storage implements domain.Storage.
 type Storage struct {
@@ -99,11 +104,8 @@ func (d *Storage) EnsureParentDirectoryExists(filename string, mode os.FileMode)
 	if err != nil {
 		return err
 	}
-	root := filepath.VolumeName(parsedDir) + string(os.PathSeparator)
-	if runtime.GOOS != "windows" || parsedDir != root || filepath.Base(parsedDir) != "" {
-		return d.osOpts.MkdirAll(parsedDir, mode)
-	}
-	return nil
+
+	return osSpecificEnsureDir(d.osOpts, parsedDir, mode)
 }
 
 // Exists implements domain.Storage.
