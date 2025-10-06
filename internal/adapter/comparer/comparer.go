@@ -221,7 +221,7 @@ func (c *Comparer) asNumber(v any) (*big.Float, bool) {
 }
 
 func (c *Comparer) isSet(v any) bool {
-	if g, ok := v.(domain.GetSetter); ok {
+	if g, ok := v.(domain.Getter); ok {
 		_, isSet := g.Get()
 		return isSet
 	}
@@ -229,7 +229,7 @@ func (c *Comparer) isSet(v any) bool {
 }
 
 func (c *Comparer) getVal(v any) any {
-	if g, ok := v.(domain.GetSetter); ok {
+	if g, ok := v.(domain.Getter); ok {
 		val, _ := g.Get()
 		return val
 	}
