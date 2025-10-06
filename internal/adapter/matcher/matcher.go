@@ -260,12 +260,23 @@ func (m *Matcher) matchQueryPart(obj domain.Document, queryKey string, queryValu
 		return m.regex(nil, objValue, "", queryValueRegex)
 	}
 
-	comp, err := m.comparer.Compare(objValue, queryValue)
-	if err != nil {
-		return false, err
+	if m.isDefined(objValue) || m.isDefined(queryValue) {
+		comp, err := m.comparer.Compare(objValue, queryValue)
+		if err != nil {
+			return false, err
+		}
+		return comp == 0, nil
 	}
 
-	return comp == 0, nil
+	return false, nil
+}
+
+func (m *Matcher) isDefined(v any) bool {
+	if g, ok := v.(domain.Getter); ok {
+		_, defined := g.Get()
+		return defined
+	}
+	return true
 }
 
 func (m *Matcher) ne(_ domain.Document, a any, _ string, b any) (bool, error) {
