@@ -14,6 +14,10 @@ var osSpecificEnsureDir = func(o osOps, dir string, mode os.FileMode) error {
 	return o.MkdirAll(dir, mode)
 }
 
+var osSpecificSync = func(f *os.File, _ bool) error {
+	return f.Sync()
+}
+
 // Storage implements domain.Storage.
 type Storage struct {
 	osOpts osOps
@@ -131,7 +135,7 @@ func (d *Storage) flushToStorage(filename string, isDir bool, mode os.FileMode) 
 		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
-	if err := fileHandle.Sync(); err != nil {
+	if err := osSpecificSync(fileHandle, isDir); err != nil {
 		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 

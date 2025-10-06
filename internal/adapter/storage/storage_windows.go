@@ -15,4 +15,11 @@ func init() {
 		}
 		return nil
 	}
+
+	osSpecificSync = func(f *os.File, isDir bool) error {
+		if isDir {
+			return nil
+		}
+		return f.Sync()
+	}
 }
