@@ -135,12 +135,10 @@ func (d *Storage) flushToStorage(filename string, isDir bool, mode os.FileMode) 
 		return domain.ErrFlushToStorage{ErrorOnFsync: err}
 	}
 
+	defer fileHandle.Close()
+
 	if err := osSpecificSync(fileHandle, isDir); err != nil {
 		return domain.ErrFlushToStorage{ErrorOnFsync: err}
-	}
-
-	if err := fileHandle.Close(); err != nil {
-		return domain.ErrFlushToStorage{ErrorOnClose: err}
 	}
 
 	return nil
