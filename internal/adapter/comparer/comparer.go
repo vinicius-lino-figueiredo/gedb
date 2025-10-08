@@ -20,6 +20,11 @@ func NewComparer() domain.Comparer {
 
 // Comparable implements domain.Comparer.
 func (c *Comparer) Comparable(a, b any) bool {
+	if !c.isSet(a) || !c.isSet(b) {
+		return false
+	}
+	a, b = c.getVal(a), c.getVal(b)
+
 	equal := false
 	if _, ok := c.asNumber(a); ok {
 		_, equal = c.asNumber(b)
