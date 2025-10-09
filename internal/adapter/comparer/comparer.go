@@ -189,7 +189,20 @@ func (c *Comparer) compareDoc(a domain.Document, b domain.Document) (int, error)
 		}
 	}
 
-	return cmp.Compare(a.Len(), b.Len()), nil
+	if comp := cmp.Compare(a.Len(), b.Len()); comp != 0 {
+		return comp, nil
+	}
+
+	aKeysAny := make([]any, len(aKeys))
+	for n, v := range aKeys {
+		aKeysAny[n] = v
+	}
+	bKeysAny := make([]any, len(bKeys))
+	for n, v := range bKeys {
+		bKeysAny[n] = v
+	}
+
+	return c.compareArray(aKeysAny, bKeysAny)
 }
 
 func (c *Comparer) asNumber(v any) (*big.Float, bool) {
