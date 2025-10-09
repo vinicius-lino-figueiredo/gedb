@@ -12,11 +12,17 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 )
 
-// Matcher implements domain.Matcher.
+type oper func(domain.Document, []string, any) (bool, error)
+
+type matchFn func(any, any) (bool, error)
+
+// Matcher implements [domain.Matcher].
 type Matcher struct {
 	documentFactory func(any) (domain.Document, error)
 	comparer        domain.Comparer
 	fieldNavigator  domain.FieldNavigator
+	compFuncs       map[string]oper
+	logicOps        map[string]func(domain.Document, any) (bool, error)
 }
 
 // NewMatcher returns a new implementation of domain.Matcher.
@@ -32,369 +38,300 @@ func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 		option(&opts)
 	}
 
-	return &Matcher{
+	m := &Matcher{
 		documentFactory: opts.DocumentFactory,
 		comparer:        opts.Comparer,
 		fieldNavigator:  opts.FieldNavigator,
 	}
-}
-
-func (m *Matcher) and(obj domain.Document, query any) (bool, error) {
-	q, ok := query.([]any)
-	if !ok {
-		return false, fmt.Errorf("$and operator used without an array")
-	}
-	for _, i := range q {
-		match, err := m.match(obj, i)
-		if err != nil {
-			return false, err
-		}
-		if !match {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (m *Matcher) elemMatch(_ domain.Document, a any, _ string, b any) (bool, error) {
-	aArr, ok := a.([]any)
-	if !ok {
-		return false, nil
-	}
-
-	for _, el := range aArr {
-		matches, err := m.match(el, b)
-		if matches || err != nil {
-			return matches, err
-		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) exists(obj domain.Document, _ any, field string, b any) (bool, error) {
-	var bBool bool
-	if b != nil {
-		if n, ok := m.asNumber(b); ok {
-			bBool = n.Cmp(big.NewFloat(0)) != 0
-		} else {
-			nb, ok := b.(bool)
-			bBool = nb == ok
-		}
-	}
-
-	return obj.Has(field) == bBool, nil
-}
-
-func (m *Matcher) gt(_ domain.Document, a any, _ string, b any) (bool, error) {
-	if !m.comparer.Comparable(a, b) {
-		return false, nil
-	}
-	comp, err := m.comparer.Compare(a, b)
-	if err != nil {
-		return false, err
-	}
-	return comp > 0, nil
-}
-
-func (m *Matcher) gte(_ domain.Document, a any, _ string, b any) (bool, error) {
-	if !m.comparer.Comparable(a, b) {
-		return false, nil
-	}
-	comp, err := m.comparer.Compare(a, b)
-	if err != nil {
-		return false, err
-	}
-	return comp >= 0, nil
-}
-
-func (m *Matcher) in(_ domain.Document, a any, _ string, b any) (bool, error) {
-	bArr, ok := b.([]any)
-	if !ok {
-		return false, fmt.Errorf("$in operator called with a non-array")
-	}
-	for _, el := range bArr {
-		found, err := m.comparer.Compare(a, el)
-		if err != nil {
-			return false, err
-		}
-		if found == 0 {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) lt(_ domain.Document, a any, _ string, b any) (bool, error) {
-	if !m.comparer.Comparable(a, b) {
-		return false, nil
-	}
-	comp, err := m.comparer.Compare(a, b)
-	if err != nil {
-		return false, err
-	}
-	return comp < 0, nil
-}
-
-func (m *Matcher) lte(_ domain.Document, a any, _ string, b any) (bool, error) {
-	if !m.comparer.Comparable(a, b) {
-		return false, nil
-	}
-	comp, err := m.comparer.Compare(a, b)
-	if err != nil {
-		return false, err
-	}
-	return comp <= 0, nil
-}
-
-// Match implements domain.Matcher.
-func (m *Matcher) Match(o any, q any) (bool, error) {
-	return m.match(o, q)
-}
-
-func (m *Matcher) match(o any, q any) (bool, error) {
-	if q == nil {
-		return true, nil
-	}
-	obj, okObj := o.(domain.Document)
-	query, okQuery := q.(domain.Document)
-	if !okObj || !okQuery {
-		var err error
-		obj, err = m.documentFactory(map[string]any{"needAKey": o})
-		if err != nil {
-			return false, err
-		}
-		return m.matchQueryPart(obj, "needAKey", q, false)
-	}
-	for queryKey, queryValue := range query.Iter() {
-		if !strings.HasPrefix(queryKey, "$") {
-			matches, err := m.matchQueryPart(obj, queryKey, queryValue, false)
-			if !matches || err != nil {
-				return matches, err
-			}
-			continue
-		}
-
-		matches, err := m.useLogicalOperators(queryKey, obj, queryValue)
-		if !matches || err != nil {
-			return matches, err
-		}
-	}
-	return true, nil
-}
-
-func (m *Matcher) matchQueryPart(obj domain.Document, queryKey string, queryValue any, treatObjAsValue bool) (bool, error) {
-	addr, err := m.fieldNavigator.GetAddress(queryKey)
-	if err != nil {
-		return false, err
-	}
-	objValues, _, err := m.fieldNavigator.GetField(obj, addr...)
-	if err != nil {
-		return false, err
-	}
-	var objValue any
-	if len(objValues) == 1 {
-		val, isSet := objValues[0].Get()
-		if !isSet {
-			return false, nil
-		}
-		objValue = val
-	} else {
-		values := make([]any, len(objValues))
-		for n, value := range objValues {
-			values[n], _ = value.Get()
-		}
-		objValue = values
-	}
-	if objValueArray, ok := objValue.([]any); ok && !treatObjAsValue {
-		if _, ok := queryValue.([]any); ok {
-			return m.matchQueryPart(obj, queryKey, queryValue, true)
-		}
-		if queryValueObj, ok := queryValue.(domain.Document); ok {
-			for key := range queryValueObj.Iter() {
-				switch key {
-				case "$size", "$elemMatch":
-					return m.matchQueryPart(obj, queryKey, queryValueObj, true)
-				default:
-				}
-			}
-		}
-		for _, el := range objValueArray {
-			elObj, err := m.documentFactory(map[string]any{"k": el})
-			if err != nil {
-				return false, err
-			}
-			matches, err := m.matchQueryPart(elObj, "k", queryValue, false)
-			if err != nil {
-				return false, err
-			}
-			if matches {
-				return true, nil
-			}
-		}
-		return false, nil
-	}
-
-	if queryValueObj, ok := queryValue.(domain.Document); ok {
-		dollarFields := 0
-		for key := range queryValueObj.Keys() {
-			if strings.HasPrefix(key, "$") {
-				dollarFields++
-			}
-		}
-		if dollarFields != 0 && dollarFields != queryValueObj.Len() {
-			return false, fmt.Errorf("you cannot mix operators and normal fields")
-		}
-
-		if dollarFields > 0 {
-			for key, value := range queryValueObj.Iter() {
-				matches, err := m.useComparisonFunc(obj, key, queryKey, objValue, value)
-				if !matches || err != nil {
-					return false, err
-				}
-			}
-			return true, nil
-		}
-	}
-
-	if queryValueRegex, ok := queryValue.(*regexp.Regexp); ok {
-		return m.regex(nil, objValue, "", queryValueRegex)
-	}
-
-	if m.isDefined(objValue) || m.isDefined(queryValue) {
-		comp, err := m.comparer.Compare(objValue, queryValue)
-		if err != nil {
-			return false, err
-		}
-		return comp == 0, nil
-	}
-
-	return false, nil
-}
-
-func (m *Matcher) isDefined(v any) bool {
-	if g, ok := v.(domain.Getter); ok {
-		_, defined := g.Get()
-		return defined
-	}
-	return true
-}
-
-func (m *Matcher) ne(_ domain.Document, a any, _ string, b any) (bool, error) {
-	comp, err := m.comparer.Compare(a, b)
-	if err != nil {
-		return false, err
-	}
-	return comp != 0, nil
-}
-
-func (m *Matcher) nin(_ domain.Document, a any, _ string, b any) (bool, error) {
-	in, err := m.in(nil, a, "", b)
-	if err != nil {
-		return false, err
-	}
-	return !in, nil
-}
-
-func (m *Matcher) not(obj domain.Document, query any) (bool, error) {
-	match, err := m.match(obj, query)
-	if err != nil {
-		return false, err
-	}
-	return !match, nil
-}
-
-func (m *Matcher) or(obj domain.Document, query any) (bool, error) {
-	q, ok := query.([]any)
-	if !ok {
-		return false, fmt.Errorf("$or operator used without an array")
-	}
-	for _, i := range q {
-		match, err := m.match(obj, i)
-		if err != nil {
-			return false, nil
-		}
-		if match {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) regex(_ domain.Document, a any, _ string, b any) (bool, error) {
-	rgx, ok := b.(*regexp.Regexp)
-	if !ok {
-		return false, fmt.Errorf("$regex operator called with non regular expression")
-	}
-	str, ok := a.(string)
-	if !ok {
-		return false, nil
-	}
-	return rgx.MatchString(str), nil
-}
-
-func (m *Matcher) size(_ domain.Document, a any, _ string, b any) (bool, error) {
-	aArr, ok := a.([]any)
-	if !ok {
-		return false, nil
-	}
-
-	num, ok := m.asNumber(b)
-	if !ok || !num.IsInt() {
-		return false, fmt.Errorf("$size operator called without an integer")
-	}
-
-	comp, err := m.comparer.Compare(len(aArr), b)
-	if err != nil {
-		return false, err
-	}
-
-	return comp == 0, nil
-}
-
-func (m *Matcher) useComparisonFunc(obj domain.Document, key string, field string, a any, b any) (bool, error) {
-	comp := map[string]func(domain.Document, any, string, any) (bool, error){
-		"$lt":        m.lt,
-		"$lte":       m.lte,
-		"$gt":        m.gt,
-		"$gte":       m.gte,
-		"$ne":        m.ne,
-		"$in":        m.in,
-		"$nin":       m.nin,
-		"$regex":     m.regex,
-		"$exists":    m.exists,
-		"$size":      m.size,
-		"$elemMatch": m.elemMatch,
-	}
-	if fn, ok := comp[key]; ok {
-		return fn(obj, a, field, b)
-	}
-	return false, fmt.Errorf("unknown comparison function %q", key)
-}
-
-func (m *Matcher) useLogicalOperators(k string, a domain.Document, b any) (bool, error) {
-	op := map[string]func(domain.Document, any) (bool, error){
+	m.logicOps = map[string]func(domain.Document, any) (bool, error){
 		"$and":   m.and,
 		"$not":   m.not,
 		"$or":    m.or,
 		"$where": m.where,
 	}
-	if fn, ok := op[k]; ok {
-		return fn(a, b)
+	m.compFuncs = map[string]oper{
+		"$regex":     m.regex,
+		"$nin":       m.nin,
+		"$lt":        m.lt,
+		"$gte":       m.gte,
+		"$lte":       m.lte,
+		"$gt":        m.gt,
+		"$ne":        m.ne,
+		"$in":        m.in,
+		"$exists":    m.exists,
+		"$size":      m.size,
+		"$elemMatch": m.elemMatch,
 	}
-	return false, fmt.Errorf("unknown logic operator %q", k)
 
+	return m
 }
 
-func (m *Matcher) where(obj domain.Document, query any) (bool, error) {
-	fn, ok := query.(func(domain.Document) (bool, error))
+// Match implements [domain.Matcher].
+func (m *Matcher) Match(val any, qry any) (bool, error) {
+	doc, ok := val.(domain.Document)
 	if !ok {
-		return false, fmt.Errorf("$where operator used without a func(domain.Document) (bool, error)")
+		return m.nonDocMatch(val, qry)
 	}
 
-	return fn(obj)
+	query, ok := qry.(domain.Document)
+	if !ok {
+		// if val is not a doc, there is no non-doc value that can match
+		return false, nil
+	}
+
+	return m.matchDocs(doc, query)
+
 }
 
-func (m *Matcher) asNumber(v any) (*big.Float, bool) {
+func (m *Matcher) nonDocMatch(val any, qry any) (bool, error) {
+	valDoc, err := m.documentFactory(nil)
+	if err != nil {
+		return false, err
+	}
+	qryDoc, err := m.documentFactory(nil)
+	if err != nil {
+		return false, err
+	}
+
+	valDoc.Set("needAKey", val)
+	qryDoc.Set("needAKey", qry)
+
+	matches, err := m.matchDocs(valDoc, qryDoc)
+	if err != nil {
+		return false, err
+	}
+	return matches, nil
+}
+
+func (m *Matcher) matchDocs(obj, qry domain.Document) (bool, error) {
+
+	qryMap, hasOps, err := m.mapQuery(qry)
+	if err != nil {
+		return false, err
+	}
+
+	matchFunction := m.matchSimpleField
+	if hasOps {
+		matchFunction = m.matchDollarField
+	}
+
+	for field, value := range qryMap {
+		matches, err := matchFunction(obj, field, value)
+		if err != nil || !matches {
+			return false, err
+		}
+	}
+	return true, nil
+
+}
+
+func (m *Matcher) matchDollarField(obj domain.Document, field string, value any) (bool, error) {
+	fn, ok := m.logicOps[field]
+	if !ok {
+		return false, fmt.Errorf("Unknown logical operator %s", field)
+	}
+	return fn(obj, value)
+}
+
+func (m *Matcher) matchSimpleField(obj domain.Document, field string, value any) (bool, error) {
+	addr, err := m.fieldNavigator.GetAddress(field)
+	if err != nil {
+		return false, err
+	}
+
+	valueDoc, ok := value.(domain.Document)
+	if !ok {
+		return m.eq(obj, addr, value)
+	}
+
+	qryMap, hasOps, err := m.mapQuery(valueDoc)
+	if err != nil {
+		return false, err
+	}
+
+	if !hasOps {
+		return m.eq(obj, addr, value)
+	}
+
+	for op := range qryMap {
+		_, ok := m.compFuncs[op]
+		if !ok {
+			return false, fmt.Errorf("Unknown comparison function %s", op)
+		}
+	}
+
+	for op, arg := range qryMap {
+		matches, err := m.compFuncs[op](obj, addr, arg)
+		if err != nil || !matches {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+func (m *Matcher) mapQuery(qry domain.Document) (map[string]any, bool, error) {
+	queryMap := make(map[string]any, qry.Len())
+	totalFields := 0
+	dollarFields := 0
+	for field, value := range qry.Iter() {
+		totalFields++
+		if strings.HasPrefix(field, "$") {
+			dollarFields++
+		}
+		if dollarFields > 0 && totalFields != dollarFields {
+			return nil, false, fmt.Errorf("you cannot mix operators and normal fields")
+		}
+		// we are saving the values to a map there is no way to know how
+		// costly it is to iterate over the query fields, and match
+		// should check the commands before executing them.
+		queryMap[field] = value
+	}
+	return queryMap, dollarFields != 0, nil
+}
+
+func (m *Matcher) and(obj domain.Document, value any) (bool, error) {
+	value, _ = m.getValue(value)
+	arr, ok := value.([]any)
+	if !ok {
+		return false, fmt.Errorf("$and operator used without an array")
+	}
+	for _, item := range arr {
+		matches, err := m.Match(obj, item)
+		if err != nil || !matches {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) not(obj domain.Document, value any) (bool, error) {
+	matches, err := m.Match(obj, value)
+	if err != nil {
+		return false, err
+	}
+	return !matches, nil
+}
+
+func (m *Matcher) or(obj domain.Document, value any) (bool, error) {
+	value, _ = m.getValue(value)
+	arr, ok := value.([]any)
+	if !ok {
+		return false, fmt.Errorf("$or operator used without an array")
+	}
+	for _, item := range arr {
+		matches, err := m.Match(obj, item)
+		if err != nil || matches {
+			return matches, err
+		}
+	}
+	return false, nil
+}
+
+func (m *Matcher) where(obj domain.Document, value any) (bool, error) {
+	value, _ = m.getValue(value)
+
+	switch where := value.(type) {
+	case func(domain.Document) bool:
+		return where(obj), nil
+
+	case func(domain.Document) (bool, error):
+		return where(obj)
+
+	default:
+		// original code would check the return type but we are not
+		// doing that because it is not worth the cost
+		return false, fmt.Errorf("$where operator used without a function")
+	}
+
+}
+
+func (m *Matcher) matchList(obj domain.Document, addr []string, value any, fn matchFn) (bool, error) {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return false, err
+	}
+
+	for _, field := range fields {
+		matches, err := m.matchGetter(field, value, fn)
+		if err != nil || matches {
+			return matches, err
+		}
+	}
+
+	return false, nil
+}
+
+func (m *Matcher) matchGetter(field domain.Getter, value any, fn matchFn) (bool, error) {
+	fieldVal, _ := field.Get()
+	arr, ok := fieldVal.([]any)
+	if !ok {
+		arr = []any{field}
+	}
+	for _, item := range arr {
+		matches, err := fn(item, value)
+		if err != nil || matches {
+			return matches, err
+		}
+	}
+	return false, nil
+}
+
+func (m *Matcher) eq(obj domain.Document, addr []string, value any) (bool, error) {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return false, err
+	}
+	var matches bool
+	for _, field := range fields {
+		matches, err = m.compare(field, value)
+		if err != nil {
+			return false, err
+		}
+		if matches {
+			break
+		}
+	}
+	return matches, nil
+}
+
+func (m *Matcher) compare(field domain.Getter, value any) (bool, error) {
+	if rgx, ok := value.(*regexp.Regexp); ok {
+		return m.regexValues(field, rgx)
+	}
+	fieldValue, _ := field.Get()
+	arr, ok := fieldValue.([]any)
+	if !ok {
+		c, err := m.comparer.Compare(field, value)
+		return c == 0, err
+	}
+
+	valueConcrete, _ := m.getValue(value)
+	if valueArr, ok := valueConcrete.([]any); ok {
+		c, err := m.comparer.Compare(arr, valueArr)
+		if err != nil {
+			return false, err
+		}
+		return c == 0, nil
+	}
+
+	for _, item := range arr {
+		c, err := m.comparer.Compare(item, value)
+		if err != nil || c == 0 {
+			return c == 0, err
+		}
+	}
+	return false, nil
+}
+
+func (m *Matcher) getValue(v any) (any, bool) {
+	if g, ok := v.(domain.Getter); ok {
+		return g.Get()
+	}
+	return v, true
+}
+
+func (m *Matcher) asInt(v any) (int, bool) {
 	r := big.NewFloat(0)
 	switch n := v.(type) {
 	case int:
@@ -422,7 +359,222 @@ func (m *Matcher) asNumber(v any) (*big.Float, bool) {
 	case float64:
 		r.SetFloat64(n)
 	default:
-		return nil, false
+		return 0, false
 	}
-	return r, true
+	if !r.IsInt() {
+		return 0, false
+	}
+	i64, _ := r.Int64()
+	return int(i64), true
+}
+
+func (m *Matcher) regex(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		rgx, ok := param.(*regexp.Regexp)
+		if !ok {
+			return false, fmt.Errorf("$regex operator called with non regular expression")
+		}
+		return m.regexValues(value, rgx)
+	})
+}
+
+func (m *Matcher) regexValues(a any, rgx *regexp.Regexp) (bool, error) {
+	val, defined := m.getValue(a)
+	if !defined {
+		return false, nil
+	}
+	if str, ok := val.(string); ok {
+		return rgx.MatchString(str), nil
+	}
+	return false, nil
+}
+
+func (m *Matcher) nin(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		concrete, _ := m.getValue(param)
+		arr, ok := concrete.([]any)
+		if !ok {
+			return false, fmt.Errorf("$nin operator called with a non-array")
+		}
+		for _, item := range arr {
+			found, err := m.comparer.Compare(item, value)
+			if err != nil {
+				return false, err
+			}
+			if found == 0 {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+}
+
+func (m *Matcher) lt(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		if !m.comparer.Comparable(value, param) {
+			return false, nil
+		}
+		c, err := m.comparer.Compare(value, param)
+		if err != nil {
+			return false, err
+		}
+		return c < 0, nil
+	})
+}
+
+func (m *Matcher) gte(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		if !m.comparer.Comparable(value, param) {
+			return false, nil
+		}
+		c, err := m.comparer.Compare(value, param)
+		if err != nil {
+			return false, err
+		}
+		return c >= 0, nil
+	})
+}
+
+func (m *Matcher) lte(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		if !m.comparer.Comparable(value, param) {
+			return false, nil
+		}
+		c, err := m.comparer.Compare(value, param)
+		if err != nil {
+			return false, err
+		}
+		return c <= 0, nil
+	})
+}
+
+func (m *Matcher) gt(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		if !m.comparer.Comparable(value, param) {
+			return false, nil
+		}
+		c, err := m.comparer.Compare(value, param)
+		if err != nil {
+			return false, err
+		}
+		return c > 0, nil
+	})
+}
+
+func (m *Matcher) ne(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		if !m.comparer.Comparable(value, param) {
+			return false, nil
+		}
+		c, err := m.comparer.Compare(value, param)
+		if err != nil {
+			return false, err
+		}
+		return c != 0, nil
+	})
+}
+
+func (m *Matcher) in(obj domain.Document, addr []string, b any) (bool, error) {
+	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
+		concrete, _ := m.getValue(param)
+		arr, ok := concrete.([]any)
+		if !ok {
+			return false, fmt.Errorf("$in operator called with a non-array")
+		}
+		for _, item := range arr {
+			found, err := m.comparer.Compare(item, value)
+			if err != nil {
+				return false, err
+			}
+			if found == 0 {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+}
+
+func (m *Matcher) exists(obj domain.Document, addr []string, b any) (bool, error) {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return false, err
+	}
+
+	wantExistent, err := m.isTruthy(b)
+	if err != nil {
+		return false, err
+	}
+
+	for _, field := range fields {
+		if _, defined := field.Get(); defined {
+			return wantExistent, nil
+		}
+	}
+	return !wantExistent, nil
+}
+
+func (m *Matcher) isTruthy(value any) (bool, error) {
+	value, _ = m.getValue(value)
+	if value == nil {
+		return false, nil
+	}
+
+	c, err := m.comparer.Compare(value, 0)
+	if err != nil || c == 0 {
+		return c != 0, err
+	}
+
+	c, err = m.comparer.Compare(value, false)
+
+	return c != 0, err
+}
+
+func (m *Matcher) size(obj domain.Document, addr []string, b any) (bool, error) {
+	fields, expanded, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return false, err
+	}
+
+	num, ok := m.asInt(b)
+	if !ok {
+		return false, fmt.Errorf("$size operator called without an integer")
+	}
+
+	if expanded {
+		return len(fields) == num, nil
+	}
+
+	value, _ := fields[0].Get()
+	if value == nil {
+		return false, nil
+	}
+
+	if arr, ok := value.([]any); ok {
+		return len(arr) == num, nil
+	}
+
+	return false, nil
+}
+
+func (m *Matcher) elemMatch(obj domain.Document, addr []string, b any) (bool, error) {
+	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	if err != nil {
+		return false, err
+	}
+
+	for _, field := range fields {
+		value, _ := field.Get()
+		arr, ok := value.([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range arr {
+			matches, err := m.Match(item, b)
+			if err != nil || matches {
+				return matches, err
+			}
+		}
+	}
+
+	return false, nil
 }
