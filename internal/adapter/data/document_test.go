@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"testing"
@@ -194,6 +195,7 @@ func (s *MTestSuite) TestNullable() {
 
 func (s *MTestSuite) TestAnyValueMap() {
 	now := time.Now()
+	rgx := regexp.MustCompile(`^123$`)
 	obj := map[string]any{
 		"planets": map[string]int{
 			"count": 8,
@@ -208,6 +210,7 @@ func (s *MTestSuite) TestAnyValueMap() {
 			"subObj": {
 				"value": "a",
 				"time":  now,
+				"regex": rgx,
 			},
 			"null": nil,
 		},
@@ -218,7 +221,7 @@ func (s *MTestSuite) TestAnyValueMap() {
 		"values":    M{"pi": 3.14},
 		"furniture": M{"couch": "livingroom"},
 		"nested": M{
-			"subObj": M{"value": "a", "time": now},
+			"subObj": M{"value": "a", "time": now, "regex": rgx},
 			"null":   nil,
 		},
 	}

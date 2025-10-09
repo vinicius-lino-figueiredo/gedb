@@ -5,6 +5,7 @@ import (
 	"iter"
 	"maps"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ const TagName = "gedb"
 
 var (
 	timeTyp   = goreflect.TypeOf(*new(time.Time))
+	regexTyp  = goreflect.TypeOf(new(regexp.Regexp))
 	stringTyp = goreflect.TypeOf(*new(string))
 )
 
@@ -102,6 +104,9 @@ func parseMap[T any](v map[string]T) domain.Document {
 
 func parseReflect(r goreflect.Value) (any, error) {
 	for r.Kind() == reflect.Pointer || r.Kind() == goreflect.Interface {
+		if r.Type() == regexTyp {
+			return r.Interface(), nil
+		}
 		r = r.Elem()
 	}
 	switch r.Kind() {
