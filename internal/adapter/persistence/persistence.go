@@ -151,9 +151,6 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 	dataLength := 0
 
 	for lineStream.Scan() {
-		if err := lineStream.Err(); err != nil {
-			return nil, nil, err
-		}
 		line := lineStream.Bytes()
 		if len(line) == 0 {
 			continue
@@ -198,6 +195,9 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 			}
 		}
 		dataLength++
+	}
+	if err := lineStream.Err(); err != nil {
+		return nil, nil, err
 	}
 	if dataLength > 0 {
 		corruptionRate := float64(corruptItems) / float64(dataLength)
