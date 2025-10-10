@@ -174,9 +174,15 @@ func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) (
 				continue
 			}
 			if comp == 0 {
-				dataByID.Delete(doc.ID())
+				if err := dataByID.Delete(doc.ID()); err != nil {
+					corruptItems++
+					continue
+				}
 			} else {
-				dataByID.Set(doc.ID(), doc)
+				if err := dataByID.Set(doc.ID(), doc); err != nil {
+					corruptItems++
+					continue
+				}
 			}
 		} else {
 			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
