@@ -85,6 +85,13 @@ func parseSimple(v any) (domain.Document, error) {
 		return parseMap(t), nil
 	case map[string]float64:
 		return parseMap(t), nil
+	default:
+		return parseSimpleStdLib(v)
+	}
+}
+
+func parseSimpleStdLib(v any) (domain.Document, error) {
+	switch t := v.(type) {
 	case map[string]time.Time:
 		return parseMap(t), nil
 	case map[string]time.Duration:

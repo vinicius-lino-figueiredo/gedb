@@ -396,7 +396,7 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 		}
 		array, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("can't $addToSet an element on non-array values")
+			return fmt.Errorf("cannot $addToSet an element on non-array values")
 		}
 		values := []any{v}
 		if d, ok := v.(domain.Document); ok {
@@ -405,7 +405,7 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 				return err
 			}
 			if props.hasEach && d.Len() > 1 {
-				return fmt.Errorf("can't use another field in conjunction with $each")
+				return fmt.Errorf("cannot use another field in conjunction with $each")
 			}
 			values = props.each
 		}

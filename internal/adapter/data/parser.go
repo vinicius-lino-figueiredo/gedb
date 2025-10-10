@@ -199,21 +199,15 @@ func (p *parser) decodeString(b []byte) (string, error) {
 				w++
 			case 'u':
 				i--
-				rr := p.getUTF(b[i:])
-				if rr < 0 {
-					return "", errors.New("invalid utf8 char")
+				si, sw, br, err := p.treatSlashU(b[i:], out[w:])
+				if err != nil {
+					return "", err
 				}
-				i += 6
-				if utf16.IsSurrogate(rr) {
-					rr1 := p.getUTF(b[i:])
-					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
-						i += 6
-						w += utf8.EncodeRune(out[w:], dec)
-						break
-					}
-					rr = unicode.ReplacementChar
+				i += si
+				w += sw
+				if br {
+					break
 				}
-				w += utf8.EncodeRune(out[w:], rr)
 			default:
 				return "", fmt.Errorf("unknown escape character %q", c)
 			}
@@ -233,6 +227,26 @@ func (p *parser) decodeString(b []byte) (string, error) {
 		}
 	}
 	return string(out[0:w]), nil
+}
+
+func (p *parser) treatSlashU(b []byte, out []byte) (int, int, bool, error) {
+	rr := p.getUTF(b)
+	if rr < 0 {
+		return 0, 0, false, errors.New("invalid utf8 char")
+	}
+	i := 6
+	w := 0
+	if utf16.IsSurrogate(rr) {
+		rr1 := p.getUTF(b[i:])
+		if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
+			i += 6
+			w += utf8.EncodeRune(out, dec)
+			return i, w, true, nil
+		}
+		rr = unicode.ReplacementChar
+	}
+	w += utf8.EncodeRune(out, rr)
+	return i, w, false, nil
 }
 
 func (p *parser) getUTF(b []byte) rune {

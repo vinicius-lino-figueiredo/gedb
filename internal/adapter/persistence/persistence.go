@@ -29,6 +29,8 @@ const (
 	DefaultFileMode os.FileMode = 0o644
 )
 
+type docMap = *uncomparablemap.UncomparableMap[domain.Document]
+
 // Persistence implements domain.Persistence.
 type Persistence struct {
 	inMemoryOnly          bool
@@ -168,36 +170,15 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 			continue
 		}
 		if doc.Has("_id") {
-			comp, err := p.comparer.Compare(doc.Get("$$deleted"), true)
+			err := p.addOrDeleteDoc(doc, dataByID)
 			if err != nil {
 				corruptItems++
 				continue
 			}
-			if comp == 0 {
-				if err := dataByID.Delete(doc.ID()); err != nil {
-					corruptItems++
-					continue
-				}
-			} else {
-				if err := dataByID.Set(doc.ID(), doc); err != nil {
-					corruptItems++
-					continue
-				}
-			}
 		} else {
-			if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
-				ni := new(domain.IndexDTO)
-				err := p.decoder.Decode(doc, ni)
-				if err != nil {
-					corruptItems++
-					continue
-				}
-				indexes[ni.IndexCreated.FieldName] = *ni
-
-			} else if doc.Get("$$indexRemoved") != nil {
-				if s, ok := doc.Get("$$indexRemoved").(string); ok {
-					delete(indexes, s)
-				}
+			if err := p.addOrDeleteIndex(doc, indexes); err != nil {
+				corruptItems++
+				continue
 			}
 		}
 		dataLength++
@@ -218,6 +199,38 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 	}
 	data := slices.Collect(dataByID.Values())
 	return data, indexes, nil
+}
+
+// if doc is a valid Index record, add or remove from the map; if not, ignore
+func (p *Persistence) addOrDeleteIndex(doc domain.Document, m map[string]domain.IndexDTO) error {
+	if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
+		var ni domain.IndexDTO
+		err := p.decoder.Decode(doc, &ni)
+		if err != nil {
+			return err
+		}
+		m[ni.IndexCreated.FieldName] = ni
+		return nil
+
+	}
+	if doc.Get("$$indexRemoved") != nil {
+		if s, ok := doc.Get("$$indexRemoved").(string); ok {
+			delete(m, s)
+		}
+	}
+	return nil
+}
+
+// if doc is a valid document declaration, add to the map; if not, ignore
+func (p *Persistence) addOrDeleteDoc(doc domain.Document, m docMap) error {
+	comp, err := p.comparer.Compare(doc.Get("$$deleted"), true)
+	if err != nil {
+		return err
+	}
+	if comp == 0 {
+		return m.Delete(doc.ID())
+	}
+	return m.Set(doc.ID(), doc)
 }
 
 // LoadDatabase implements domain.Persistence.
