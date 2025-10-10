@@ -111,7 +111,6 @@ func (i *Index) Reset(ctx context.Context, newData ...domain.Document) error {
 	return i.Insert(ctx, newData...)
 }
 
-// Insert2 implements domain.Index.
 func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 
 	// When a dotted field path references multiple array elements, each
@@ -257,7 +256,7 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 
 	for _, d := range docs {
 		var keys []any
-		NoValid := false
+		noValidField := false
 		for _, field := range i._fields {
 			addr, err := i.fieldNavigator.GetAddress(field)
 			if err != nil {
@@ -281,10 +280,10 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 				}
 			}
 
-			NoValid = NoValid || hasAnyField
+			noValidField = noValidField || hasAnyField
 		}
 
-		if i.sparse && NoValid {
+		if i.sparse && noValidField {
 			return nil
 		}
 

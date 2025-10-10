@@ -17,7 +17,7 @@ func (s *ComparerTestSuite) SetupTest() {
 	s.c = NewComparer().(*Comparer)
 }
 
-// nil should always be the smallest value
+// nil should always be the smallest value.
 func (s *ComparerTestSuite) TestNilIsSmallest() {
 	otherStuff := [...]any{"string", "", -1, 0, uint(12), false,
 		time.UnixMilli(12345), data.M{}, data.M{"hello": "world"},
@@ -33,7 +33,7 @@ func (s *ComparerTestSuite) TestNilIsSmallest() {
 	}
 }
 
-// number should by the second smallest type (any number type)
+// number should by the second smallest type (any number type).
 func (s *ComparerTestSuite) TestNumberIsSecondSmallest() {
 
 	testCases := []struct {
@@ -72,7 +72,7 @@ func (s *ComparerTestSuite) TestNumberIsSecondSmallest() {
 	}
 }
 
-// string should be the third smallest type
+// string should be the third smallest type.
 func (s *ComparerTestSuite) TestStringIsThirdSmallest() {
 	testCases := []struct {
 		arg1 string
@@ -106,7 +106,7 @@ func (s *ComparerTestSuite) TestStringIsThirdSmallest() {
 	}
 }
 
-// bool should be the fourth smallest type
+// bool should be the fourth smallest type.
 func (s *ComparerTestSuite) TestBoolIsFourthSmallest() {
 	testCases := []struct {
 		arg1 bool
@@ -140,7 +140,7 @@ func (s *ComparerTestSuite) TestBoolIsFourthSmallest() {
 	}
 }
 
-// date should be the fifth smallest type
+// date should be the fifth smallest type.
 func (s *ComparerTestSuite) TestDateIsFifthSmallest() {
 	now := time.Now()
 	testCases := []struct {
@@ -176,7 +176,7 @@ func (s *ComparerTestSuite) TestDateIsFifthSmallest() {
 	}
 }
 
-// []any should be the sixth smallest type
+// []any should be the sixth smallest type.
 func (s *ComparerTestSuite) TestSliceIsSixthSmallest() {
 	testCases := []struct {
 		arg1 []any
@@ -211,7 +211,7 @@ func (s *ComparerTestSuite) TestSliceIsSixthSmallest() {
 	}
 }
 
-// Document should be the greatest type
+// Document should be the greatest type.
 func (s *ComparerTestSuite) TestDocumentIsSeventhSmallest() {
 	testCases := []struct {
 		arg1 any
@@ -233,7 +233,7 @@ func (s *ComparerTestSuite) TestDocumentIsSeventhSmallest() {
 	}
 }
 
-// comparison between two unknown types should return errors
+// comparison between two unknown types should return errors.
 func (s *ComparerTestSuite) TestErrorOnUnknownPair() {
 	testCases := []struct {
 		arg1 any

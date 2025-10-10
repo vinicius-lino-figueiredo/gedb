@@ -128,7 +128,7 @@ func (m *Matcher) matchDocs(obj, qry domain.Document) (bool, error) {
 func (m *Matcher) matchDollarField(obj domain.Document, field string, value any) (bool, error) {
 	fn, ok := m.logicOps[field]
 	if !ok {
-		return false, fmt.Errorf("Unknown logical operator %s", field)
+		return false, fmt.Errorf("unknown logical operator %s", field)
 	}
 	return fn(obj, value)
 }
@@ -156,7 +156,7 @@ func (m *Matcher) matchSimpleField(obj domain.Document, field string, value any)
 	for op := range qryMap {
 		_, ok := m.compFuncs[op]
 		if !ok {
-			return false, fmt.Errorf("Unknown comparison function %s", op)
+			return false, fmt.Errorf("unknown comparison function %s", op)
 		}
 	}
 
@@ -182,8 +182,8 @@ func (m *Matcher) mapQuery(qry domain.Document) (map[string]any, bool, error) {
 		if dollarFields > 0 && totalFields != dollarFields {
 			return nil, false, fmt.Errorf("you cannot mix operators and normal fields")
 		}
-		// we are saving the values to a map there is no way to know how
-		// costly it is to iterate over the query fields, and match
+		// We are saving the values to a map. There is no way to know
+		// how costly it is to iterate over the query fields, and match
 		// should check the commands before executing them.
 		queryMap[field] = value
 	}

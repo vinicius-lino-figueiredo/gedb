@@ -233,27 +233,27 @@ func isNullable(t goreflect.Type) bool {
 		k == reflect.Chan
 }
 
-// ID implements domain.Document
+// ID implements domain.Document.
 func (d M) ID() any {
 	return d["_id"]
 }
 
-// Get implements domain.Document
+// Get implements domain.Document.
 func (d M) Get(key string) any {
 	return d[key]
 }
 
-// Set implements domain.Document
+// Set implements domain.Document.
 func (d M) Set(key string, value any) {
 	d[key] = value
 }
 
-// Unset implements domain.Document
+// Unset implements domain.Document.
 func (d M) Unset(key string) {
 	delete(d, key)
 }
 
-// D implements domain.Document
+// D implements domain.Document.
 func (d M) D(key string) domain.Document {
 	r := d[key]
 	if r == nil {

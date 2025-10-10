@@ -2,14 +2,14 @@ package fieldnavigator
 
 import "github.com/vinicius-lino-figueiredo/gedb/domain"
 
-// GetSetter implements [domain.GetSetter]
+// GetSetter implements [domain.GetSetter].
 type GetSetter struct {
 	get   func() (any, bool)
 	set   func(any)
 	unset func()
 }
 
-// NewGetSetterWithArrayIndex retusn a new implementation of [domain.GetSetter]
+// NewGetSetterWithArrayIndex returns a new implementation of [domain.GetSetter]
 // that will represent a value from a slice of [any].
 func NewGetSetterWithArrayIndex(array []any, index int) domain.GetSetter {
 	return &GetSetter{
@@ -32,7 +32,7 @@ func NewGetSetterWithArrayIndex(array []any, index int) domain.GetSetter {
 	}
 }
 
-// NewGetSetterWithDoc retusn a new implementation of [domain.GetSetter] that
+// NewGetSetterWithDoc returns a new implementation of [domain.GetSetter] that
 // will represent a value from a [domain.Document].
 func NewGetSetterWithDoc(doc domain.Document, key string) domain.GetSetter {
 	return &GetSetter{
@@ -47,7 +47,7 @@ func NewGetSetterEmpty() domain.GetSetter {
 	return &GetSetter{}
 }
 
-// Get implements [domain.GetSetter]
+// Get implements [domain.GetSetter].
 func (gs *GetSetter) Get() (any, bool) {
 	if gs.get != nil {
 		return gs.get()
@@ -55,14 +55,14 @@ func (gs *GetSetter) Get() (any, bool) {
 	return nil, false
 }
 
-// Set implements [domain.GetSetter]
+// Set implements [domain.GetSetter].
 func (gs *GetSetter) Set(value any) {
 	if gs.set != nil {
 		gs.set(value)
 	}
 }
 
-// Unset implements [domain.GetSetter]
+// Unset implements [domain.GetSetter].
 func (gs *GetSetter) Unset() {
 	if gs.unset != nil {
 		gs.unset()

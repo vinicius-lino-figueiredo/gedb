@@ -95,7 +95,7 @@ func (m *Modifier) checkMod(obj domain.Document, key string, value any) error {
 		return err
 	}
 	if c != 0 {
-		return fmt.Errorf("you cannot change a document's _id")
+		return fmt.Errorf("cannot change a document's _id")
 	}
 	return nil
 }
@@ -131,7 +131,7 @@ func (m *Modifier) dollarMod(obj domain.Document, qry map[string]any) (domain.Do
 		}
 		d, ok := arg.(domain.Document)
 		if !ok {
-			return nil, fmt.Errorf("Modifier %s's argument must be an object", modName)
+			return nil, fmt.Errorf("modifier %s's argument must be an object", modName)
 		}
 
 		calls[modName] = modCall{
@@ -158,7 +158,7 @@ func (m *Modifier) dollarMod(obj domain.Document, qry map[string]any) (domain.Do
 	}
 
 	if obj.ID() != docCopy.ID() {
-		return nil, fmt.Errorf("you can't change a document's _id")
+		return nil, fmt.Errorf("cannot change a document's _id")
 	}
 
 	return docCopy, nil
@@ -280,7 +280,7 @@ func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
 		}
 		num, ok := m.asNumber(value)
 		if !ok {
-			return fmt.Errorf("Don't use the $inc modifier on non-number fields")
+			return fmt.Errorf("cannot use the $inc modifier on non-number fields")
 		}
 		sum := num.Add(num, incNum)
 		sumFloat, _ := sum.Float64()
@@ -305,7 +305,7 @@ func (m *Modifier) push(obj domain.Document, addr []string, v any) error {
 		}
 		array, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("Can't $push an element on non-array values")
+			return fmt.Errorf("cannot $push an element on non-array values")
 		}
 
 		values := append(array, v)
@@ -362,7 +362,7 @@ func (m *Modifier) getPushItems(d domain.Document, array []any) ([]any, error) {
 	}
 
 	if d.Len() > props.usedFields {
-		return nil, fmt.Errorf("Can only use $slice in cunjunction with $each when $push to array")
+		return nil, fmt.Errorf("can only use $slice in conjunction with $each when $push to array")
 	}
 
 	res := append(array, props.each...)
@@ -396,7 +396,7 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 		}
 		array, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("Can't $addToSet an element on non-array values")
+			return fmt.Errorf("can't $addToSet an element on non-array values")
 		}
 		values := []any{v}
 		if d, ok := v.(domain.Document); ok {
@@ -405,7 +405,7 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 				return err
 			}
 			if props.hasEach && d.Len() > 1 {
-				return fmt.Errorf("Can't use another field in conjunction with $each")
+				return fmt.Errorf("can't use another field in conjunction with $each")
 			}
 			values = props.each
 		}
@@ -459,12 +459,12 @@ func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
 
 		l, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("Can't $pop an element from non-array values")
+			return fmt.Errorf("can't $pop an element from non-array values")
 		}
 
 		start, end := 0, max(0, len(l)-1) // do not grow larger than l
 		if num < 0 {
-			// do not start after l end s
+			// do not start after l ends
 			start, end = min(1, len(l)), len(l)
 		}
 
@@ -484,7 +484,7 @@ func (m *Modifier) pull(obj domain.Document, addr []string, v any) error {
 
 		l, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("Can't $pop an element from non-array values")
+			return fmt.Errorf("cannot $pull an element from non-array values")
 		}
 
 		res := make([]any, 0, len(l))

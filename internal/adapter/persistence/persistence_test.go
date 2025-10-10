@@ -161,7 +161,7 @@ func (s *PersistenceTestSuite) SetupTest() {
 
 }
 
-// Every line represents a document (with stream)
+// Every line represents a document (with stream).
 func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -173,7 +173,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 3)
@@ -182,7 +182,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	s.Equal(data.M{"_id": "3", "nested": data.M{"today": now}}, treatedData[2])
 }
 
-// Badly formatted lines have no impact on the treated data (with stream)
+// Badly formatted lines have no impact on the treated data (with stream).
 func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	p.SetCorruptAlertThreshold(1) // to prevent a corruption alert
 
@@ -194,7 +194,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	s.NoError(err1)
 	s.NoError(err2)
 	rawData := []byte(string(rawData1) + "\n" + "garbage" + "\n" + string(rawData2))
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
@@ -203,7 +203,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	s.Equal(data.M{"_id": "3", "nested": data.M{"today": now}}, treatedData[1])
 }
 
-// Well formatted lines that have no _id are not included in the data (with stream)
+// Well formatted lines that have no _id are not included in the data (with stream).
 func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -215,7 +215,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
@@ -224,7 +224,8 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	s.Equal(data.M{"_id": "2", "hello": "world"}, treatedData[1])
 }
 
-// If two lines concern the same doc (= same _id), the last one is the good version (with stream)
+// If two lines concern the same doc (= same _id), the last one is the good
+// version (with stream).
 func (s *PersistenceTestSuite) TestRepeatedID() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -236,7 +237,7 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	_ = treatedData
 
@@ -246,7 +247,8 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 	s.Equal(data.M{"_id": "2", "hello": "world"}, treatedData[1])
 }
 
-// If a doc contains $$deleted: true, that means we need to remove it from the data (with stream)
+// If a doc contains $$deleted: true, that means we need to remove it from the
+// data (with stream).
 func (s *PersistenceTestSuite) TestDeleteDoc() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -260,7 +262,7 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 	s.NoError(err4)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3) + "\n" + string(rawData4))
 
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.NoError(err)
 	s.Len(treatedData, 2)
@@ -268,7 +270,8 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 	s.Equal(data.M{"_id": "3", "today": now}, treatedData[1])
 }
 
-// If a doc contains $$deleted: true, no error is thrown if the doc wasnt in the []any before (with stream)
+// If a doc contains $$deleted: true, no error is thrown if the doc wasn't in
+// the []any before (with stream).
 func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -280,7 +283,7 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, _, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
@@ -288,7 +291,8 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	s.Equal(data.M{"_id": "3", "today": now}, treatedData[1])
 }
 
-// If a doc contains $$indexCreated, no error is thrown during treatRawData and we can get the index options (with stream)
+// If a doc contains $$indexCreated, no error is thrown during treatRawData and
+// we can get the index options (with stream).
 func (s *PersistenceTestSuite) TestIndexCreated() {
 	now := float64((time.Time{}).Unix())
 	ctx := context.Background()
@@ -300,7 +304,7 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, indexes, err := p.TreadRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, indexes, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	s.Len(indexes, 1)
 	s.Equal(domain.IndexDTO{IndexCreated: domain.IndexCreated{FieldName: "test", Unique: true}}, indexes["test"])
@@ -311,7 +315,7 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 	s.Equal(data.M{"_id": "3", "today": now}, treatedData[1])
 }
 
-// Compact database on load
+// Compact database on load.
 func (s *PersistenceTestSuite) TestCompactOnLoad() {
 	now := time.Now().Unix()
 
@@ -358,9 +362,9 @@ func (s *PersistenceTestSuite) TestCompactOnLoad() {
 // 'Calling loadDatabase after the datafile was removed will reset the database'
 // 'Calling loadDatabase after the datafile was modified loads the new data'
 
-// Calling loadDatabase after the datafile was removed will reset the database
+// Calling loadDatabase after the datafile was removed will reset the database.
 //
-// TODO: Reimplement with datastore (not testable as original version)
+// TODO: Reimplement with datastore (not testable as original version).
 func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	d1 := data.M{"_id": uuid.New().String(), "a": 1}
 	d2 := data.M{"_id": uuid.New().String(), "a": 2}
@@ -384,7 +388,7 @@ func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	s.Len(allData, 0)
 }
 
-// Will return error if Serialize fails
+// Will return error if Serialize fails.
 func (s *PersistenceTestSuite) TestPersistNewStateFailSerializing() {
 	e := fmt.Errorf("error")
 	p.serializer = serializeFunc(func(context.Context, any) ([]byte, error) {
@@ -395,8 +399,8 @@ func (s *PersistenceTestSuite) TestPersistNewStateFailSerializing() {
 	s.ErrorIs(err, e)
 }
 
-// Will return error if Write fails
-func (s *PersistenceTestSuite) TestPersistNewStateFailWritting() {
+// Will return error if Write fails.
+func (s *PersistenceTestSuite) TestPersistNewStateFailWriting() {
 	sr := p.serializer
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -411,21 +415,21 @@ func (s *PersistenceTestSuite) TestPersistNewStateFailWritting() {
 	s.ErrorIs(err, context.Canceled)
 }
 
-// will return error if stream fails to be read
-func (s *PersistenceTestSuite) TestTreadRawStreamFailScan() {
+// will return error if stream fails to be read.
+func (s *PersistenceTestSuite) TestTreatRawStreamFailScan() {
 	r := new(readerMock)
 
 	r.On("Read", mock.Anything).
 		Return(0, fmt.Errorf("error")).
 		Once()
 
-	doc, index, err := p.TreadRawStream(context.Background(), r)
+	doc, index, err := p.TreatRawStream(context.Background(), r)
 	s.Error(err)
 	s.Nil(doc)
 	s.Nil(index)
 }
 
-// empty lines in a stream should not affect resulting data
+// empty lines in a stream should not affect resulting data.
 func (s *PersistenceTestSuite) TestIgnoreEmptyLines() {
 	fakeData := `{"_id":"one","hello":"world"}
 
@@ -438,15 +442,16 @@ func (s *PersistenceTestSuite) TestIgnoreEmptyLines() {
 {"_id":"three","hello":"you"}`
 
 	r := strings.NewReader(fakeData)
-	docs, indexes, err := p.TreadRawStream(context.Background(), r)
+	docs, indexes, err := p.TreatRawStream(context.Background(), r)
 	s.NoError(err)
 	s.Len(indexes, 0)
 	s.Len(docs, 3)
 
 }
 
-// When treating raw data, refuse to proceed if too much data is corrupt, to avoid data loss
-func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
+// When treating raw data, refuse to proceed if too much data is corrupt, to
+// avoid data loss.
+func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
 	fakeData := "{\"_id\":\"one\",\"hello\":\"world\"}\n" + "Some corrupt data\n" + "{\"_id\":\"two\",\"hello\":\"earth\"}\n" + "{\"_id\":\"three\",\"hello\":\"you\"}\n"
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
@@ -486,7 +491,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.Equal(4, e.DataLength)
 }
 
-// Treat document factory errors as data corruption
+// Treat document factory errors as data corruption.
 func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
 	fakeData := "{\"_id\":\"one\",\"hello\":\"world\"}\n" + "{\"_id\":\"two\",\"hello\":\"earth\"}\n" + "{\"_id\":\"three\",\"hello\":\"you\"}\n"
@@ -515,7 +520,7 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 
 	ctx := context.Background()
 
-	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.Error(err)
 	s.Nil(docs)
 	s.Nil(indexes)
@@ -529,13 +534,13 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 2)
 	s.Len(indexes, 0)
 }
 
-// Treat deleted document errors as data corruption
+// Treat deleted document errors as data corruption.
 func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
 	fakeData := `{"_id":"two","$$deleted":true}
@@ -562,7 +567,7 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.Error(err)
 	s.Nil(docs)
 	s.Nil(indexes)
@@ -584,13 +589,13 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	p = per.(*Persistence)
 
 	ctx = context.Background()
-	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 1)
 	s.Len(indexes, 0)
 }
 
-// Malformed indexes are treated as data corruption
+// Malformed indexes are treated as data corruption.
 func (s *PersistenceTestSuite) TestFailIndex() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
 	fakeData := `{"$$indexCreated": {"fieldName": "n"}, "$$indexRemoved": 1}
@@ -608,7 +613,7 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.Error(err)
 	s.Nil(docs)
 	s.Nil(indexes)
@@ -622,13 +627,13 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 	p = per.(*Persistence)
 
 	ctx = context.Background()
-	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 1)
 	s.Len(indexes, 0)
 }
 
-// Can remove an index
+// Can remove an index.
 func (s *PersistenceTestSuite) TestRemoveIndex() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
 	fakeData := `{"$$indexCreated": {"fieldName": "a"}}
@@ -646,14 +651,14 @@ func (s *PersistenceTestSuite) TestRemoveIndex() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 0)
 	s.Len(indexes, 1)
 	s.Contains(indexes, "a")
 }
 
-// Can []anyen to compaction events
+// Can listen to compaction events.
 func (s *PersistenceTestSuite) TestListenEvent() {
 	done := make(chan struct{})
 	ctx := context.Background()
@@ -666,7 +671,7 @@ func (s *PersistenceTestSuite) TestListenEvent() {
 	<-done
 }
 
-// Cannot load database if parent directory was ensured
+// Cannot load database if parent directory was ensured.
 func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
 
 	st := new(storageMock)
@@ -690,7 +695,7 @@ func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
 	s.Nil(indexes)
 }
 
-// Cannot load database if datafile was ensured
+// Cannot load database if datafile was ensured.
 func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
 
 	st := new(storageMock)
@@ -717,7 +722,7 @@ func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
 	s.Nil(indexes)
 }
 
-// Cannot load database if file stream is not properly read
+// Cannot load database if file stream is not properly read.
 func (s *PersistenceTestSuite) TestFailReadFile() {
 
 	st := new(storageMock)
@@ -748,11 +753,7 @@ func (s *PersistenceTestSuite) TestFailReadFile() {
 	s.Nil(indexes)
 }
 
-func (s *PersistenceTestSuite) TestSetializers() {
-	//	describe('Serialization hooks', function () {
-	//	  const se = function (s) { return 'before_' + s + '_after' }
-	//	  const bd = function (s) { return s.substring(7, s.length - 6) }
-	//
+func (s *PersistenceTestSuite) TestSerializers() {
 	se := serializeFunc(func(ctx context.Context, v any) ([]byte, error) {
 		s, err := s.serializer.Serialize(ctx, v)
 		if err != nil {
@@ -887,6 +888,7 @@ func (s *PersistenceTestSuite) TestSetializers() {
 		s.NoError(err)
 		p = per.(*Persistence)
 		docs, indexes, err := p.LoadDatabase(ctx)
+		s.NoError(err)
 		s.Len(docs, 1)
 		s.Equal("earth", docs[0].Get("hello"))
 		s.Equal(_id, docs[0].Get("_id"))
@@ -896,7 +898,8 @@ func (s *PersistenceTestSuite) TestSetializers() {
 } // ==== End of 'Serialization hooks' ==== //
 
 func (s *PersistenceTestSuite) TestPreventDataloss() {
-	// Creating a datastore with in memory as true and a bad filename wont cause an error
+	// Creating a datastore with in memory as true and a bad filename won't
+	// cause an error
 	s.Run("InMemoryBadFilenameNoError", func() {
 		_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"), domain.WithPersistenceInMemoryOnly(true))
 		s.NoError(err)
@@ -971,7 +974,8 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 		s.Equal("something", string(b))
 	})
 
-	// If temp datafile stat and datafile doesnt, ensureDatafileIntegrity will use it (cannot happen except upon first use)
+	// If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
+	// will use it (cannot happen except upon first use)
 	s.Run("UseTempDatafileIfExistsUponFirstUse", func() {
 		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
 		s.NoError(err)
@@ -1153,6 +1157,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 		s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
 		contents, err := os.ReadFile(testDb)
+		s.NoError(err)
 		s.FileExists(testDb)
 		s.NoFileExists(testDb + "~")
 		d := make(data.M)
@@ -1163,7 +1168,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 	})
 
 	// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
-	s.Run("CleanDatafileIfEmptyTempFileEists", func() {
+	s.Run("CleanDatafileIfEmptyTempFileExists", func() {
 		const dbFile = "../../../workspace/test2.db"
 
 		fileExists, err := s.storage.Exists(dbFile)
@@ -1264,7 +1269,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 
 		// Loading it in a separate process that we will crash before finishing the loadDatabase
 		s.Run("loadAndCrash", func() {
-			// dont really like this approach, but testing by
+			// don't really like this approach, but testing by
 			// running a main package
 			cmd := exec.Command("go", "run", "../../../test_lac/")
 			err := cmd.Run()
@@ -1326,7 +1331,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 			N := 64
 
 			var originalRLimit syscall.Rlimit
-			syscall.Getrlimit(syscall.RLIMIT_NOFILE, &originalRLimit)
+			s.NoError(syscall.Getrlimit(syscall.RLIMIT_NOFILE, &originalRLimit))
 
 			rLimit := syscall.Rlimit{
 				Cur: 128,
@@ -1393,7 +1398,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 } // ==== End of 'Prevent dataloss when persisting data' ====
 
 // NOTE: Most part of the this original test suite are Datastore related, not
-// persistence. Im just adding a few tests so this is not empty
+// persistence. Im just adding a few tests so this is not empty.
 //
 // Original tests:
 //
@@ -1404,7 +1409,7 @@ func (s *PersistenceTestSuite) TestPreventDataloss() {
 // check that we can reload and insert afterwards (added)
 // check that we can dropDatatabase if the file is already deleted (added)
 // Check that TTL indexes are reset
-// Check that the buffer is reset (added)
+// Check that the buffer is reset (added).
 func (s *PersistenceTestSuite) TestDropDatabase() {
 	s.Run("RemovesFile", func() {
 		s.FileExists(testDb)
@@ -1451,7 +1456,7 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 		s.NoFileExists(testDb)
 	})
 	s.SetupTest()
-	s.Run("ReseBuffer", func() {
+	s.Run("ResetBuffer", func() {
 		ctx := context.Background()
 		s.NoError(p.DropDatabase(ctx))
 		docs := []domain.Document{
@@ -1468,7 +1473,7 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 	})
 }
 
-// Will return error if calling methods with a cancelled context
+// Will return error if calling methods with a cancelled context.
 func (s *PersistenceTestSuite) TestPersistCancelledContext() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1476,7 +1481,7 @@ func (s *PersistenceTestSuite) TestPersistCancelledContext() {
 	err := p.PersistNewState(ctx)
 	s.ErrorIs(err, context.Canceled)
 
-	docs, indexes, err := p.TreadRawStream(ctx, nil)
+	docs, indexes, err := p.TreatRawStream(ctx, nil)
 	s.ErrorIs(err, context.Canceled)
 	s.Nil(docs)
 	s.Nil(indexes)
@@ -1497,12 +1502,13 @@ func (s *PersistenceTestSuite) TestPersistCancelledContext() {
 }
 
 // Won't do anything if file related methods are called in a memory-only
-// persistence instance
+// persistence instance.
 func (s *PersistenceTestSuite) TestPersistNewStateInMemoryOnly() {
 	p, err := NewPersistence(domain.WithPersistenceInMemoryOnly(true))
 	s.NoError(err)
 
 	err = p.PersistNewState(context.Background())
+	s.NoError(err)
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
 	s.NoError(err)
@@ -1516,7 +1522,7 @@ func (s *PersistenceTestSuite) TestPersistNewStateInMemoryOnly() {
 	s.NoError(err)
 }
 
-// Should not be able to drop the database without confirming the file exists
+// Should not be able to drop the database without confirming the file exists.
 func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
 	st := new(storageMock)
 
@@ -1537,7 +1543,7 @@ func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
 	s.Error(err)
 }
 
-// Should not be able to persist data if serialization fails
+// Should not be able to persist data if serialization fails.
 func (s *PersistenceTestSuite) TestPersistSerializeError() {
 
 	original := p.serializer
@@ -1593,8 +1599,8 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 
 }
 
-// To persist cached database, CrashSafeWriteFileLines must not fail
-func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWritting() {
+// To persist cached database, CrashSafeWriteFileLines must not fail.
+func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWriting() {
 	st := new(storageMock)
 
 	var err error

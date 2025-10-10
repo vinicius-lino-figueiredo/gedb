@@ -67,14 +67,14 @@ type MatcherTestSuite struct {
 	mtchr *Matcher
 }
 
-// Can find documents with simple fields
+// Can find documents with simple fields.
 func (s *MatcherTestSuite) TestSimpleFieldEquality() {
 	s.NotMatches(s.mtchr.Match(M{"test": "yeah"}, M{"test": "yea"}))
 	s.NotMatches(s.mtchr.Match(M{"test": "yeah"}, M{"test": "yeahh"}))
 	s.Matches(s.mtchr.Match(M{"test": "yeah"}, M{"test": "yeah"}))
 }
 
-// Can find documents with the dot-notation
+// Can find documents with the dot-notation.
 func (s *MatcherTestSuite) TestCanFindDocumentsWithTheDotNotation() {
 	s.NotMatches(s.mtchr.Match(M{"test": M{"ooo": "yeah"}}, M{"test.ooo": "yea"}))
 	s.NotMatches(s.mtchr.Match(M{"test": M{"ooo": "yeah"}}, M{"test.oo": "yeah"}))
@@ -82,13 +82,13 @@ func (s *MatcherTestSuite) TestCanFindDocumentsWithTheDotNotation() {
 	s.Matches(s.mtchr.Match(M{"test": M{"ooo": "yeah"}}, M{"test.ooo": "yeah"}))
 }
 
-// Cannot find undefined
+// Cannot find undefined.
 func (s *MatcherTestSuite) TestCannotFindUndefined() {
 	s.NotMatches(s.mtchr.Match(M{"test": undefined}, M{"test": undefined}))
 	s.NotMatches(s.mtchr.Match(M{"test": M{"pp": undefined}}, M{"test.pp": undefined}))
 }
 
-// Nested objects are deep-equality matched and not treated as sub-queries
+// Nested objects are deep-equality matched and not treated as sub-queries.
 func (s *MatcherTestSuite) TestNestedObjectsAreDeepEqualNotSubQuery() {
 	s.Matches(s.mtchr.Match(M{"a": M{"b": 5}}, M{"a": M{"b": 5}}))
 	s.NotMatches(s.mtchr.Match(M{"a": M{"b": 5, "c": 3}}, M{"a": M{"b": 5}}))
@@ -97,7 +97,7 @@ func (s *MatcherTestSuite) TestNestedObjectsAreDeepEqualNotSubQuery() {
 	s.ErrorMatch(s.mtchr.Match(M{"a": M{"b": 5}}, M{"a": M{"$or": A{M{"b": 10}, M{"b": 5}}}}))
 }
 
-// Can match for field equality inside an array with the dot notation
+// Can match for field equality inside an array with the dot notation.
 func (s *MatcherTestSuite) TestInsideArrayDotNotation() {
 	s.NotMatches(s.mtchr.Match(
 		M{"a": true, "b": A{"node", "embedded", "database"}},
@@ -113,7 +113,7 @@ func (s *MatcherTestSuite) TestInsideArrayDotNotation() {
 	))
 }
 
-// Will return error if GetAddress fails
+// Will return error if GetAddress fails.
 func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -124,12 +124,12 @@ func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn.AssertExpectations(s.T())
 }
 
-// Will return error if matching two invalid types
+// Will return error if matching two invalid types.
 func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 	s.ErrorMatch(s.mtchr.Match(M{"a": []string{}}, M{"a": make(chan int)}))
 }
 
-// Will return error if matching two invalid types nested in arrays
+// Will return error if matching two invalid types nested in arrays.
 func (s *MatcherTestSuite) TestEqualInvalidTypesInArray() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"a": A{[]string{}}},
@@ -137,7 +137,7 @@ func (s *MatcherTestSuite) TestEqualInvalidTypesInArray() {
 	))
 }
 
-// Will return error if GetField fails
+// Will return error if GetField fails.
 func (s *MatcherTestSuite) TestFailedGetField() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -151,7 +151,7 @@ func (s *MatcherTestSuite) TestFailedGetField() {
 	fn.AssertExpectations(s.T())
 }
 
-// Matching a non-string to a regular expression always yields false
+// Matching a non-string to a regular expression always yields false.
 func (s *MatcherTestSuite) TestRegexNonString() {
 	d := time.Now()
 	r := regexp.MustCompile(regexp.QuoteMeta(d.String()))
@@ -162,12 +162,12 @@ func (s *MatcherTestSuite) TestRegexNonString() {
 	s.NotMatches(s.mtchr.Match(M{"test": d}, M{"test": r}))
 }
 
-// Will not match if using regex in an unset field, but will not return error
+// Will not match if using regex in an unset field, but will not return error.
 func (s *MatcherTestSuite) TestRegexUndefined() {
 	s.NotMatches(s.mtchr.Match(M{}, M{"test": regexp.MustCompile(`^a$ `)}))
 }
 
-// Regular expression matching
+// Regular expression matching.
 func (s *MatcherTestSuite) TestMatchBasicQueryStringRegex() {
 	s.Matches(s.mtchr.Match(M{"test": "true"}, M{"test": regexp.MustCompile(`true`)}))
 	s.Matches(s.mtchr.Match(M{"test": "babaaaar"}, M{"test": regexp.MustCompile(`aba+r`)}))
@@ -175,7 +175,7 @@ func (s *MatcherTestSuite) TestMatchBasicQueryStringRegex() {
 	s.NotMatches(s.mtchr.Match(M{"test": "true"}, M{"test": regexp.MustCompile(`t[ru]e`)}))
 }
 
-// Can match strings using the $regex operator
+// Can match strings using the $regex operator.
 func (s *MatcherTestSuite) TestMatchStringRegexOperator() {
 	s.Matches(s.mtchr.Match(M{"test": "true"}, M{"test": M{"$regex": regexp.MustCompile(`true`)}}))
 	s.Matches(s.mtchr.Match(M{"test": "babaaaar"}, M{"test": M{"$regex": regexp.MustCompile(`aba+r`)}}))
@@ -183,7 +183,7 @@ func (s *MatcherTestSuite) TestMatchStringRegexOperator() {
 	s.NotMatches(s.mtchr.Match(M{"test": "true"}, M{"test": M{"$regex": regexp.MustCompile(`t[ru]e`)}}))
 }
 
-// Will throw if $regex operator is used with a non regex value
+// Will throw if $regex operator is used with a non regex value.
 func (s *MatcherTestSuite) TestNonRegexInOperator() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"test": "true"},
@@ -199,7 +199,7 @@ func (s *MatcherTestSuite) TestNonRegexInOperator() {
 	)
 }
 
-// Can use the $regex operator in conjunction with other operators
+// Can use the $regex operator in conjunction with other operators.
 func (s *MatcherTestSuite) TestRegexWithOtherOps() {
 	s.Matches(s.mtchr.Match(
 		M{"test": "helLo"},
@@ -218,7 +218,7 @@ func (s *MatcherTestSuite) TestRegexWithOtherOps() {
 }
 
 // Cannot compare a field to an object, an array, null or a boolean, it will
-// return false
+// return false.
 func (s *MatcherTestSuite) TestFieldLowerThanNonPrimitive() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lt": M{"a": 6}}}))
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lt": A{6, 7}}}))
@@ -226,7 +226,7 @@ func (s *MatcherTestSuite) TestFieldLowerThanNonPrimitive() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lt": true}}))
 }
 
-// Can compare numbers, with or without dot notation
+// Can compare numbers, with or without dot notation.
 func (s *MatcherTestSuite) TestLowerThanNumbers() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lt": 6}}))
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lt": 5}}))
@@ -236,7 +236,7 @@ func (s *MatcherTestSuite) TestLowerThanNumbers() {
 	s.NotMatches(s.mtchr.Match(M{"a": M{"b": 5}}, M{"a.b": M{"$lt": 3}}))
 }
 
-// Can compare strings, with or without dot notation
+// Can compare strings, with or without dot notation.
 func (s *MatcherTestSuite) TestLowerThanStrings() {
 	s.Matches(s.mtchr.Match(
 		M{"a": "gedb"},
@@ -257,14 +257,14 @@ func (s *MatcherTestSuite) TestLowerThanStrings() {
 	))
 }
 
-// If field is an array field, a match means a match on at least one element
+// If field is an array field, a match means a match on at least one element.
 func (s *MatcherTestSuite) TestLowerThanLooksUpArrayItems() {
 	s.NotMatches(s.mtchr.Match(M{"a": A{5, 10}}, M{"a": M{"$lt": 4}}))
 	s.Matches(s.mtchr.Match(M{"a": A{5, 10}}, M{"a": M{"$lt": 6}}))
 	s.Matches(s.mtchr.Match(M{"a": A{5, 10}}, M{"a": M{"$lt": 11}}))
 }
 
-// Works with dates too
+// Works with dates too.
 func (s *MatcherTestSuite) TestLowerThanDates() {
 	date1000 := time.UnixMilli(1000)
 	date1001 := time.UnixMilli(1001)
@@ -274,7 +274,7 @@ func (s *MatcherTestSuite) TestLowerThanDates() {
 
 }
 
-// $lte
+// $lte.
 func (s *MatcherTestSuite) TestLowerThanOrEqual() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lte": 6}}))
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$lte": 5}}))
@@ -282,7 +282,7 @@ func (s *MatcherTestSuite) TestLowerThanOrEqual() {
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$lte": []int{}}}))
 }
 
-// $gt
+// $gt.
 func (s *MatcherTestSuite) TestGreaterThan() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$gt": 6}}))
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$gt": 5}}))
@@ -290,7 +290,7 @@ func (s *MatcherTestSuite) TestGreaterThan() {
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$gt": []int{}}}))
 }
 
-// $gte
+// $gte.
 func (s *MatcherTestSuite) TestGreaterThanOrEqual() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$gte": 6}}))
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$gte": 5}}))
@@ -298,7 +298,7 @@ func (s *MatcherTestSuite) TestGreaterThanOrEqual() {
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$gte": []int{}}}))
 }
 
-// $ne
+// $ne.
 func (s *MatcherTestSuite) TestNotEqual() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$ne": 6}}))
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$ne": 5}}))
@@ -307,7 +307,7 @@ func (s *MatcherTestSuite) TestNotEqual() {
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$ne": []int{}}}))
 }
 
-// $in
+// $in.
 func (s *MatcherTestSuite) TestIn() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$in": A{6, 8, 9}}}))
 	s.Matches(s.mtchr.Match(M{"a": 6}, M{"a": M{"$in": A{6, 8, 9}}}))
@@ -320,7 +320,7 @@ func (s *MatcherTestSuite) TestIn() {
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$in": A{2}}}))
 }
 
-// $nin
+// $nin.
 func (s *MatcherTestSuite) TestNin() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$nin": A{6, 8, 9}}}))
 	s.NotMatches(s.mtchr.Match(M{"a": 6}, M{"a": M{"$nin": A{6, 8, 9}}}))
@@ -339,7 +339,7 @@ func (s *MatcherTestSuite) TestNin() {
 	))
 }
 
-// $exists
+// $exists.
 func (s *MatcherTestSuite) TestExists() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$exists": 1}}))
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"a": M{"$exists": true}}))
@@ -358,7 +358,7 @@ func (s *MatcherTestSuite) TestExists() {
 	s.Matches(s.mtchr.Match(M{"a": 5}, M{"b": M{"$exists": false}}))
 }
 
-// Will return error if FieldNavigator fails getting field value
+// Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestExistsFailGetField() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -395,7 +395,7 @@ func (s *MatcherTestSuite) TestCompareError() {
 	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$exists": A{[]int{}}}))
 }
 
-// will return error if matchList cannot get fields
+// will return error if matchList cannot get fields.
 func (s *MatcherTestSuite) TestMatchListFailGetField() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -414,7 +414,7 @@ func (s *MatcherTestSuite) TestMatchListFailGetField() {
 	fn.AssertExpectations(s.T())
 }
 
-// Can perform a direct array match
+// Can perform a direct array match.
 func (s *MatcherTestSuite) TestCompareArrays() {
 	s.NotMatches(s.mtchr.Match(
 		M{"planets": A{"Earth", "Mars", "Pluto"}, "something": "else"},
@@ -432,7 +432,7 @@ func (s *MatcherTestSuite) TestCompareArrays() {
 	))
 }
 
-// Can query on the size of an array field
+// Can query on the size of an array field.
 func (s *MatcherTestSuite) TestSize() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": A{
@@ -471,7 +471,7 @@ func (s *MatcherTestSuite) TestSize() {
 	))
 }
 
-// Can query on the size of a nested array field
+// Can query on the size of a nested array field.
 func (s *MatcherTestSuite) TestSizeNested() {
 	s.NotMatches(s.mtchr.Match(
 		M{"hello": "world",
@@ -514,7 +514,7 @@ func (s *MatcherTestSuite) TestSizeNested() {
 	))
 }
 
-// Can query on the size of a expanded array field
+// Can query on the size of a expanded array field.
 func (s *MatcherTestSuite) TestSizeExpanded() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": A{
@@ -553,7 +553,7 @@ func (s *MatcherTestSuite) TestSizeExpanded() {
 	))
 }
 
-// $size operator works with empty arrays
+// $size operator works with empty arrays.
 func (s *MatcherTestSuite) TestSizeEmpty() {
 	s.Matches(s.mtchr.Match(
 		M{"children": A{}},
@@ -572,7 +572,7 @@ func (s *MatcherTestSuite) TestSizeEmpty() {
 }
 
 // Should return an error if a query operator is used without comparing to an
-// integer
+// integer.
 func (s *MatcherTestSuite) TestSizeNonIntegerParam() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"children": A{1, 5}},
@@ -591,7 +591,7 @@ func (s *MatcherTestSuite) TestSizeNonIntegerParam() {
 
 }
 
-// Any numeric can be used in $size
+// Any numeric can be used in $size.
 func (s *MatcherTestSuite) TestSizeAcceptsAnyNumber() {
 	two := A{
 		int(2), int8(2), int16(2), int32(2), int64(2), uint(2),
@@ -611,7 +611,7 @@ func (s *MatcherTestSuite) TestSizeAcceptsAnyNumber() {
 	}
 }
 
-// Will return error if FieldNavigator fails getting field value
+// Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestSizeFailGetField() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -627,13 +627,13 @@ func (s *MatcherTestSuite) TestSizeFailGetField() {
 	s.ErrorMatch(s.mtchr.Match(A{}, M{"$size": M{}}))
 }
 
-// Will not count nil and undefined as len 0 array
+// Will not count nil and undefined as len 0 array.
 func (s *MatcherTestSuite) TestNilValueSize() {
 	s.NotMatches(s.mtchr.Match(M{"field": nil}, M{"field": M{"$size": 0}}))
 	s.NotMatches(s.mtchr.Match(M{"nope": nil}, M{"field": M{"$size": 0}}))
 }
 
-// Will return error if receives a non-integer number for $size
+// Will return error if receives a non-integer number for $size.
 func (s *MatcherTestSuite) TestNonIntegerNumber() {
 	broken := A{0.1, 0.4, 3.14, -1.99, 1.000000000001, -10.5, 7.75, 3.99999}
 
@@ -645,7 +645,7 @@ func (s *MatcherTestSuite) TestNonIntegerNumber() {
 }
 
 // Using $size operator on a non-array field should prevent match but not return
-// an error
+// an error.
 func (s *MatcherTestSuite) TestSizeNonArray() {
 	s.NotMatches(s.mtchr.Match(
 		M{"a": 5},
@@ -655,7 +655,7 @@ func (s *MatcherTestSuite) TestSizeNonArray() {
 
 // NOTE: CANNOT use $size several times. This test will not be added
 
-// Can query array documents with multiple simultaneous conditions
+// Can query array documents with multiple simultaneous conditions.
 func (s *MatcherTestSuite) TestElemMatch() {
 	s.Matches(s.mtchr.Match(
 		M{"children": A{
@@ -739,7 +739,7 @@ func (s *MatcherTestSuite) TestElemMatch() {
 	))
 }
 
-// $elemMatch operator works with empty arrays
+// $elemMatch operator works with empty arrays.
 func (s *MatcherTestSuite) TestElemMatchEmptyArray() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": A{}},
@@ -751,7 +751,7 @@ func (s *MatcherTestSuite) TestElemMatchEmptyArray() {
 	))
 }
 
-// Will return error if FieldNavigator fails getting field value
+// Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestElemMatchFailGetField() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
@@ -767,7 +767,7 @@ func (s *MatcherTestSuite) TestElemMatchFailGetField() {
 	s.ErrorMatch(s.mtchr.Match(A{}, M{"$elemMatch": M{}}))
 }
 
-// Can use more complex comparisons inside nested query documents
+// Can use more complex comparisons inside nested query documents.
 func (s *MatcherTestSuite) TestElemMatchComplex() {
 	s.Matches(s.mtchr.Match(
 		M{"children": A{
@@ -806,7 +806,7 @@ func (s *MatcherTestSuite) TestElemMatchComplex() {
 	))
 }
 
-// Any of the subqueries should match for an $or to match
+// Any of the subqueries should match for an $or to match.
 func (s *MatcherTestSuite) TestOr() {
 	s.Matches(s.mtchr.Match(
 		M{"hello": "world"},
@@ -834,7 +834,7 @@ func (s *MatcherTestSuite) TestOr() {
 	))
 }
 
-// All of the subqueries should match for an $and to match
+// All of the subqueries should match for an $and to match.
 func (s *MatcherTestSuite) TestAnd() {
 	s.Matches(s.mtchr.Match(
 		M{"hello": "world", "age": 15},
@@ -857,7 +857,7 @@ func (s *MatcherTestSuite) TestAnd() {
 	))
 }
 
-// Subquery should not match for a $not to match
+// Subquery should not match for a $not to match.
 func (s *MatcherTestSuite) TestNot() {
 	s.Matches(s.mtchr.Match(
 		M{"a": 5, "b": 10},
@@ -874,7 +874,7 @@ func (s *MatcherTestSuite) TestNot() {
 }
 
 // Logical operators are all top-level, only other logical operators can be
-// above
+// above.
 func (s *MatcherTestSuite) TestLogicalOperatorsTopLevel() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"a": M{"b": 7}},
@@ -886,7 +886,8 @@ func (s *MatcherTestSuite) TestLogicalOperatorsTopLevel() {
 	))
 }
 
-// Logical operators can be combined as long as they are on top of the decision tree
+// Logical operators can be combined as long as they are on top of the decision
+// tree.
 func (s *MatcherTestSuite) TestMultipleLogicalOps() {
 	s.Matches(s.mtchr.Match(
 		M{"a": 5, "b": 7, "c": 12},
@@ -917,14 +918,14 @@ func (s *MatcherTestSuite) TestMultipleLogicalOps() {
 }
 
 // Should throw an error if a logical operator is used without an array or if an
-// unknown logical operator is used
+// unknown logical operator is used.
 func (s *MatcherTestSuite) TestLogicOpError() {
 	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$or": M{"a": 5}}))
 	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$and": M{"a": 5}}))
 	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$unknown": A{M{"a": 5}}}))
 }
 
-// Function should match and not match correctly
+// Function should match and not match correctly.
 func (s *MatcherTestSuite) TestWhere() {
 	s.Matches(s.mtchr.Match(
 		M{"a": 4},
@@ -940,12 +941,12 @@ func (s *MatcherTestSuite) TestWhere() {
 	))
 }
 
-// Should throw an error if the $where function is not, in fact, a function
+// Should throw an error if the $where function is not, in fact, a function.
 func (s *MatcherTestSuite) TestWhereNotAFunction() {
 	s.ErrorMatch(s.mtchr.Match(M{"a": 4}, M{"$where": "not a function"}))
 }
 
-// Should throw an error if the $where function returns a non-boolean
+// Should throw an error if the $where function returns a non-boolean.
 func (s *MatcherTestSuite) TestWhereNonBoolean() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"a": 4},
@@ -955,7 +956,7 @@ func (s *MatcherTestSuite) TestWhereNonBoolean() {
 	))
 }
 
-// Should be able to do the complex matching it must be used for
+// Should be able to do the complex matching it must be used for.
 func (s *MatcherTestSuite) TestWhereComplexMatching() {
 	checkEmail := func(doc domain.Document) bool {
 		if !doc.Has("firstName") || !doc.Has("lastName") {
@@ -1018,7 +1019,7 @@ func (s *MatcherTestSuite) TestWhereComplexMatching() {
 	))
 }
 
-// Array field equality
+// Array field equality.
 func (s *MatcherTestSuite) TestArrayFieldEquality() {
 	s.NotMatches(s.mtchr.Match(
 		M{"tags": A{"go", "embedded", "db"}},
@@ -1053,7 +1054,7 @@ func (s *MatcherTestSuite) TestArrayFieldEquality() {
 	))
 }
 
-// Array fields with one comparison operator
+// Array fields with one comparison operator.
 func (s *MatcherTestSuite) TestArrayOneComparisonOp() {
 	s.NotMatches(s.mtchr.Match(
 		M{"ages": A{3, 7, 12}},
@@ -1077,7 +1078,7 @@ func (s *MatcherTestSuite) TestArrayOneComparisonOp() {
 	))
 }
 
-// Array fields work with arrays that are in subdocuments
+// Array fields work with arrays that are in subdocuments.
 func (s *MatcherTestSuite) TestArraySubDoc() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": M{"ages": A{3, 7, 12}}},
@@ -1101,7 +1102,7 @@ func (s *MatcherTestSuite) TestArraySubDoc() {
 	))
 }
 
-// Can query inside arrays thanks to dot notation
+// Can query inside arrays thanks to dot notation.
 func (s *MatcherTestSuite) TestQueryInsideArray() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": A{
@@ -1170,7 +1171,7 @@ func (s *MatcherTestSuite) TestQueryInsideArray() {
 	))
 }
 
-// Can query for a specific element inside arrays thanks to dot notation
+// Can query for a specific element inside arrays thanks to dot notation.
 func (s *MatcherTestSuite) TestMatchArrayOnIndex() {
 	doc := M{"children": A{
 		M{"name": "Huey", "age": 3},
@@ -1197,7 +1198,7 @@ func (s *MatcherTestSuite) TestMatchArrayOnIndex() {
 	))
 }
 
-// A single array-specific operator and the query is treated as array specific
+// A single array-specific operator and the query is treated as array specific.
 func (s *MatcherTestSuite) TestArraySpecificQuery() {
 	s.ErrorMatch(s.mtchr.Match(
 		M{"children": A{"Huguinho", "Zezinho", "Luisinho"}},
@@ -1205,7 +1206,8 @@ func (s *MatcherTestSuite) TestArraySpecificQuery() {
 	))
 }
 
-// Can mix queries on array fields and non array filds with array specific operators
+// Can mix queries on array fields and non array filds with array specific
+// operators.
 func (s *MatcherTestSuite) TestMixArrayAndNonArrayOps() {
 	doc := M{
 		"uncle":   "Donald",
@@ -1239,7 +1241,7 @@ func (s *MatcherTestSuite) TestMixArrayAndNonArrayOps() {
 	))
 }
 
-// can match non-doc queries
+// can match non-doc queries.
 func (s *MatcherTestSuite) TestNonDocMatch() {
 	// $regex
 	s.Matches(s.mtchr.Match("a", M{"$regex": regexp.MustCompile(`^a$`)}))
@@ -1287,7 +1289,7 @@ func (s *MatcherTestSuite) TestNonDocMatch() {
 	s.NotMatches(s.mtchr.Match(A{1, 2, 3}, M{"$elemMatch": 4}))
 }
 
-// Will not match query if second argument is not a doc
+// Will not match query if second argument is not a doc.
 func (s *MatcherTestSuite) TestNonDocQuery() {
 	s.NotMatches(s.mtchr.Match(M{"a": "value"}, "a"))
 	s.NotMatches(s.mtchr.Match(M{"a": "value"}, "value"))
@@ -1322,7 +1324,7 @@ func (s *MatcherTestSuite) TestNonDocFailNewDoc() {
 	s.ErrorMatch(s.mtchr.Match("a", "a"))
 }
 
-// cannot mix normal fields and operators in queries
+// cannot mix normal fields and operators in queries.
 func (s *MatcherTestSuite) TestMixOperators() {
 	// without operator works
 	s.Matches(s.mtchr.Match(

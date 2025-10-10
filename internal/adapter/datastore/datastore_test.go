@@ -104,6 +104,7 @@ func (s *DatastoreTestSuite) TestAutoloading() {
 		cur, err := db.Find(ctx, nil)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
+		s.NoError(err)
 		s.Len(docs, 2)
 	})
 
@@ -219,7 +220,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// If an object returned from the DB is modified and refetched, the original value should be found
 	s.Run("CannotModifyFetched", func() {
-		s.d.insert(ctx, data.M{"a": "something"})
+		_, err := s.d.insert(ctx, data.M{"a": "something"})
+		s.NoError(err)
 
 		doc := make(data.M)
 		s.NoError(s.d.FindOne(ctx, nil, &doc))
@@ -259,7 +261,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.ErrorAs(err, &e)
 	})
 
-	// Modifying the insertedDoc after an insert doesnt change the copy saved in the database
+	// Modifying the insertedDoc after an insert doesn1t change the copy saved in the database
 	s.Run("InsertReturnsUnmodifiableDocs", func() {
 		newDoc, err := s.d.Insert(ctx, data.M{"a": 2, "hello": "world"})
 		s.NoError(err)
@@ -353,7 +355,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 	s.Run("TimestampDataAddsCreatedAtField", func() {
 		newDoc := data.M{"hello": "world"}
 
-		// precision bellow milliseconds and comparison would fail
+		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
 
 		timeGetter := new(timeGetterMock)
@@ -373,6 +375,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Len(docs, 0)
 
 		insertedDocs, err := d.Insert(ctx, newDoc)
+		s.NoError(err)
 		s.Len(insertedDocs, 1)
 		insertedDoc := insertedDocs[0]
 
@@ -442,7 +445,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 	s.Run("ShouldNotChangeProvidedCreatedAtField", func() {
 		newDoc := data.M{"hello": "world", "createdAt": time.UnixMilli(234)}
 
-		// precision bellow milliseconds and comparison would fail
+		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
 
 		timeGetter := new(timeGetterMock)
@@ -481,7 +484,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 	s.Run("ShouldNotChangeProvidedCreatedAtField", func() {
 		newDoc := data.M{"hello": "world", "updatedAt": time.UnixMilli(234)}
 
-		// precision bellow milliseconds and comparison would fail
+		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
 
 		timeGetter := new(timeGetterMock)
@@ -536,6 +539,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_, err = s.d.Insert(ctx, data.M{"tf": 6})
 		s.NoError(err)
 		_doc2, err := s.d.Insert(ctx, data.M{"tf": 4, "an": "other"})
+		s.NoError(err)
 		s.Len(_doc2, 1)
 		_, err = s.d.Insert(ctx, data.M{"tf": 9})
 		s.NoError(err)
@@ -565,6 +569,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_doc1, err := s.d.Insert(ctx, data.M{"tf": 4, "tg": 1, "foo": 3})
 		s.NoError(err)
 		_, err = s.d.Insert(ctx, data.M{"tf": 6, "tg": 1, "foo": 4})
+		s.NoError(err)
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "tg": 1}, false)
 		s.NoError(err)
 		s.Len(dt, 1)
@@ -1228,7 +1233,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Equal(beginning, insertedDocs[0].Get("createdAt"))
 		s.Len(insertedDocs[0], 4)
 
-		call = timeGetter.On("GetTime").Return(beginning.Add(time.Millisecond))
+		timeGetter.On("GetTime").Return(beginning.Add(time.Millisecond))
 		n, err := d.Update(ctx, data.M{"_id": insertedDocs[0].ID()}, data.M{"$set": data.M{"hello": "mars"}})
 		s.NoError(err)
 		s.Len(n, 1)
@@ -1544,7 +1549,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Equal(newDocs[0], doc)
 	})
 
-	// Cant change the _id of a document
+	// Can't change the _id of a document
 	s.Run("CannotChangeID", func() {
 		newDocs, err := s.d.Insert(ctx, data.M{"a": 2})
 		s.NoError(err)
@@ -1722,7 +1727,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		// unset after find because it gets time to remove expired docs
 		call.Unset()
 
-		call = timeGetter.On("GetTime").Return(beginning.Add(time.Second))
+		timeGetter.On("GetTime").Return(beginning.Add(time.Second))
 
 		n, err := d2.Update(ctx, data.M{"a": 1}, data.M{"$set": data.M{"b": 2}})
 		s.NoError(err)
@@ -1733,7 +1738,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.NoError(err)
 		s.Equal(createdAt, doc.Get("createdAt"))
 
-		call = timeGetter.On("GetTime").Return(beginning.Add(time.Minute))
+		timeGetter.On("GetTime").Return(beginning.Add(time.Minute))
 
 		n, err = d2.Update(ctx, data.M{"a": 1}, data.M{"c": 3})
 		s.NoError(err)
@@ -1745,7 +1750,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Equal(createdAt, doc.Get("createdAt"))
 	})
 
-	// NOTE: 'Callback signature' tests not added because we dont use callbacks
+	// NOTE: 'Callback signature' tests not added because we don't use
+	// callbacks
 
 } // ==== End of 'Update' ==== //
 
@@ -1802,7 +1808,6 @@ func (s *DatastoreTestSuite) TestRemove() {
 		c := sync.NewCond(mu)
 
 		for _, planet := range [...]string{"Mars", "Saturn"} {
-			planet := planet // planet in this scope
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -2417,7 +2422,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		})
 
-		// Unique indexes prevent you from inserting two docs where the field is undefined except if theyre sparse
+		// Unique indexes prevent you from inserting two docs where the
+		// field is undefined except if they're sparse
 		s.Run("SparseAcceptUnset", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithEnsureIndexFieldNames("zzz"),
@@ -2483,8 +2489,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(s.d.getAllData(), 2)
 
 			matching, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["a"].GetMatching(1)
+			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["_id"].GetMatching(doc1[0].ID())
 			s.NoError(err)
@@ -2493,8 +2501,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(expected[0], matching[0])
 
 			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["a"].GetMatching(2)
+			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
 			s.NoError(err)
@@ -2673,7 +2683,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 		})
 
-		// If a simple update violates a contraint, all changes are rolled back and an error is thrown
+		// If a simple update violates a constraint, all changes are
+		// rolled back and an error is thrown
 		s.Run("RollbackAllOnViolationSimple", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithEnsureIndexFieldNames("a"),
@@ -2742,7 +2753,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(doc3, matching[0])
 		})
 
-		// If a multi update violates a contraint, all changes are rolled back and an error is thrown
+		// If a multi update violates a constraint, all changes are
+		// rolled back and an error is thrown
 		s.Run("RollbackAllOnViolationMulti", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithEnsureIndexFieldNames("a"),
@@ -2906,7 +2918,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			persDB := "../../../workspace/persistIndexes.db"
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
-				os.WriteFile(persDB, nil, DefaultFileMode)
+				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
 			db, err := LoadDatastore(ctx, domain.WithDatastoreFilename(persDB))
@@ -2958,7 +2970,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			persDB := "../../../workspace/persistIndexes.db"
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
-				os.WriteFile(persDB, nil, DefaultFileMode)
+				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
 			db, err := LoadDatastore(ctx, domain.WithDatastoreFilename(persDB))
@@ -3057,7 +3069,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			persDB := "../../../workspace/persistIndexes.db"
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
-				os.WriteFile(persDB, nil, DefaultFileMode)
+				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
 			db, err := LoadDatastore(ctx, domain.WithDatastoreFilename(persDB))
@@ -3133,4 +3145,4 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Len(candidates, 1)
 	})
 
-} // ==== End of 'Using indexes' ==== //
+}

@@ -40,9 +40,6 @@ type Datastore struct {
 	filename              string
 	timestampData         bool
 	inMemoryOnly          bool
-	autoload              bool
-	serializer            domain.Serializer
-	deserializer          domain.Deserializer
 	corruptAlertThreshold float64
 	comparer              domain.Comparer
 	fileMode              os.FileMode
@@ -74,7 +71,7 @@ func LoadDatastore(ctx context.Context, options ...domain.DatastoreOption) (doma
 	return db, nil
 }
 
-// NewDatastore returns a new implementation of Datastore
+// NewDatastore returns a new implementation of Datastore.
 func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 
 	comp := comparer.NewComparer()
@@ -264,7 +261,7 @@ func (d *Datastore) clone(v any) (any, error) {
 	}
 }
 
-// CompactDatafile implements domain.domain.
+// CompactDatafile implements domain.GEDB.
 func (d *Datastore) CompactDatafile(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -277,7 +274,7 @@ func (d *Datastore) CompactDatafile(ctx context.Context) error {
 	return d.persistence.PersistCachedDatabase(ctx, allData, indexDTOs)
 }
 
-// Count implements domain.domain.
+// Count implements domain.GEDB.
 func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return 0, err
@@ -318,14 +315,14 @@ func (d *Datastore) createNewID() (string, error) {
 	}
 }
 
-// DropDatabase implements domain.domain.
+// DropDatabase implements domain.GEDB.
 func (d *Datastore) DropDatabase(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
 	}
 	defer d.executor.Unlock()
 	ctx = context.WithoutCancel(ctx) // should complete this task
-	// d.StopAutocompaction not added for now
+	// d.StopAutocompaction not added for now.
 	IDIdx, err := d.indexFactory(domain.WithIndexFieldName("_id"))
 	if err != nil {
 		return err
@@ -335,7 +332,7 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	return d.persistence.DropDatabase(ctx)
 }
 
-// EnsureIndex implements domain.domain.
+// EnsureIndex implements domain.GEDB.
 func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureIndexOption) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -419,7 +416,7 @@ func (d *Datastore) filterIndexNames(indexNames []string, k string, v any) bool 
 	return true
 }
 
-// Find implements domain.domain.
+// Find implements domain.GEDB.
 func (d *Datastore) Find(ctx context.Context, query any, options ...domain.FindOption) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -474,7 +471,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 	return d.cursorFactory(ctx, allData, cursorOptions...)
 }
 
-// FindOne implements domain.domain.
+// FindOne implements domain.GEDB.
 func (d *Datastore) FindOne(ctx context.Context, query any, target any, options ...domain.FindOption) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -494,7 +491,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	return cur.Exec(ctx, target)
 }
 
-// GetAllData implements domain.domain.
+// GetAllData implements domain.GEDB.
 func (d *Datastore) GetAllData(ctx context.Context) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -641,7 +638,7 @@ IndexesLoop:
 	return d.getAllData(), nil
 }
 
-// Insert implements domain.domain.
+// Insert implements domain.GEDB.
 func (d *Datastore) Insert(ctx context.Context, newDocs ...any) ([]domain.Document, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -658,7 +655,7 @@ func (d *Datastore) insert(ctx context.Context, newDocs ...any) ([]domain.Docume
 	if err != nil {
 		return nil, err
 	}
-	// avoid a mess by ensuring it wont cancel during cache insertion
+	// avoid a mess by ensuring it won't cancel during cache insertion
 	ctx = context.WithoutCancel(ctx)
 	if err = d.insertInCache(ctx, preparedDocs); err != nil {
 		return nil, err
@@ -691,7 +688,7 @@ func (d *Datastore) insertInCache(ctx context.Context, preparedDocs []domain.Doc
 	return nil
 }
 
-// LoadDatabase implements domain.domain.
+// LoadDatabase implements domain.GEDB.
 func (d *Datastore) LoadDatabase(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -765,7 +762,7 @@ func (d *Datastore) prepareDocumentsForInsertion(newDocs []any) ([]domain.Docume
 	return preparedDocs, nil
 }
 
-// Remove implements domain.domain.
+// Remove implements domain.GEDB.
 func (d *Datastore) Remove(ctx context.Context, query any, options ...domain.RemoveOption) (int64, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return 0, err
@@ -836,7 +833,7 @@ func (d *Datastore) removeFromIndexes(ctx context.Context, doc domain.Document) 
 	return nil
 }
 
-// RemoveIndex implements domain.domain.
+// RemoveIndex implements domain.GEDB.
 func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -875,7 +872,7 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...domain.Document) e
 	return nil
 }
 
-// Update implements domain.domain.
+// Update implements domain.GEDB.
 func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) ([]domain.Document, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -995,7 +992,7 @@ func (d *Datastore) updateIndexes(ctx context.Context, mods []domain.Update) err
 	return err
 }
 
-// WaitCompaction implements domain.domain.
+// WaitCompaction implements domain.GEDB.
 func (d *Datastore) WaitCompaction(ctx context.Context) error {
 	return d.persistence.WaitCompaction(ctx)
 }

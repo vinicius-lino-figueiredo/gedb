@@ -19,7 +19,7 @@ func NewFieldNavigator(docFac func(any) (domain.Document, error)) domain.FieldNa
 	}
 }
 
-// GetAddress returns a new instance of [domain.FieldNavigator].
+// GetAddress implements [domain.FieldNavigator].
 func (fn *FieldNavigator) GetAddress(field string) ([]string, error) {
 	return strings.Split(field, "."), nil
 }

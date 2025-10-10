@@ -9,8 +9,8 @@ import (
 )
 
 var osSpecificEnsureDir = func(o osOps, dir string, mode os.FileMode) error {
-	// default behavior for ensuring a dir is to always create the dir. On
-	// windows, we do not ensure if it is root.
+	// default behavior for ensuring a dir is to always create the
+	// directory. On windows, we do not ensure if it is root.
 	return o.MkdirAll(dir, mode)
 }
 

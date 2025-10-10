@@ -199,13 +199,13 @@ func (p *parser) decodeString(b []byte) (string, error) {
 				w++
 			case 'u':
 				i--
-				rr := p.getUft(b[i:])
+				rr := p.getUTF(b[i:])
 				if rr < 0 {
 					return "", errors.New("invalid utf8 char")
 				}
 				i += 6
 				if utf16.IsSurrogate(rr) {
-					rr1 := p.getUft(b[i:])
+					rr1 := p.getUTF(b[i:])
 					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
 						i += 6
 						w += utf8.EncodeRune(out[w:], dec)
@@ -235,7 +235,7 @@ func (p *parser) decodeString(b []byte) (string, error) {
 	return string(out[0:w]), nil
 }
 
-func (p *parser) getUft(b []byte) rune {
+func (p *parser) getUTF(b []byte) rune {
 	if len(b) < 6 || b[0] != '\\' || b[1] != 'u' {
 		return -1
 	}

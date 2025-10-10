@@ -26,7 +26,7 @@ func (s *SerializerTestSuite) SetupTest() {
 	s.s = NewSerializer(comparer, docFac).(*Serializer)
 }
 
-// Can serialize strings
+// Can serialize strings.
 func (s *SerializerTestSuite) TestString() {
 	a := data.M{"test": "Some string"}
 	b, err := s.s.Serialize(ctx, a)
@@ -37,7 +37,7 @@ func (s *SerializerTestSuite) TestString() {
 
 }
 
-// Can serialize booleans
+// Can serialize booleans.
 func (s *SerializerTestSuite) TestBool() {
 	a := data.M{"test1": true, "test2": false}
 	b, err := s.s.Serialize(ctx, a)
@@ -48,7 +48,7 @@ func (s *SerializerTestSuite) TestBool() {
 	s.False(false, r["test2"])
 }
 
-// Can serialize numbers
+// Can serialize numbers.
 func (s *SerializerTestSuite) TestNumber() {
 	a := data.M{"test1": 5, "test2": 6.2}
 	b, err := s.s.Serialize(ctx, a)
@@ -59,7 +59,7 @@ func (s *SerializerTestSuite) TestNumber() {
 	s.Equal(6.2, r["test2"])
 }
 
-// Can serialize null
+// Can serialize null.
 func (s *SerializerTestSuite) TestNil() {
 	a := data.M{"test": nil}
 	b, err := s.s.Serialize(ctx, a)
@@ -69,7 +69,7 @@ func (s *SerializerTestSuite) TestNil() {
 	s.Equal(nil, r["test"])
 }
 
-// Can serialize time.Time
+// Can serialize time.Time.
 func (s *SerializerTestSuite) TestDate() {
 	d := time.Now()
 
@@ -81,7 +81,7 @@ func (s *SerializerTestSuite) TestDate() {
 	s.Equal(map[string]any{"$$date": float64(d.UnixMilli())}, r["test"])
 }
 
-// Can serialize sub objects
+// Can serialize sub objects.
 func (s *SerializerTestSuite) TestNestedDocs() {
 	d := time.Now()
 
@@ -94,7 +94,7 @@ func (s *SerializerTestSuite) TestNestedDocs() {
 	s.Equal("yes", r.D("test").D("yes").Get("again"))
 }
 
-// Can serialize sub arrays
+// Can serialize sub arrays.
 func (s *SerializerTestSuite) TestNestedSlices() {
 	d := time.Now()
 
@@ -108,7 +108,8 @@ func (s *SerializerTestSuite) TestNestedSlices() {
 	s.Equal("yes", r["test"].([]any)[2].(map[string]any)["again"])
 }
 
-// Reject field names beginning with a $ sign or containing a dot, except the four edge cases
+// Reject field names beginning with a $ sign or containing a dot, except the
+// four edge cases.
 func (s *SerializerTestSuite) TestRejectBadDollarFields() {
 	a := []data.M{
 		{"$$date": nil},
@@ -137,7 +138,7 @@ func (s *SerializerTestSuite) TestRejectBadDollarFields() {
 
 }
 
-// Can serialize strings despite of line breaks
+// Can serialize strings despite of line breaks.
 func (s *SerializerTestSuite) TestStringWithLineBreak() {
 	badString := "world\r\nearth\nother\rline"
 	a := data.M{"test": badString}
@@ -152,7 +153,7 @@ func (s *SerializerTestSuite) TestStringWithLineBreak() {
 // NOTE: No tests for numeric keys in serialization. JavaScript-only feature
 // not worth the development cost and performance impact.
 
-// Serialization with a canceled context should fail
+// Serialization with a canceled context should fail.
 func (s *SerializerTestSuite) TestContext() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -171,7 +172,7 @@ func (s *SerializerTestSuite) TestContext() {
 	s.Nil(b)
 }
 
-// Serialization should not succeed if document factory fails at least once
+// Serialization should not succeed if document factory fails at least once.
 func (s *SerializerTestSuite) TestInvalidDocFactory() {
 	count := 0
 	// failing on second call so it can fail at nested doc in copyAny

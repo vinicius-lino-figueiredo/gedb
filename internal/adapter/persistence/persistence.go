@@ -74,7 +74,7 @@ func NewPersistence(options ...domain.PersistenceOption) (domain.Persistence, er
 	}
 
 	if !opts.InMemoryOnly && opts.Filename != "" && strings.HasSuffix(opts.Filename, "~") {
-		return nil, errors.New("the datafile name can't end with a ~, which is reserved for crash safe backup files")
+		return nil, errors.New("the datafile name cannot end with a ~, which is reserved for crash safe backup files")
 	}
 
 	return &Persistence{
@@ -134,8 +134,8 @@ func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Doc
 	return err
 }
 
-// TreadRawStream implements domain.Persistence.
-func (p *Persistence) TreadRawStream(ctx context.Context, rawStream io.Reader) ([]domain.Document, map[string]domain.IndexDTO, error) {
+// TreatRawStream implements domain.Persistence.
+func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) ([]domain.Document, map[string]domain.IndexDTO, error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -227,10 +227,10 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 		return nil, nil, ctx.Err()
 	default:
 	}
-	// NOTE: Not Reseting DB indexes here. This should be done in the
+	// NOTE: Not Resetting DB indexes here. This should be done in the
 	// datastore implementation
 
-	// In-memoery only datastore
+	// In-memory only datastore
 	if p.inMemoryOnly {
 		return nil, nil, nil
 	}
@@ -252,14 +252,14 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 	}
 	defer fileStream.Close()
 
-	newDocs, newIdxs, err := p.TreadRawStream(ctx, fileStream)
+	newDocs, newIdxs, err := p.TreatRawStream(ctx, fileStream)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// NOTE: The original function modifies some data in the datastore
-	// instance. This is intentionally avoided to prevent coupling between
-	// datastore types in this package
+	// NOTE: The original function (shown below) modifies some data in the
+	// datastore instance. This is intentionally avoided to prevent coupling
+	// between datastore types in this package
 	//
 	// // Recreate all indexes in the datafile
 	// Object.keys(treatedData.indexes).forEach(key => {

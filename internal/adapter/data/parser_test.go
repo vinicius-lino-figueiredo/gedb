@@ -539,9 +539,6 @@ var unmarshalTests = []struct {
 func TestParser(t *testing.T) {
 	for _, tc := range unmarshalTests {
 		t.Run(tc.CaseName, func(t *testing.T) {
-			if tc.CaseName == "incomplete_escape" {
-				println("")
-			}
 			p := parser{data: []byte(tc.in), n: len(tc.in)}
 			res, err := p.parse()
 			if jsonerr := json.Unmarshal([]byte(tc.in), new(any)); jsonerr != nil {

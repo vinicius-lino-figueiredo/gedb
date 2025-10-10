@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
@@ -23,14 +22,12 @@ type Cursor struct {
 	ctx            context.Context
 	mu             *ctxsync.Mutex
 	dec            domain.Decoder
-	once           sync.Once
 	started        bool
-	closed         bool
 	storedErr      error
 	fieldNavigator domain.FieldNavigator
 }
 
-// NewCursor returns a new implementation of Cursor
+// NewCursor returns a new implementation of Cursor.
 func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.CursorOption) (domain.Cursor, error) {
 	select {
 	case <-ctx.Done():
@@ -67,7 +64,7 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 	var doesMatch bool
 	var err error
 	var added int64
-	var skiped int64
+	var skipped int64
 	for _, doc := range dt {
 		doesMatch, err = opts.Matcher.Match(doc, opts.Query)
 		if err != nil {
@@ -80,8 +77,8 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 			res = append(res, doc)
 			continue
 		}
-		if opts.Skip > skiped {
-			skiped++
+		if opts.Skip > skipped {
+			skipped++
 			continue
 		}
 
@@ -106,7 +103,7 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 		}
 	}
 
-	// just making sure the iteration wont receive a negative number
+	// just making sure the iteration won't receive a negative number
 	opts.Skip = max(0, opts.Skip)
 	res = res[opts.Skip:]
 
@@ -349,8 +346,8 @@ func (c *Cursor) removeField(doc map[string]any, proj string) {
 		}
 		switch v := val.(type) {
 		// Projecting "hello.0": 0 on an array of data replaces the
-		// value with null, preserving the index. Not sure if this is
-		// intended, but I'm replicating the behavior.
+		// value with null, preserving the index. It is unclear if this
+		// is intended, but it was replicated regardless
 		case []any:
 			if n == len(projParts)-1 {
 				idx, err := strconv.Atoi(lastPart)

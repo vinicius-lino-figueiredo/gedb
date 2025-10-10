@@ -93,15 +93,14 @@ func (o *osOptsMock) WriteFile(name string, data []byte, perm os.FileMode) error
 
 type StorageTestSuite struct {
 	suite.Suite
-	store  *Storage
-	osImpl osImpl
+	store *Storage
 }
 
 func (s *StorageTestSuite) SetupTest() {
 	s.store = NewStorage().(*Storage)
 }
 
-// Will append to existent file
+// Will append to existent file.
 func (s *StorageTestSuite) TestAppendExistentFile() {
 
 	file := s.ExistentFile(s.T())
@@ -115,7 +114,7 @@ func (s *StorageTestSuite) TestAppendExistentFile() {
 	s.Equal([]byte(testLine), bytes)
 }
 
-// Will append to non-empty file
+// Will append to non-empty file.
 func (s *StorageTestSuite) TestAppendNonEmptyFile() {
 
 	file := s.NonEmptyFile(s.T())
@@ -129,7 +128,7 @@ func (s *StorageTestSuite) TestAppendNonEmptyFile() {
 	s.Equal("123\n"+testLine, string(bytes))
 }
 
-// Will create file if it does not exist
+// Will create file if it does not exist.
 func (s *StorageTestSuite) TestAppendNonExistentFile() {
 	file := s.NonexistentFile(s.T())
 
@@ -142,7 +141,7 @@ func (s *StorageTestSuite) TestAppendNonExistentFile() {
 	s.Equal([]byte(testLine), bytes)
 }
 
-// Will fail to append to read-only file
+// Will fail to append to read-only file.
 func (s *StorageTestSuite) TestAppendReadOnlyFile() {
 
 	file := s.ReadOnlyFile(s.T())
@@ -181,7 +180,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteInvalidDir() {
 	invalidDir := filepath.Join(s.T().TempDir(), "invalid", "dir")
 	s.NoError(os.MkdirAll(invalidDir, 0777))
 	s.NoError(os.Chmod(filepath.Dir(invalidDir), 0000))
-	defer os.Chmod(filepath.Dir(invalidDir), 0777)
+	defer s.NoError(os.Chmod(filepath.Dir(invalidDir), 0777))
 
 	lines := [][]byte{[]byte("abc123")}
 	err := s.store.CrashSafeWriteFileLines(invalidDir, lines, 0666, 0666)
@@ -197,7 +196,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteReadOnlyFile() {
 	s.Error(err)
 }
 
-// Will not overwrite data if program crashes during crash safe write
+// Will not overwrite data if program crashes during crash safe write.
 func (s *StorageTestSuite) TestCrashSafeWrite() {
 
 	dir := s.T().TempDir()
@@ -250,7 +249,7 @@ func (s *StorageTestSuite) MakeCrashableTest(name, file, lineVal string, crash t
 	}
 }
 
-// Will return error if parent exists, but is a file and not a directory
+// Will return error if parent exists, but is a file and not a directory.
 func (s *StorageTestSuite) TestCrashSafeWriteFileLinesInaccessibleFile() {
 
 	dir := filepath.Join(s.T().TempDir(), "notadir.txt")
@@ -339,13 +338,13 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailFlushingRenamed() {
 	om.AssertExpectations(s.T())
 }
 
-// Will not get any error when ensuring integrity of existing file
+// Will not get any error when ensuring integrity of existing file.
 func (s *StorageTestSuite) TestEnsureDatafileIntegrityExistingFile() {
 	file := s.ExistentFile(s.T())
 	s.NoError(s.store.EnsureDatafileIntegrity(file, 0000))
 }
 
-// Will not get any error when ensuring integrity of existing file
+// Will not get any error when ensuring integrity of existing file.
 func (s *StorageTestSuite) TestEnsureDatafileIntegrityNonExistingFile() {
 	file := s.NonexistentFile(s.T())
 
@@ -413,7 +412,7 @@ func (s *StorageTestSuite) TestEnsureParentDirectoryExistsFailAbs() {
 	s.NoError(os.Chmod(dir, 0777))
 
 	s.NoError(os.Chdir(dir))
-	defer os.Chdir(back)
+	defer func() { s.NoError(os.Chdir(back)) }()
 	s.NoError(os.Remove(abs))
 
 	s.Error(s.store.EnsureParentDirectoryExists("subdir", 0000))
@@ -465,7 +464,7 @@ func (s *StorageTestSuite) TestReadFileStream() {
 	s.Nil(nonexistent)
 }
 
-func (s *StorageTestSuite) TestWriteFileLinesErrorWritting() {
+func (s *StorageTestSuite) TestWriteFileLinesErrorWriting() {
 	file := s.ExistentFile(s.T())
 
 	om := new(osOptsMock)

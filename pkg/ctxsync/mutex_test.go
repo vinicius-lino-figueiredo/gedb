@@ -31,7 +31,7 @@ func TestLock(t *testing.T) {
 		go func() {
 			defer add.Done()
 			getReady.Done()
-			<-ch // released afer all goroutines are locked here
+			<-ch // released after all goroutines are locked here
 			mu.Lock()
 			defer mu.Unlock()
 			n++
@@ -77,7 +77,7 @@ func TestOrder(t *testing.T) {
 	assert.True(t, slices.IsSorted(n))
 }
 
-// Calling LockWithContext with a valid context should not return any errors
+// Calling LockWithContext with a valid context should not return any errors.
 func TestContext(t *testing.T) {
 	workers := 1000
 
@@ -246,7 +246,7 @@ func TestIndependentCancelling(t *testing.T) {
 
 }
 
-// Should not wait for lock if passed context is already canceled
+// Should not wait for lock if passed context is already canceled.
 func TestCanceledContext(t *testing.T) {
 	workers := 1000
 
@@ -345,7 +345,7 @@ func TestDoubleUnlock(t *testing.T) {
 	mu := ctxsync.NewMutex()
 
 	ctx := context.Background()
-	mu.LockWithContext(ctx)
+	assert.NoError(t, mu.LockWithContext(ctx))
 	mu.Unlock()
 
 	assert.Panics(t, func() {
@@ -360,7 +360,7 @@ func BenchmarkLockUnlock(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			mu.LockWithContext(ctx)
+			_ = mu.LockWithContext(ctx)
 			mu.Unlock()
 		}
 	})
@@ -369,12 +369,12 @@ func BenchmarkLockUnlock(b *testing.B) {
 // BenchmarkTimeoutLock tests timeout cancellation performance.
 func BenchmarkTimeoutLock(b *testing.B) {
 	mu := ctxsync.NewMutex()
-	mu.LockWithContext(context.Background()) // Hold the lock
+	_ = mu.LockWithContext(context.Background()) // Hold the lock
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-			mu.LockWithContext(ctx)
+			_ = mu.LockWithContext(ctx)
 			cancel()
 		}
 	})
@@ -388,7 +388,7 @@ func BenchmarkLockCanceledContext(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			mu.LockWithContext(ctx)
+			_ = mu.LockWithContext(ctx)
 		}
 	})
 }

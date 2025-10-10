@@ -71,7 +71,7 @@ func (s *ModifierTestSuite) SetupTest() {
 }
 
 // Queries not containing any modifier just replace the document by the
-// contents of the query but keep its _id
+// contents of the query but keep its _id.
 func (s *ModifierTestSuite) TestModifyDoc() {
 	obj := M{"some": "thing", "_id": "keepit"}
 	updateQuery := M{"replace": "done", "bloup": A{1, 8}}
@@ -80,7 +80,8 @@ func (s *ModifierTestSuite) TestModifyDoc() {
 	s.Equal(M{"replace": "done", "bloup": A{1, 8}, "_id": "keepit"}, t)
 }
 
-// Return an error if trying to change the _id field in a copy-type modification
+// Return an error if trying to change the _id field in a copy-type
+// modification.
 func (s *ModifierTestSuite) TestModifyID() {
 	obj := M{"some": "thing", "_id": "keepit"}
 	updateQuery := M{
@@ -93,7 +94,7 @@ func (s *ModifierTestSuite) TestModifyID() {
 	s.Error(err)
 }
 
-// Return an error if obj and query have invalid _id's
+// Return an error if obj and query have invalid _id's.
 func (s *ModifierTestSuite) TestModifyInvalidID() {
 	obj := M{"some": "thing", "_id": []string{}}
 	updateQuery := M{"_id": []string{}}
@@ -102,7 +103,7 @@ func (s *ModifierTestSuite) TestModifyInvalidID() {
 	s.Error(err)
 }
 
-// Should not return error when setting unchanged _id
+// Should not return error when setting unchanged _id.
 func (s *ModifierTestSuite) TestModifyUnchangedID() {
 	obj := M{"_id": 1}
 	updateQuery := M{"_id": 1}
@@ -112,7 +113,7 @@ func (s *ModifierTestSuite) TestModifyUnchangedID() {
 	s.Equal(M{"_id": 1}, t)
 }
 
-// Will return error if document factory fails on copying modifications
+// Will return error if document factory fails on copying modifications.
 func (s *ModifierTestSuite) TestCopyWithFailedNewDoc() {
 	obj := M{}
 	updateQuery := M{}
@@ -126,7 +127,7 @@ func (s *ModifierTestSuite) TestCopyWithFailedNewDoc() {
 	s.Nil(t)
 }
 
-// Will return error if document factory fails during $unset
+// Will return error if document factory fails during $unset.
 func (s *ModifierTestSuite) TestModifyWithFailedNewDoc() {
 	obj := M{}
 	updateQuery := M{"$unset": M{"a": true}}
@@ -140,7 +141,7 @@ func (s *ModifierTestSuite) TestModifyWithFailedNewDoc() {
 	s.Nil(t)
 }
 
-// Return an error if trying to use modify in a mixed copy+modify way
+// Return an error if trying to use modify in a mixed copy+modify way.
 func (s *ModifierTestSuite) TestMixCopyModify() {
 	obj := M{"some": "thing"}
 	updateQuery := M{"replace": "me", "$modify": "metoo"}
@@ -149,7 +150,7 @@ func (s *ModifierTestSuite) TestMixCopyModify() {
 	s.Error(err)
 }
 
-// Return an error if trying to use an inexistent modifier
+// Return an error if trying to use an inexistent modifier.
 func (s *ModifierTestSuite) TestInexistentModifier() {
 	obj := M{"some": "thing"}
 	updateQuery := M{"$set": M{"it": "exists"}, "$modify": "not this one"}
@@ -158,7 +159,7 @@ func (s *ModifierTestSuite) TestInexistentModifier() {
 	s.Error(err)
 }
 
-// Return an error if a modifier is used with a non-object argument
+// Return an error if a modifier is used with a non-object argument.
 func (s *ModifierTestSuite) TestSetObjectArgument() {
 	obj := M{"some": "thing"}
 	updateQuery := M{"$set": "this stat"}
@@ -167,7 +168,7 @@ func (s *ModifierTestSuite) TestSetObjectArgument() {
 	s.Error(err)
 }
 
-// Can change already set fields without modifying the underlying object
+// Can change already set fields without modifying the underlying object.
 func (s *ModifierTestSuite) TestSetExistentFields() {
 	obj := M{"some": "thing", "yup": "yes", "nay": "noes"}
 	updateQuery := M{"$set": M{"some": "changed", "nay": "yes indeed"}}
@@ -180,7 +181,7 @@ func (s *ModifierTestSuite) TestSetExistentFields() {
 	s.Equal(M{"some": "thing", "yup": "yes", "nay": "noes"}, obj)
 }
 
-// Creates fields to set if they dont exist yet
+// Creates fields to set if they don't exist yet.
 func (s *ModifierTestSuite) TestSetCreatesFields() {
 	obj := M{"yup": "yes"}
 	updateQuery := M{"$set": M{"some": "changed", "nay": "yes indeed"}}
@@ -190,7 +191,7 @@ func (s *ModifierTestSuite) TestSetCreatesFields() {
 	s.Equal(M{"yup": "yes", "some": "changed", "nay": "yes indeed"}, t)
 }
 
-// Appends nil values to arrays if they dont exist yet
+// Appends nil values to arrays if they don't exist yet.
 func (s *ModifierTestSuite) TestSetIncreasesArrayLength() {
 	obj := M{"yup": A{0, 1}}
 	updateQuery := M{"$set": M{"yup.5": 5}}
@@ -200,7 +201,7 @@ func (s *ModifierTestSuite) TestSetIncreasesArrayLength() {
 	s.Equal(M{"yup": A{0, 1, nil, nil, nil, 5}}, t)
 }
 
-// Can set sub-fields and create them if necessary
+// Can set sub-fields and create them if necessary.
 func (s *ModifierTestSuite) TestSetCreatesSubFields() {
 	obj := M{"yup": M{"subfield": "bloup"}}
 	updateQuery := M{
@@ -230,7 +231,7 @@ func (s *ModifierTestSuite) TestSetCreatesSubFields() {
 // Doesn't replace a falsy field by an object when recursively following dot
 // notation
 //
-// That test is not really necessary in go, but I'm keeping it anyway
+// That test is not really necessary in go, but I'm keeping it anyway.
 func (s *ModifierTestSuite) TestSetDoesNotReplaceFalsyValue() {
 	obj := M{"nested": false}
 	updateQuery := M{"$set": M{"nested.now": "it is"}}
@@ -240,7 +241,7 @@ func (s *ModifierTestSuite) TestSetDoesNotReplaceFalsyValue() {
 	s.Equal(M{"nested": false}, t)
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestSetFailedEnsure() {
 	obj := M{"nested": false}
 	updateQuery := M{"$set": M{"nested.now": "it is"}}
@@ -262,7 +263,7 @@ func (s *ModifierTestSuite) TestSetFailedEnsure() {
 	s.Nil(t)
 }
 
-// Can delete a field, not returning an error if the field doesnt exist
+// Can delete a field, not returning an error if the field doesn't exist.
 func (s *ModifierTestSuite) TestUnsetIgnoresUnsetFields() {
 
 	obj := M{"yup": "yes", "other": "also"}
@@ -283,7 +284,7 @@ func (s *ModifierTestSuite) TestUnsetIgnoresUnsetFields() {
 	s.Equal(M{"yup": "yes"}, t)
 }
 
-// Can unset sub-fields and entire nested documents
+// Can unset sub-fields and entire nested documents.
 func (s *ModifierTestSuite) TestUnsetSubfields() {
 	obj := M{"yup": "yes", "nested": M{"a": "also", "b": "yeah"}}
 
@@ -304,7 +305,7 @@ func (s *ModifierTestSuite) TestUnsetSubfields() {
 }
 
 // When unsetting nested fields, should not create an empty parent to nested
-// field
+// field.
 func (s *ModifierTestSuite) TestUnsetDoesNotCreateEmptyParent() {
 
 	updateQuery := M{"$unset": M{"bad.worse": true}}
@@ -325,7 +326,7 @@ func (s *ModifierTestSuite) TestUnsetDoesNotCreateEmptyParent() {
 	s.Equal(M{"argh": true, "bad": M{}}, t)
 }
 
-// Will not allow _id modifications in dollar field operations
+// Will not allow _id modifications in dollar field operations.
 func (s *ModifierTestSuite) TestUnsetID() {
 	obj := M{"_id": 123}
 	updateQuery := M{"$unset": M{"_id": true}}
@@ -334,7 +335,7 @@ func (s *ModifierTestSuite) TestUnsetID() {
 	s.Nil(t)
 }
 
-// Will return error if GetAddress fails during $unset
+// Will return error if GetAddress fails during $unset.
 func (s *ModifierTestSuite) TestUnsetGetAddressError() {
 	obj := M{"a": "b"}
 	updateQuery := M{"$unset": M{"a": true}}
@@ -353,7 +354,7 @@ func (s *ModifierTestSuite) TestUnsetGetAddressError() {
 
 }
 
-// Will return error if GetField fails during $unset
+// Will return error if GetField fails during $unset.
 func (s *ModifierTestSuite) TestUnsetGetFieldError() {
 	obj := M{"a": "b"}
 	updateQuery := M{"$unset": M{"a": true}}
@@ -377,7 +378,7 @@ func (s *ModifierTestSuite) TestUnsetGetFieldError() {
 
 }
 
-// Will return error when GetField fails
+// Will return error when GetField fails.
 func (s *ModifierTestSuite) TestUnsetFailedGetField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$unset": M{"nested.now": true}}
@@ -400,7 +401,7 @@ func (s *ModifierTestSuite) TestUnsetFailedGetField() {
 }
 
 // Return an error if you try to use it with a non-number or on a non number
-// field
+// field.
 func (s *ModifierTestSuite) TestIncNonNumberField() {
 
 	obj := M{"some": "thing", "yup": "yes", "nay": 2}
@@ -416,7 +417,7 @@ func (s *ModifierTestSuite) TestIncNonNumberField() {
 	s.Nil(t)
 }
 
-// Can increment number fields or create and initialize them if needed
+// Can increment number fields or create and initialize them if needed.
 func (s *ModifierTestSuite) TestIncCanCreateField() {
 	obj := M{"some": "thing", "nay": 40}
 
@@ -432,7 +433,7 @@ func (s *ModifierTestSuite) TestIncCanCreateField() {
 	s.Equal(M{"some": "thing", "nay": 40, "inexistent": -6.0}, t)
 }
 
-// Works recursively
+// Works recursively.
 func (s *ModifierTestSuite) TestIncWorksRecursively() {
 	obj := M{"some": "thing", "nay": M{"nope": 40}}
 	updateQuery := M{"$inc": M{"nay.nope": -2, "blip.blop": 123}}
@@ -448,7 +449,7 @@ func (s *ModifierTestSuite) TestIncWorksRecursively() {
 	s.Equal(expected, t)
 }
 
-// Can increment any numeric type
+// Can increment any numeric type.
 func (s *ModifierTestSuite) TestIncAnyNumber() {
 	obj := M{"value": 1}
 
@@ -467,7 +468,7 @@ func (s *ModifierTestSuite) TestIncAnyNumber() {
 	}
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestIncFailedEnsure() {
 	obj := M{"nested": false}
 	updateQuery := M{"$inc": M{"nested.now": 1}}
@@ -490,7 +491,7 @@ func (s *ModifierTestSuite) TestIncFailedEnsure() {
 }
 
 // Will ignore unset fields (that cannot be ensured by fieldNavigator) when
-// using $inc modifier
+// using $inc modifier.
 func (s *ModifierTestSuite) TestIncUnset() {
 	obj := M{"planets": A{"earth", "mars"}}
 	updateQuery := M{"$inc": M{"planets.age": 1}}
@@ -499,7 +500,7 @@ func (s *ModifierTestSuite) TestIncUnset() {
 	s.Equal(M{"planets": A{"earth", "mars"}}, t)
 }
 
-// Can push an element to the end of an array
+// Can push an element to the end of an array.
 func (s *ModifierTestSuite) TestPushAddsToEndOfSlice() {
 	obj := M{"arr": A{"hello"}}
 	updateQuery := M{"$push": M{"arr": "world"}}
@@ -508,7 +509,7 @@ func (s *ModifierTestSuite) TestPushAddsToEndOfSlice() {
 	s.Equal(M{"arr": A{"hello", "world"}}, t)
 }
 
-// Can push an element to a non-existent field and will create the array
+// Can push an element to a non-existent field and will create the array.
 func (s *ModifierTestSuite) TestPushCreatesUnexistentFields() {
 	obj := M{}
 	updateQuery := M{"$push": M{"arr": "world"}}
@@ -517,7 +518,7 @@ func (s *ModifierTestSuite) TestPushCreatesUnexistentFields() {
 	s.Equal(M{"arr": A{"world"}}, t)
 }
 
-// Can push on nested fields
+// Can push on nested fields.
 func (s *ModifierTestSuite) TestPushNestedFields() {
 	obj := M{"arr": M{"nested": A{"hello"}}}
 	updateQuery := M{"$push": M{"arr.nested": "world"}}
@@ -532,7 +533,7 @@ func (s *ModifierTestSuite) TestPushNestedFields() {
 	s.Equal(M{"arr": M{"a": 2, "nested": A{"world"}}}, t)
 }
 
-// Return an error if we try to push to a non-array
+// Return an error if we try to push to a non-array.
 func (s *ModifierTestSuite) TestPushNonSlice() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$push": M{"arr": "world"}}
@@ -547,7 +548,7 @@ func (s *ModifierTestSuite) TestPushNonSlice() {
 	s.Nil(t)
 }
 
-// Can use the $each modifier to add multiple values to an array at once
+// Can use the $each modifier to add multiple values to an array at once.
 func (s *ModifierTestSuite) TestPushEach() {
 	obj := M{"arr": A{"hello"}}
 	updateQuery := M{
@@ -574,7 +575,7 @@ func (s *ModifierTestSuite) TestPushEach() {
 	s.Nil(t)
 }
 
-// Can use the $slice modifier to limit the number of array elements
+// Can use the $slice modifier to limit the number of array elements.
 func (s *ModifierTestSuite) TestPushAndSlice() {
 	obj := M{"arr": A{"hello"}}
 
@@ -635,7 +636,7 @@ func (s *ModifierTestSuite) TestPushAndSlice() {
 }
 
 // Will ignore unset fields (that cannot be ensured by fieldNavigator) when
-// using $push modifier
+// using $push modifier.
 func (s *ModifierTestSuite) TestPushUnset() {
 	obj := M{"planets": A{"earth"}}
 	updateQuery := M{"$push": M{"planets.satellites": "moon"}}
@@ -644,7 +645,7 @@ func (s *ModifierTestSuite) TestPushUnset() {
 	s.Equal(M{"planets": A{"earth"}}, t)
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestPushFailedEnsure() {
 	obj := M{"nested": false}
 	updateQuery := M{"$push": M{"nested.now": true}}
@@ -666,7 +667,7 @@ func (s *ModifierTestSuite) TestPushFailedEnsure() {
 	s.Nil(t)
 }
 
-// Can add an element to a set
+// Can add an element to a set.
 func (s *ModifierTestSuite) TestAddToSet() {
 	obj := M{"arr": A{"hello"}}
 
@@ -681,7 +682,7 @@ func (s *ModifierTestSuite) TestAddToSet() {
 	s.Equal(M{"arr": A{"hello"}}, t)
 }
 
-// Can add an element to a non-existent set and will create the array
+// Can add an element to a non-existent set and will create the array.
 func (s *ModifierTestSuite) TestAddToSetCreatesArray() {
 	obj := M{"arr": A{}}
 	updateQuery := M{"$addToSet": M{"arr": "world"}}
@@ -691,7 +692,7 @@ func (s *ModifierTestSuite) TestAddToSetCreatesArray() {
 	s.Equal(M{"arr": A{"world"}}, t)
 }
 
-// Return an error if we try to addToSet to a non-array
+// Return an error if we try to addToSet to a non-array.
 func (s *ModifierTestSuite) TestAddToSetNonArray() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$addToSet": M{"arr": "world"}}
@@ -700,7 +701,7 @@ func (s *ModifierTestSuite) TestAddToSetNonArray() {
 	s.Nil(t)
 }
 
-// Use deep-equality to check whether we can add a value to a set
+// Use deep-equality to check whether we can add a value to a set.
 func (s *ModifierTestSuite) TestAddToSetIgnoreDeepEqual() {
 	obj := M{"arr": A{M{"b": 2}}}
 
@@ -715,7 +716,7 @@ func (s *ModifierTestSuite) TestAddToSetIgnoreDeepEqual() {
 	s.Equal(M{"arr": A{M{"b": 2}}}, t)
 }
 
-// Can use the $each modifier to add multiple values to a set at once
+// Can use the $each modifier to add multiple values to a set at once.
 func (s *ModifierTestSuite) TestAddToSetMultiple() {
 	obj := M{"arr": A{"hello"}}
 
@@ -735,7 +736,7 @@ func (s *ModifierTestSuite) TestAddToSetMultiple() {
 	s.Nil(t)
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestAddToSetFailedEnsureField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$addToSet": M{"nested.now": true}}
@@ -758,7 +759,7 @@ func (s *ModifierTestSuite) TestAddToSetFailedEnsureField() {
 }
 
 // Will ignore unset fields (that cannot be ensured by fieldNavigator) when
-// using $addToSet modifier
+// using $addToSet modifier.
 func (s *ModifierTestSuite) TestAddToSetUnset() {
 	obj := M{"planets": A{"earth", "mars"}}
 	updateQuery := M{"$addToSet": M{"planets.age": 1}}
@@ -767,7 +768,7 @@ func (s *ModifierTestSuite) TestAddToSetUnset() {
 	s.Equal(M{"planets": A{"earth", "mars"}}, t)
 }
 
-// Will set []any to nil fields before starting to apply $addToSet modification
+// Will set []any to nil fields before starting to apply $addToSet modification.
 func (s *ModifierTestSuite) TestAddToSetNil() {
 	obj := M{"planets": nil}
 	updateQuery := M{"$addToSet": M{"planets": "earth"}}
@@ -777,7 +778,7 @@ func (s *ModifierTestSuite) TestAddToSetNil() {
 }
 
 // Will return error when both $addToSet param and one of the set items are of
-// not recognized types
+// not recognized types.
 func (s *ModifierTestSuite) TestAddToSetInvalidType() {
 	obj := M{"planets": A{[]string{}}}
 	updateQuery := M{"$addToSet": M{"planets": make(chan int)}}
@@ -787,7 +788,7 @@ func (s *ModifierTestSuite) TestAddToSetInvalidType() {
 }
 
 // Return an error if called on a non array, a non defined field or a non
-// integer
+// integer.
 func (s *ModifierTestSuite) TestPopUnexpectedTypes() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$pop": M{"arr": 1}}
@@ -808,7 +809,7 @@ func (s *ModifierTestSuite) TestPopUnexpectedTypes() {
 	s.Nil(t)
 }
 
-// Can remove the first and last element of an array
+// Can remove the first and last element of an array.
 func (s *ModifierTestSuite) TestPopFirstAndLast() {
 	obj := M{"arr": A{1, 4, 8}}
 	updateQuery := M{"$pop": M{"arr": 1}}
@@ -834,7 +835,7 @@ func (s *ModifierTestSuite) TestPopFirstAndLast() {
 	s.Equal(M{"arr": A{}}, t)
 }
 
-// Pop passing 0 as argument will have no effect
+// Pop passing 0 as argument will have no effect.
 func (s *ModifierTestSuite) TestPopZero() {
 	obj := M{"arr": A{0, 1, 2}}
 	updateQuery := M{"$pop": M{"arr": 0}}
@@ -843,7 +844,7 @@ func (s *ModifierTestSuite) TestPopZero() {
 	s.Equal(M{"arr": A{0, 1, 2}}, t)
 }
 
-// Will return error when GetField fails
+// Will return error when GetField fails.
 func (s *ModifierTestSuite) TestPopFailedGetField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$pop": M{"nested.now": 1}}
@@ -865,7 +866,7 @@ func (s *ModifierTestSuite) TestPopFailedGetField() {
 	s.Nil(t)
 }
 
-// Can remove an element from an array
+// Can remove an element from an array.
 func (s *ModifierTestSuite) TestPull() {
 	obj := M{"arr": A{"hello", "world"}}
 	updateQuery := M{"$pull": M{"arr": "world"}}
@@ -880,7 +881,7 @@ func (s *ModifierTestSuite) TestPull() {
 	s.Equal(M{"arr": A{"hello"}}, t)
 }
 
-// Can remove multiple matching elements
+// Can remove multiple matching elements.
 func (s *ModifierTestSuite) TestPullMultiple() {
 	obj := M{"arr": A{"hello", "world", "hello", "world"}}
 	updateQuery := M{"$pull": M{"arr": "world"}}
@@ -889,7 +890,7 @@ func (s *ModifierTestSuite) TestPullMultiple() {
 	s.Equal(M{"arr": A{"hello", "hello"}}, t)
 }
 
-// Return an error if we try to pull from a non-array
+// Return an error if we try to pull from a non-array.
 func (s *ModifierTestSuite) TestPullNonArray() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$pull": M{"arr": "world"}}
@@ -898,7 +899,7 @@ func (s *ModifierTestSuite) TestPullNonArray() {
 	s.Nil(t)
 }
 
-// Use deep-equality to check whether we can remove a value from an array
+// Use deep-equality to check whether we can remove a value from an array.
 func (s *ModifierTestSuite) TestPullDeepEqual() {
 	obj := M{"arr": A{M{"b": 2}, M{"b": 3}}}
 	updateQuery := M{"$pull": M{"arr": M{"b": 3}}}
@@ -913,7 +914,7 @@ func (s *ModifierTestSuite) TestPullDeepEqual() {
 	s.Equal(M{"arr": A{M{"b": 2}}}, t)
 }
 
-// Can use any kind of nedb query with $pull
+// Can use any kind of nedb query with $pull.
 func (s *ModifierTestSuite) TestPullQuery() {
 	obj := M{"arr": A{4, 7, 12, 2}, "other": "yup"}
 	updateQuery := M{"$pull": M{"arr": M{"$gte": 5}}}
@@ -928,7 +929,7 @@ func (s *ModifierTestSuite) TestPullQuery() {
 	s.Equal(M{"arr": A{M{"b": 4}, M{"b": 1}}, "other": "yup"}, t)
 }
 
-// Will return error when GetField fails
+// Will return error when GetField fails.
 func (s *ModifierTestSuite) TestPullFailedGetField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$pull": M{"nested.now": 1}}
@@ -950,7 +951,7 @@ func (s *ModifierTestSuite) TestPullFailedGetField() {
 	s.Nil(t)
 }
 
-// Will return error when Match fails
+// Will return error when Match fails.
 func (s *ModifierTestSuite) TestPullFailedMatch() {
 	obj := M{"nested": A{1}}
 	updateQuery := M{"$pull": M{"nested": 1}}
@@ -970,7 +971,7 @@ func (s *ModifierTestSuite) TestPullFailedMatch() {
 }
 
 // Will set the field to the updated value if value is greater than current one,
-// without modifying the original object
+// without modifying the original object.
 func (s *ModifierTestSuite) TestMax() {
 	obj := M{"some": "thing", "number": 10}
 	updateQuery := M{"$max": M{"number": 12}}
@@ -980,7 +981,7 @@ func (s *ModifierTestSuite) TestMax() {
 	s.Equal(M{"some": "thing", "number": 10}, obj)
 }
 
-// Will not update the field if new value is smaller than current one
+// Will not update the field if new value is smaller than current one.
 func (s *ModifierTestSuite) TestMaxIgnoresSmaller() {
 	obj := M{"some": "thing", "number": 10}
 	updateQuery := M{"$max": M{"number": 9}}
@@ -989,7 +990,7 @@ func (s *ModifierTestSuite) TestMaxIgnoresSmaller() {
 	s.Equal(M{"some": "thing", "number": 10}, t)
 }
 
-// Will create the field if it does not exist
+// Will create the field if it does not exist.
 func (s *ModifierTestSuite) TestMaxCreatesInexistentField() {
 	obj := M{"some": "thing"}
 	updateQuery := M{"$max": M{"number": 10}}
@@ -998,7 +999,7 @@ func (s *ModifierTestSuite) TestMaxCreatesInexistentField() {
 	s.Equal(M{"some": "thing", "number": 10}, t)
 }
 
-// Works on embedded documents
+// Works on embedded documents.
 func (s *ModifierTestSuite) TestMaxWorksOnSubDoc() {
 	obj := M{"some": "thing", "somethingElse": M{"number": 10}}
 	updateQuery := M{"$max": M{"somethingElse.number": 12}}
@@ -1007,7 +1008,7 @@ func (s *ModifierTestSuite) TestMaxWorksOnSubDoc() {
 	s.Equal(M{"some": "thing", "somethingElse": M{"number": 12}}, t)
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestMaxFailedEnsureField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$max": M{"nested.now": 1}}
@@ -1029,7 +1030,7 @@ func (s *ModifierTestSuite) TestMaxFailedEnsureField() {
 	s.Nil(t)
 }
 
-// Will fail to find $max if both values are of invalid types
+// Will fail to find $max if both values are of invalid types.
 func (s *ModifierTestSuite) TestMaxCompareInvalid() {
 	obj := M{"some": make(chan struct{})}
 	updateQuery := M{"$max": M{"some": struct{}{}}}
@@ -1039,7 +1040,7 @@ func (s *ModifierTestSuite) TestMaxCompareInvalid() {
 }
 
 // Will set the field to the updated value if value is smaller than current one,
-// without modifying the original object
+// without modifying the original object.
 func (s *ModifierTestSuite) TestMin() {
 	obj := M{"some": "thing", "number": 10}
 	updateQuery := M{"$min": M{"number": 8}}
@@ -1049,7 +1050,7 @@ func (s *ModifierTestSuite) TestMin() {
 	s.Equal(M{"some": "thing", "number": 10}, obj)
 }
 
-// Will not update the field if new value is greater than current one
+// Will not update the field if new value is greater than current one.
 func (s *ModifierTestSuite) TestMinIgnoresGreater() {
 	obj := M{"some": "thing", "number": 10}
 	updateQuery := M{"$min": M{"number": 12}}
@@ -1058,7 +1059,7 @@ func (s *ModifierTestSuite) TestMinIgnoresGreater() {
 	s.Equal(M{"some": "thing", "number": 10}, t)
 }
 
-// Will create the field if it does not exist
+// Will create the field if it does not exist.
 func (s *ModifierTestSuite) TestMinCreatesInexistentField() {
 	obj := M{"some": "thing"}
 	updateQuery := M{"$min": M{"number": 10}}
@@ -1067,7 +1068,7 @@ func (s *ModifierTestSuite) TestMinCreatesInexistentField() {
 	s.Equal(M{"some": "thing", "number": 10}, t)
 }
 
-// Works on embedded documents
+// Works on embedded documents.
 func (s *ModifierTestSuite) TestMinWorksOnSubDoc() {
 	obj := M{"some": "thing", "somethingElse": M{"number": 10}}
 	updateQuery := M{"$min": M{"somethingElse.number": 8}}
@@ -1076,7 +1077,7 @@ func (s *ModifierTestSuite) TestMinWorksOnSubDoc() {
 	s.Equal(M{"some": "thing", "somethingElse": M{"number": 8}}, t)
 }
 
-// Will return error when EnsureField fails
+// Will return error when EnsureField fails.
 func (s *ModifierTestSuite) TestMinFailedEnsureField() {
 	obj := M{"nested": false}
 	updateQuery := M{"$min": M{"nested.now": 1}}
@@ -1098,7 +1099,7 @@ func (s *ModifierTestSuite) TestMinFailedEnsureField() {
 	s.Nil(t)
 }
 
-// Will fail to find $min if both values are of invalid types
+// Will fail to find $min if both values are of invalid types.
 func (s *ModifierTestSuite) TestMinCompareInvalid() {
 	obj := M{"some": make(chan struct{})}
 	updateQuery := M{"$min": M{"some": struct{}{}}}
@@ -1107,7 +1108,7 @@ func (s *ModifierTestSuite) TestMinCompareInvalid() {
 	s.Nil(t)
 }
 
-// Will not copy dollar fields
+// Will not copy dollar fields.
 func (s *ModifierTestSuite) TestCopyDollarField() {
 	obj := M{"$dollarField": "exists", "noItDoesNot": true}
 	docCopy, err := s.modifier.copyDoc(obj)
@@ -1115,7 +1116,7 @@ func (s *ModifierTestSuite) TestCopyDollarField() {
 	s.Equal(M{"noItDoesNot": true}, docCopy)
 }
 
-// Failing to create a new Document will stop doc from being copied
+// Failing to create a new Document will stop doc from being copied.
 func (s *ModifierTestSuite) TestCopyFailDocFactory() {
 	obj := M{"checks": A{M{"exists": true}}}
 

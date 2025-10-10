@@ -202,7 +202,7 @@ func (s *FieldNavigatorTestSuite) TestNestedInPrimitive() {
 	s.Nil(value)
 }
 
-// should always return defined when expanding list values
+// should always return defined when expanding list values.
 func (s *FieldNavigatorTestSuite) TestReturnDefinedOnLists() {
 	doc := data.M{
 		"planets": []any{
@@ -223,7 +223,7 @@ func (s *FieldNavigatorTestSuite) TestReturnDefinedOnLists() {
 	}
 }
 
-// Out of bounds wont be undefined if search has been expanded.
+// Out of bounds won't be undefined if search has been expanded.
 func (s *FieldNavigatorTestSuite) TestExpandedOutOfBounds() {
 	doc := data.M{
 		"planets": []any{

@@ -16,12 +16,12 @@ type Mutex struct {
 	unlock chan struct{}
 }
 
-// Lock locks the mutex with a context.Background()
+// Lock locks the mutex with a context.Background().
 func (m *Mutex) Lock() {
 	_ = m.LockWithContext(context.Background())
 }
 
-// LockWithContext locks until Unlock is called or context is cancelled
+// LockWithContext locks until Unlock is called or context is cancelled.
 func (m *Mutex) LockWithContext(ctx context.Context) error {
 	select {
 	case <-ctx.Done():

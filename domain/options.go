@@ -64,14 +64,6 @@ func WithUpsert(u bool) UpdateOption {
 	}
 }
 
-// WithUpdate enables inserting a document if no matches are found.
-// Deprecated: Use WithUpdateUpsert instead.
-func WithUpdate(u bool) UpdateOption {
-	return func(uo *UpdateOptions) {
-		uo.Upsert = u
-	}
-}
-
 // UpdateOption configures update behavior through the functional options
 // pattern.
 type UpdateOption func(*UpdateOptions)

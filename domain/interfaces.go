@@ -91,7 +91,7 @@ type GetSetter interface {
 
 // FieldNavigator provides field access operations with dot notation support.
 type FieldNavigator interface {
-	// GetField extracts values from nested document, following path parts.
+	// GetField extracts values from nested documents, following path parts.
 	GetField(any, ...string) ([]GetSetter, bool, error)
 	EnsureField(any, ...string) ([]GetSetter, error)
 	// GetAddress extracts nested path from the string address using the
@@ -158,8 +158,8 @@ type Persistence interface {
 	PersistNewState(ctx context.Context, newDocs ...Document) error
 	// SetCorruptAlertThreshold sets the threshold for corruption warnings.
 	SetCorruptAlertThreshold(v float64)
-	// TreadRawStream parses a raw data stream and extracts documents and indexes.
-	TreadRawStream(ctx context.Context, rawStream io.Reader) ([]Document, map[string]IndexDTO, error)
+	// TreatRawStream parses a raw data stream and extracts documents and indexes.
+	TreatRawStream(ctx context.Context, rawStream io.Reader) ([]Document, map[string]IndexDTO, error)
 	// WaitCompaction blocks until any running compaction process completes.
 	WaitCompaction(ctx context.Context) error
 	// PersistCachedDatabase writes all data and indexes to storage in one operation.

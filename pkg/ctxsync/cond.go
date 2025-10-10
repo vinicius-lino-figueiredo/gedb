@@ -29,7 +29,7 @@ func NewCond() *Cond {
 // Wait blocks until awoken by Signal or Broadcast. It is equivalent to
 // WaitWithContext(context.Background()).
 func (c *Cond) Wait() {
-	c.WaitWithContext(context.Background())
+	_ = c.WaitWithContext(context.Background())
 }
 
 // WaitWithContext blocks until awoken by Signal, Broadcast, or context

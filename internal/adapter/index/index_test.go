@@ -94,7 +94,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Error(idx.Insert(ctx, doc1))
 	})
 
-	// Inserting twice for a fieldName the docs dont have with a unique index results in an error thrown
+	// Inserting twice for a fieldName the docs don't have with a unique
+	// index results in an error thrown
 	s.Run("InsertTwiceNonUnique", func() {
 		i, err := NewIndex(
 			domain.WithIndexFieldName("nope"),
@@ -112,7 +113,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Error(idx.Insert(ctx, doc2))
 	})
 
-	// Inserting twice for a fieldName the docs dont have with a unique and sparse index will not throw, since the docs will be non indexed
+	// Inserting twice for a fieldName the docs don't have with a unique and
+	// sparse index will not throw, since the docs will be non indexed
 	s.Run("InsertTwiceSparse", func() {
 		i, err := NewIndex(
 			domain.WithIndexFieldName("nope"),
@@ -357,7 +359,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 			ctx := context.Background()
 
-			idx.Insert(ctx, obj)
+			s.NoError(idx.Insert(ctx, obj))
 			s.Len(idx.GetAll(), 2)
 			aaMatches, err := idx.GetMatching("aa")
 			s.NoError(err)
@@ -699,7 +701,8 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.Equal(doc3, blopMatches2[0])
 	})
 
-	// If an update doesnt change a document, the unique constraint is not violated
+	// If an update doesn't change a document, the unique constraint is not
+	// violated
 	s.Run("NoChangeNoError", func() {
 		i, err := NewIndex(
 			domain.WithIndexFieldName("tf"),
@@ -1110,7 +1113,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(err)
 		s.Len(blopMatches, 1)
 
-		idx.Reset(ctx)
+		s.NoError(idx.Reset(ctx))
 		s.Equal(0, idx.Tree.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
@@ -1150,7 +1153,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(err)
 		s.Len(blopMatches, 1)
 
-		idx.Reset(ctx, newDoc)
+		s.NoError(idx.Reset(ctx, newDoc))
 		s.Equal(1, idx.Tree.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
@@ -1193,7 +1196,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(err)
 		s.Len(blopMatches, 1)
 
-		idx.Reset(ctx, newDocs...)
+		s.NoError(idx.Reset(ctx, newDocs...))
 		s.Equal(2, idx.Tree.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
@@ -1214,7 +1217,7 @@ func (s *IndexesTestSuite) TestResetting() {
 	})
 } // ==== End of 'Resetting' ==== //
 
-// Get all elements in the index
+// Get all elements in the index.
 func (s *IndexesTestSuite) TestGetAll() {
 	i, err := NewIndex(domain.WithIndexFieldName("tf"))
 	s.NoError(err)

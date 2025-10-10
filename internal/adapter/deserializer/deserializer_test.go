@@ -23,7 +23,7 @@ func (s *DeserializerTestSuite) SetupTest() {
 	s.d = NewDeserializer(decoder).(*Deserializer)
 }
 
-// Can deserialize strings
+// Can deserialize strings.
 func (s *DeserializerTestSuite) TestString() {
 	a := data.M{"test": "Some string"}
 	b, err := json.Marshal(a)
@@ -34,7 +34,7 @@ func (s *DeserializerTestSuite) TestString() {
 
 }
 
-// Can deserialize booleans
+// Can deserialize booleans.
 func (s *DeserializerTestSuite) TestBool() {
 	a := data.M{"test1": true, "test2": false}
 	b, err := json.Marshal(a)
@@ -45,7 +45,7 @@ func (s *DeserializerTestSuite) TestBool() {
 	s.False(false, r["test2"])
 }
 
-// Can deserialize numbers
+// Can deserialize numbers.
 func (s *DeserializerTestSuite) TestNumber() {
 	a := data.M{"test1": 5, "test2": 6.2}
 	b, err := json.Marshal(a)
@@ -56,7 +56,7 @@ func (s *DeserializerTestSuite) TestNumber() {
 	s.Equal(6.2, r["test2"])
 }
 
-// Can deserialize null
+// Can deserialize null.
 func (s *DeserializerTestSuite) TestNil() {
 	a := data.M{"test": nil}
 	b, err := json.Marshal(a)
@@ -66,7 +66,7 @@ func (s *DeserializerTestSuite) TestNil() {
 	s.Equal(nil, r["test"])
 }
 
-// Can deserialize time.Time
+// Can deserialize time.Time.
 func (s *DeserializerTestSuite) TestDate() {
 	d := time.Now()
 
@@ -78,7 +78,7 @@ func (s *DeserializerTestSuite) TestDate() {
 	s.Equal(d.Truncate(time.Millisecond), r["test"])
 }
 
-// Can deserialize sub objects
+// Can deserialize sub objects.
 func (s *DeserializerTestSuite) TestNestedDocs() {
 	d := time.Now()
 
@@ -91,7 +91,7 @@ func (s *DeserializerTestSuite) TestNestedDocs() {
 	s.Equal("yes", r.D("test").D("yes").Get("again"))
 }
 
-// Can deserialize sub arrays
+// Can deserialize sub arrays.
 func (s *DeserializerTestSuite) TestNestedSlices() {
 	d := time.Now()
 
@@ -105,7 +105,7 @@ func (s *DeserializerTestSuite) TestNestedSlices() {
 	s.Equal("yes", r["test"].([]any)[2].(data.M)["again"])
 }
 
-// Can deserialize strings despite of line breaks
+// Can deserialize strings despite of line breaks.
 func (s *DeserializerTestSuite) TestStringWithLineBreak() {
 	badString := "world\r\nearth\nother\rline"
 	a := data.M{"test": badString}
@@ -117,7 +117,7 @@ func (s *DeserializerTestSuite) TestStringWithLineBreak() {
 	s.Equal(badString, r["test"])
 }
 
-// Deserialization with a canceled context should fail
+// Deserialization with a canceled context should fail.
 func (s *DeserializerTestSuite) TestContext() {
 
 	b, err := json.Marshal(data.M{"hello": "world"})
@@ -151,7 +151,7 @@ func (s *DeserializerTestSuite) TestContext() {
 	s.Nil(v3)
 }
 
-// Deserialize returns error if target is nil
+// Deserialize returns error if target is nil.
 func (s *DeserializerTestSuite) TestNilTarget() {
 	err := s.d.Deserialize(ctx, []byte(`{"a":1}`), nil)
 	s.Error(err)

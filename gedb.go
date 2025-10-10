@@ -63,7 +63,7 @@ func NewDB(options ...domain.DatastoreOption) (domain.GEDB, error) {
 }
 
 // LoadDB creates and loads a GEDB instance with the provided configuration
-// options. Created for compatibility with nedb. Its use is not recomended.
+// options. Created for compatibility with NeDB. Its use is not recommended.
 func LoadDB(ctx context.Context, options ...domain.DatastoreOption) (domain.GEDB, error) {
 	return datastore.LoadDatastore(ctx, options...)
 }
