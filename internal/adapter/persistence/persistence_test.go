@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
@@ -36,6 +38,67 @@ type deserializeFunc func(context.Context, []byte, any) error
 
 func (s deserializeFunc) Deserialize(ctx context.Context, b []byte, v any) error {
 	return s(ctx, b, v)
+}
+
+type readerMock struct{ mock.Mock }
+
+// Read implements io.Reader.
+func (r *readerMock) Read(p []byte) (n int, err error) {
+	call := r.Called(p)
+	return call.Int(0), call.Error(1)
+}
+
+type comparerMock struct{ mock.Mock }
+
+// Comparable implements domain.Comparer.
+func (c *comparerMock) Comparable(a any, b any) bool {
+	return c.Called(a, b).Bool(0)
+}
+
+// Compare implements domain.Comparer.
+func (c *comparerMock) Compare(a any, b any) (int, error) {
+	call := c.Called(a, b)
+	return call.Int(0), call.Error(1)
+}
+
+type storageMock struct{ mock.Mock }
+
+// AppendFile implements domain.Storage.
+func (s *storageMock) AppendFile(f string, m os.FileMode, b []byte) (int, error) {
+	call := s.Called(f, m, b)
+	return call.Int(0), call.Error(1)
+}
+
+// CrashSafeWriteFileLines implements domain.Storage.
+func (s *storageMock) CrashSafeWriteFileLines(f string, l [][]byte, m1 os.FileMode, m2 os.FileMode) error {
+	return s.Called(f, l, m1, m2).Error(0)
+}
+
+// EnsureDatafileIntegrity implements domain.Storage.
+func (s *storageMock) EnsureDatafileIntegrity(f string, m os.FileMode) error {
+	return s.Called(f, m).Error(0)
+}
+
+// EnsureParentDirectoryExists implements domain.Storage.
+func (s *storageMock) EnsureParentDirectoryExists(f string, m os.FileMode) error {
+	return s.Called(f, m).Error(0)
+}
+
+// Exists implements domain.Storage.
+func (s *storageMock) Exists(f string) (bool, error) {
+	call := s.Called(f)
+	return call.Bool(0), call.Error(1)
+}
+
+// ReadFileStream implements domain.Storage.
+func (s *storageMock) ReadFileStream(f string, m os.FileMode) (io.ReadCloser, error) {
+	call := s.Called(f, m)
+	return call.Get(0).(io.ReadCloser), call.Error(1)
+}
+
+// Remove implements domain.Storage.
+func (s *storageMock) Remove(f string) error {
+	return s.Called(f).Error(0)
 }
 
 var p *Persistence
@@ -321,6 +384,67 @@ func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	s.Len(allData, 0)
 }
 
+// Will return error if Serialize fails
+func (s *PersistenceTestSuite) TestPersistNewStateFailSerializing() {
+	e := fmt.Errorf("error")
+	p.serializer = serializeFunc(func(context.Context, any) ([]byte, error) {
+		return nil, e
+	})
+
+	err := p.PersistNewState(context.Background(), data.M{})
+	s.ErrorIs(err, e)
+}
+
+// Will return error if Write fails
+func (s *PersistenceTestSuite) TestPersistNewStateFailWritting() {
+	sr := p.serializer
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	p.serializer = serializeFunc(func(ctx context.Context, v any) ([]byte, error) {
+		ctx = context.WithoutCancel(ctx)
+		cancel()
+		return sr.Serialize(ctx, v)
+	})
+
+	err := p.PersistNewState(ctx, data.M{})
+	s.ErrorIs(err, context.Canceled)
+}
+
+// will return error if stream fails to be read
+func (s *PersistenceTestSuite) TestTreadRawStreamFailScan() {
+	r := new(readerMock)
+
+	r.On("Read", mock.Anything).
+		Return(0, fmt.Errorf("error")).
+		Once()
+
+	doc, index, err := p.TreadRawStream(context.Background(), r)
+	s.Error(err)
+	s.Nil(doc)
+	s.Nil(index)
+}
+
+// empty lines in a stream should not affect resulting data
+func (s *PersistenceTestSuite) TestIgnoreEmptyLines() {
+	fakeData := `{"_id":"one","hello":"world"}
+
+
+
+
+
+
+{"_id":"two","hello":"earth"}
+{"_id":"three","hello":"you"}`
+
+	r := strings.NewReader(fakeData)
+	docs, indexes, err := p.TreadRawStream(context.Background(), r)
+	s.NoError(err)
+	s.Len(indexes, 0)
+	s.Len(docs, 3)
+
+}
+
 // When treating raw data, refuse to proceed if too much data is corrupt, to avoid data loss
 func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	const corruptTestFileName = "../../../workspace/corruptTest.db"
@@ -362,6 +486,173 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrup() {
 	s.Equal(4, e.DataLength)
 }
 
+// Treat document factory errors as data corruption
+func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
+	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	fakeData := "{\"_id\":\"one\",\"hello\":\"world\"}\n" + "{\"_id\":\"two\",\"hello\":\"earth\"}\n" + "{\"_id\":\"three\",\"hello\":\"you\"}\n"
+	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
+
+	docFac := func(v any) (domain.Document, error) {
+		d, err := data.NewDocument(v)
+		if err != nil {
+			return nil, err
+		}
+		if d.ID() == "two" {
+			return nil, fmt.Errorf("error")
+		}
+		return d, nil
+	}
+
+	// Allowing no corrupt data it will fail
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+		domain.WithPersistenceDocFactory(docFac),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx := context.Background()
+
+	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	// allowing corrupt data, it will pass
+	per, err = NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(1),
+		domain.WithPersistenceDocFactory(docFac),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.NoError(err)
+	s.Len(docs, 2)
+	s.Len(indexes, 0)
+}
+
+// Treat deleted document errors as data corruption
+func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
+	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	fakeData := `{"_id":"two","$$deleted":true}
+{"_id":"one","hello":"world"}`
+
+	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
+
+	comp := new(comparerMock)
+	comp.On("Compare", nil, true).
+		Return(-1, nil).
+		Once()
+	comp.On("Compare", true, true).
+		Return(0, fmt.Errorf("error")).
+		Once()
+
+	// Allowing no corrupt data it will fail
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+		domain.WithPersistenceComparer(comp),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx := context.Background()
+	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	comp.On("Compare", nil, true).
+		Return(-1, nil).
+		Once()
+	comp.On("Compare", true, true).
+		Return(0, fmt.Errorf("error")).
+		Once()
+
+	// Allowing corrupt data it will not fail
+	per, err = NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(1),
+		domain.WithPersistenceComparer(comp),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx = context.Background()
+	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.NoError(err)
+	s.Len(docs, 1)
+	s.Len(indexes, 0)
+}
+
+// Malformed indexes are treated as data corruption
+func (s *PersistenceTestSuite) TestFailIndex() {
+	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	fakeData := `{"$$indexCreated": {"fieldName": "n"}, "$$indexRemoved": 1}
+{"_id":"one","hello":"world"}`
+
+	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
+
+	// Allowing no corrupt data it will fail
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx := context.Background()
+	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	// Allowing corrupt data it will not fail
+	per, err = NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(1),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx = context.Background()
+	docs, indexes, err = p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.NoError(err)
+	s.Len(docs, 1)
+	s.Len(indexes, 0)
+}
+
+// Can remove an index
+func (s *PersistenceTestSuite) TestRemoveIndex() {
+	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	fakeData := `{"$$indexCreated": {"fieldName": "a"}}
+{"$$indexCreated": {"fieldName": "n"}}
+{"$$indexRemoved": "n"}`
+
+	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(corruptTestFileName),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	ctx := context.Background()
+	docs, indexes, err := p.TreadRawStream(ctx, strings.NewReader(fakeData))
+	s.NoError(err)
+	s.Len(docs, 0)
+	s.Len(indexes, 1)
+	s.Contains(indexes, "a")
+}
+
 // Can []anyen to compaction events
 func (s *PersistenceTestSuite) TestListenEvent() {
 	done := make(chan struct{})
@@ -373,6 +664,88 @@ func (s *PersistenceTestSuite) TestListenEvent() {
 	// Persistence.compactDatafile is deprecated and was not added
 	s.NoError(p.PersistCachedDatabase(ctx, nil, nil))
 	<-done
+}
+
+// Cannot load database if parent directory was ensured
+func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
+
+	st := new(storageMock)
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceStorage(st),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+		Return(fmt.Errorf("error")).
+		Once()
+
+	docs, indexes, err := p.LoadDatabase(context.Background())
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+}
+
+// Cannot load database if datafile was ensured
+func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
+
+	st := new(storageMock)
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceStorage(st),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+		Return(nil).
+		Once()
+	st.On("EnsureDatafileIntegrity", testDb, p.fileMode).
+		Return(fmt.Errorf("error")).
+		Once()
+
+	docs, indexes, err := p.LoadDatabase(context.Background())
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+}
+
+// Cannot load database if file stream is not properly read
+func (s *PersistenceTestSuite) TestFailReadFile() {
+
+	st := new(storageMock)
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceStorage(st),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+		Return(nil).
+		Once()
+	st.On("EnsureDatafileIntegrity", testDb, p.fileMode).
+		Return(nil).
+		Once()
+
+	st.On("ReadFileStream", testDb, p.fileMode).
+		Return(io.NopCloser(nil), fmt.Errorf("error")).
+		Once()
+
+	docs, indexes, err := p.LoadDatabase(context.Background())
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
 }
 
 func (s *PersistenceTestSuite) TestSetializers() {
@@ -1093,6 +1466,153 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 		s.NoError(err)
 		s.Len(docs, 1)
 	})
+}
+
+// Will return error if calling methods with a cancelled context
+func (s *PersistenceTestSuite) TestPersistCancelledContext() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := p.PersistNewState(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	docs, indexes, err := p.TreadRawStream(ctx, nil)
+	s.ErrorIs(err, context.Canceled)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	docs, indexes, err = p.LoadDatabase(ctx)
+	s.ErrorIs(err, context.Canceled)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	err = p.DropDatabase(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = p.EnsureParentDirectoryExists(ctx, "", 0000)
+	s.ErrorIs(err, context.Canceled)
+
+	err = p.PersistCachedDatabase(ctx, nil, nil)
+	s.ErrorIs(err, context.Canceled)
+}
+
+// Won't do anything if file related methods are called in a memory-only
+// persistence instance
+func (s *PersistenceTestSuite) TestPersistNewStateInMemoryOnly() {
+	p, err := NewPersistence(domain.WithPersistenceInMemoryOnly(true))
+	s.NoError(err)
+
+	err = p.PersistNewState(context.Background())
+
+	docs, indexes, err := p.LoadDatabase(context.Background())
+	s.NoError(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	err = p.DropDatabase(context.Background())
+	s.NoError(err)
+
+	err = p.PersistCachedDatabase(context.Background(), nil, nil)
+	s.NoError(err)
+}
+
+// Should not be able to drop the database without confirming the file exists
+func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
+	st := new(storageMock)
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceStorage(st),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	st.On("Exists", testDb).
+		Return(false, fmt.Errorf("error")).
+		Once()
+
+	err = p.DropDatabase(context.Background())
+	s.Error(err)
+}
+
+// Should not be able to persist data if serialization fails
+func (s *PersistenceTestSuite) TestPersistSerializeError() {
+
+	original := p.serializer
+	ser := serializeFunc(func(ctx context.Context, a any) ([]byte, error) {
+		shouldFail := false
+		switch t := a.(type) {
+		case domain.Document:
+			shouldFail = t.Get("shouldFail").(bool)
+		case domain.IndexDTO:
+			shouldFail = t.IndexCreated.FieldName == "shouldFail"
+		}
+		if shouldFail {
+			return nil, fmt.Errorf("error")
+		}
+		return original.Serialize(ctx, a)
+	})
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceSerializer(ser),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	docsFile := `
+{"_id": 1, "shouldFail": false}
+{"_id": 2, "shouldFail": false}
+{"_id": 3, "shouldFail": true}
+{"_id": 4, "shouldFail": false}
+`
+	s.NoError(os.WriteFile(testDb, []byte(docsFile), p.fileMode))
+
+	docs, indexes, err := p.LoadDatabase(context.Background())
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+	indexesFile := `
+{"$$indexCreated": {"fieldName": "fieldA"}}
+{"$$indexCreated": {"fieldName": "fieldB"}}
+{"$$indexCreated": {"fieldName": "fieldC"}}
+{"$$indexCreated": {"fieldName": "shouldFail"}}
+{"$$indexCreated": {"fieldName": "fieldE"}}
+`
+	s.NoError(os.WriteFile(testDb, []byte(indexesFile), p.fileMode))
+
+	docs, indexes, err = p.LoadDatabase(context.Background())
+	s.Error(err)
+	s.Nil(docs)
+	s.Nil(indexes)
+
+}
+
+// To persist cached database, CrashSafeWriteFileLines must not fail
+func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWritting() {
+	st := new(storageMock)
+
+	var err error
+	per, err := NewPersistence(
+		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceStorage(st),
+		domain.WithPersistenceCorruptAlertThreshold(0),
+	)
+	s.NoError(err)
+	p = per.(*Persistence)
+
+	st.On("CrashSafeWriteFileLines", testDb, [][]byte(nil), p.dirMode, p.fileMode).
+		Return(fmt.Errorf("error")).
+		Once()
+
+	err = p.PersistCachedDatabase(context.Background(), nil, nil)
+	s.Error(err)
+
 }
 
 func (s *PersistenceTestSuite) compareThings(a any, b any) int {
