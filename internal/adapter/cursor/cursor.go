@@ -194,6 +194,9 @@ func (c *Cursor) asMap(doc domain.Document) map[string]any {
 func (c *Cursor) compareByCriterion(a, b domain.Document, comparer domain.Comparer, criterion string, direction int) (int, error) {
 
 	addr, err := c.fieldNavigator.GetAddress(criterion)
+	if err != nil {
+		return 0, err
+	}
 
 	criterionA, _, err := c.fieldNavigator.GetField(a, addr...)
 	if err != nil {
