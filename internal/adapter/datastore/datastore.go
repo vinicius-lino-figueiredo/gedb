@@ -566,22 +566,52 @@ func (d *Datastore) getIndexDTOs() map[string]domain.IndexDTO {
 }
 
 func (d *Datastore) getRawCandidates(ctx context.Context, query domain.Document) ([]domain.Document, error) {
+	// if query is empty, return all
 	if query.Len() == 0 {
 		return d.getAllData(), nil
 	}
+
+	// checking if query has a indexed field.
+	if res, ok, err := d.getSimpleCandidates(query); err != nil || ok {
+		return res, err
+	}
+
+	// checking if query has all fields of an existent composed index.
+	if res, ok, err := d.getComposedCandidates(query); err != nil || ok {
+		return res, err
+	}
+
+	// checking if query has the query comparer $in, which is indexable.
+	if res, ok, err := d.getEnumCandidates(query); err != nil || ok {
+		return res, err
+	}
+
+	// checking if query has an indexable query field ($lt, $gte, etc.).
+	if res, ok, err := d.getCompCandidates(ctx, query); err != nil || ok {
+		return res, err
+	}
+
+	// if cannot use any indexes, return all data.
+	return d.getAllData(), nil
+}
+
+func (d *Datastore) getSimpleCandidates(query domain.Document) ([]domain.Document, bool, error) {
 	indexNames := slices.Collect(maps.Keys(d.indexes))
 	for k, v := range query.Iter() {
 		if !d.filterIndexNames(indexNames, k, v) {
 			continue
 		}
-		return d.indexes[k].GetMatching(v)
+		return d.matchingResult(d.indexes[k].GetMatching(v))
 	}
+	return nil, false, nil
+}
 
+func (d *Datastore) getComposedCandidates(query domain.Document) ([]domain.Document, bool, error) {
 IndexesLoop:
 	for idxName, idx := range d.indexes {
 		parts, err := d.fieldNavigator.SplitFields(idxName)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if len(parts) == 0 {
 			continue
@@ -601,22 +631,34 @@ IndexesLoop:
 				break
 			}
 		}
-		return idx.GetMatching(query)
+		return d.matchingResult(idx.GetMatching(query))
 	}
+	return nil, false, nil
+}
 
+func (d *Datastore) getEnumCandidates(query domain.Document) ([]domain.Document, bool, error) {
 	for k := range query.Iter() {
-		if vDoc := query.D(k); vDoc != nil {
-			if in := vDoc.Get("$in"); vDoc.Has("$in") {
-				if idx, ok := d.indexes[k]; ok {
-					if l, ok := in.([]any); ok {
-						return idx.GetMatching(l...)
-					}
-					return idx.GetMatching(in)
-				}
-			}
+		vDoc := query.D(k)
+		if vDoc == nil || !vDoc.Has("$in") {
+			continue
 		}
-	}
 
+		idx, ok := d.indexes[k]
+		if !ok {
+			continue
+		}
+
+		in := vDoc.Get("$in")
+		if l, ok := in.([]any); ok {
+			return d.matchingResult(idx.GetMatching(l...))
+		}
+
+		return d.matchingResult(idx.GetMatching(in))
+	}
+	return nil, false, nil
+}
+
+func (d *Datastore) getCompCandidates(ctx context.Context, query domain.Document) ([]domain.Document, bool, error) {
 	comp := [...]string{"$lt", "$lte", "$gt", "$gte"}
 	for k, v := range query.Iter() {
 		if v == nil {
@@ -630,12 +672,18 @@ IndexesLoop:
 
 		for _, c := range comp {
 			if idx, ok := d.indexes[k]; ok && vDoc.Has(c) {
-				return idx.GetBetweenBounds(ctx, vDoc)
+				return d.matchingResult(idx.GetBetweenBounds(ctx, vDoc))
 			}
 		}
 	}
+	return nil, false, nil
+}
 
-	return d.getAllData(), nil
+func (d *Datastore) matchingResult(dt []domain.Document, err error) ([]domain.Document, bool, error) {
+	if err != nil {
+		return nil, false, err
+	}
+	return dt, true, nil
 }
 
 // Insert implements domain.GEDB.
@@ -900,47 +948,76 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 	}
 
 	if opts.Upsert {
-		cur, err := d.find(ctx, query, false, domain.WithFindLimit(limit))
-		if err != nil {
-			return nil, err
-		}
-		var count int64
-		for cur.Next() {
-			count++
-		}
-		if err := cur.Err(); err != nil {
-			return nil, err
-		}
-		if count != 1 {
-			if err := d.checkDocuments(updateQryDoc); err != nil {
-				if updateQryDoc, err = d.modifier.Modify(QryDoc, updateQryDoc); err != nil {
-					return nil, err
-				}
-			}
-			insertedDoc, err := d.insert(ctx, updateQryDoc)
-			if err != nil {
-				return nil, err
-			}
-			return insertedDoc, err
+		inserted, rtrn, err := d.upsert(ctx, QryDoc, updateQryDoc, limit)
+		if err != nil || rtrn {
+			return inserted, err
 		}
 	}
-	cur, err := d.find(ctx, query, false, domain.WithFindLimit(limit))
+
+	updated, mods, err := d.findAndModify(ctx, QryDoc, updateQryDoc, limit)
 	if err != nil {
 		return nil, err
 	}
-	var modifications []domain.Update
+
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+
+	if err := d.updateIndexes(ctx, mods); err != nil {
+		return nil, err
+	}
+
+	if err := d.persistence.PersistNewState(ctx, updated...); err != nil {
+		return nil, err
+	}
+
+	return d.cloneDocs(updated...)
+}
+
+func (d *Datastore) upsert(ctx context.Context, qry, mod domain.Document, limit int64) ([]domain.Document, bool, error) {
+	cur, err := d.find(ctx, qry, false, domain.WithFindLimit(limit))
+	if err != nil {
+		return nil, false, err
+	}
+	var count int64
+	for cur.Next() {
+		count++
+	}
+	if err := cur.Err(); err != nil {
+		return nil, false, err
+	}
+	if count != 1 {
+		if err := d.checkDocuments(mod); err != nil {
+			if mod, err = d.modifier.Modify(qry, mod); err != nil {
+				return nil, false, err
+			}
+		}
+		insertedDoc, err := d.insert(ctx, mod)
+		if err != nil {
+			return nil, false, err
+		}
+		return insertedDoc, true, err
+	}
+	return nil, false, nil
+}
+
+func (d *Datastore) findAndModify(ctx context.Context, qry, modQry domain.Document, limit int64) ([]domain.Document, []domain.Update, error) {
+	cur, err := d.find(ctx, qry, false, domain.WithFindLimit(limit))
+	if err != nil {
+		return nil, nil, err
+	}
+	var mods []domain.Update
 	var updatedDocs []domain.Document
 	for cur.Next() {
 		oldDoc, err := data.NewDocument(nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := cur.Exec(ctx, &oldDoc); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		newDoc, err := d.modifier.Modify(oldDoc, updateQryDoc)
+		newDoc, err := d.modifier.Modify(oldDoc, modQry)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if d.timestampData {
@@ -949,25 +1026,13 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 		}
 
 		update := domain.Update{OldDoc: oldDoc, NewDoc: newDoc}
-		modifications = append(modifications, update)
+		mods = append(mods, update)
 		updatedDocs = append(updatedDocs, newDoc)
 	}
 	if err := cur.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	defer cancel()
-
-	if err := d.updateIndexes(ctx, modifications); err != nil {
-		return nil, err
-	}
-
-	if err := d.persistence.PersistNewState(ctx, updatedDocs...); err != nil {
-		return nil, err
-	}
-
-	return d.cloneDocs(updatedDocs...)
+	return updatedDocs, mods, nil
 }
 
 func (d *Datastore) updateIndexes(ctx context.Context, mods []domain.Update) error {
