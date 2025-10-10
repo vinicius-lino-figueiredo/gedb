@@ -117,41 +117,7 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 	// element is treated as an individual key and inserted separately into
 	// the index
 	if len(i._fields) != 1 {
-		var containsKey bool
-		k := make(data.M)
-		for _, field := range i._fields {
-
-			addr, err := i.fieldNavigator.GetAddress(field)
-			if err != nil {
-				return nil, err
-			}
-
-			key, _, err := i.fieldNavigator.GetField(doc, addr...)
-			if err != nil {
-				return nil, err
-			}
-
-			k[field] = nil
-			values := make([]any, len(key))
-			ok := false
-			for n, v := range key {
-				value, isSet := v.Get()
-				if isSet && !ok {
-					ok = true
-				}
-				values[n] = value
-			}
-
-			if ok { // if undefined, treat as nil
-				k[field] = values[0]
-			}
-
-			containsKey = containsKey || k[field] != nil
-		}
-		if i.sparse && !containsKey {
-			return nil, nil
-		}
-		return []any{k}, nil
+		return i.getKeysMultiField(doc)
 	}
 
 	addr, err := i.fieldNavigator.GetAddress(i._fields[0])
@@ -188,6 +154,44 @@ func (i *Index) getKeys(doc domain.Document) ([]any, error) {
 
 	return keysAlt, nil
 
+}
+
+func (i *Index) getKeysMultiField(doc domain.Document) ([]any, error) {
+	var containsKey bool
+	k := make(data.M)
+	for _, field := range i._fields {
+
+		addr, err := i.fieldNavigator.GetAddress(field)
+		if err != nil {
+			return nil, err
+		}
+
+		key, _, err := i.fieldNavigator.GetField(doc, addr...)
+		if err != nil {
+			return nil, err
+		}
+
+		k[field] = nil
+		values := make([]any, len(key))
+		ok := false
+		for n, v := range key {
+			value, isSet := v.Get()
+			if isSet && !ok {
+				ok = true
+			}
+			values[n] = value
+		}
+
+		if ok { // if undefined, treat as nil
+			k[field] = values[0]
+		}
+
+		containsKey = containsKey || k[field] != nil
+	}
+	if i.sparse && !containsKey {
+		return nil, nil
+	}
+	return []any{k}, nil
 }
 
 // Insert implements domain.Index.
