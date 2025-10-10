@@ -55,16 +55,70 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 		option(&opts)
 	}
 
-	if len(dt) == 0 || int64(len(dt)) < opts.Skip {
-		return &Cursor{ctx: ctx, mu: ctxsync.NewMutex()}, nil
+	cur := &Cursor{
+		ctx:            ctx,
+		mu:             ctxsync.NewMutex(),
+		dec:            opts.Decoder,
+		fieldNavigator: opts.FieldNavigator,
 	}
 
+	if err := cur.apply(dt, opts); err != nil {
+		return nil, err
+	}
+
+	return cur, nil
+}
+
+func (c *Cursor) apply(dt []domain.Document, opts domain.CursorOptions) error {
+	if len(dt) == 0 || int64(len(dt)) < opts.Skip {
+		return nil
+	}
+
+	res, err := c.filterAndSkip(dt, opts)
+	if err != nil {
+		return err
+	}
+
+	if len(opts.Sort) != 0 && len(res) != 0 {
+		res, err = c.sort(res, opts)
+		if err != nil {
+			return err
+		}
+	}
+
+	// just making sure the iteration won't receive a negative number
+	opts.Skip = max(0, opts.Skip)
+	res = res[opts.Skip:]
+
+	if opts.Limit <= 0 {
+		opts.Limit = int64(len(res))
+	}
+	opts.Limit = min(int64(len(res)), opts.Limit)
+
+	res = res[:opts.Limit]
+
+	if len(opts.Projection) != 0 && len(res) != 0 {
+		res, err = c.project(res, opts)
+		if err != nil {
+			return err
+		}
+	}
+
+	values := slices.Clone(res)
+
+	c.data = values
+
+	return nil
+}
+
+func (c *Cursor) filterAndSkip(dt []domain.Document, opts domain.CursorOptions) ([]domain.Document, error) {
 	res := make([]domain.Document, 0, len(dt))
 
 	var doesMatch bool
 	var err error
-	var added int64
+
 	var skipped int64
+
 	for _, doc := range dt {
 		doesMatch, err = opts.Matcher.Match(doc, opts.Query)
 		if err != nil {
@@ -83,49 +137,13 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 		}
 
 		res = append(res, doc)
-		added++
 
-		if opts.Limit > 0 && opts.Limit <= added {
+		if opts.Limit > 0 && int(opts.Limit) <= len(res) {
 			break
 		}
 	}
-	cur := &Cursor{
-		ctx:            ctx,
-		mu:             ctxsync.NewMutex(),
-		dec:            opts.Decoder,
-		fieldNavigator: opts.FieldNavigator,
-	}
 
-	if len(opts.Sort) != 0 && len(res) != 0 {
-		res, err = cur.sort(res, opts)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// just making sure the iteration won't receive a negative number
-	opts.Skip = max(0, opts.Skip)
-	res = res[opts.Skip:]
-
-	if opts.Limit <= 0 {
-		opts.Limit = int64(len(res))
-	}
-	opts.Limit = min(int64(len(res)), opts.Limit)
-
-	res = res[:opts.Limit]
-
-	if len(opts.Projection) != 0 && len(res) != 0 {
-		res, err = cur.project(res, opts)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	values := slices.Clone(res)
-
-	cur.data = values
-
-	return cur, nil
+	return res, nil
 }
 
 func (c *Cursor) addField(doc map[string]any, candidate domain.Document, proj string) error {
