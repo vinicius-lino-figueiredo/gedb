@@ -399,7 +399,9 @@ func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 		for n, d := range found {
 			foundDocs[n] = d.(domain.Document)
 		}
-		_res.Set(id, foundDocs)
+		if err := _res.Set(id, foundDocs); err != nil {
+			return nil, err
+		}
 	}
 	keys := slices.Collect(_res.Keys())
 	var err error
