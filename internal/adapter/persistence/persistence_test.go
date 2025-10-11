@@ -897,505 +897,503 @@ func (s *PersistenceTestSuite) TestSerializers() {
 	})
 } // ==== End of 'Serialization hooks' ==== //
 
-func (s *PersistenceTestSuite) TestPreventDataloss() {
-	// Creating a datastore with in memory as true and a bad filename won't
-	// cause an error
-	s.Run("InMemoryBadFilenameNoError", func() {
-		_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"), domain.WithPersistenceInMemoryOnly(true))
+// Creating a datastore with in memory as true and a bad filename won't
+// cause an error
+func (s *PersistenceTestSuite) TestInMemoryBadFilenameNoError() {
+	_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"), domain.WithPersistenceInMemoryOnly(true))
+	s.NoError(err)
+}
+
+// Creating a persistent datastore with a bad filename will cause an error
+func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
+	_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"))
+	s.Error(err)
+}
+
+// If no file stat, ensureDatafileIntegrity creates an empty datafile
+func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
+	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	s.NoError(err)
+	p := per.(*Persistence)
+
+	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db"))
+	}
+	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db~"))
+	}
+
+	s.NoFileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+
+	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+
+	b, err := os.ReadFile("../../../workspace/it.db")
+	s.NoError(err)
+	s.Len(b, 0)
+
+}
+
+// If only datafile stat, ensureDatafileIntegrity will use it
+func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
+	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	s.NoError(err)
+	p := per.(*Persistence)
+
+	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db"))
+	}
+	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db~"))
+	}
+
+	s.NoError(os.WriteFile("../../../workspace/it.db", []byte("something"), 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+
+	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+
+	b, err := os.ReadFile("../../../workspace/it.db")
+	s.NoError(err)
+	s.Equal("something", string(b))
+}
+
+// If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
+// will use it (cannot happen except upon first use)
+func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
+	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	s.NoError(err)
+	p := per.(*Persistence)
+
+	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db"))
+	}
+	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db~"))
+	}
+
+	s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("something"), 0666))
+
+	s.NoFileExists("../../../workspace/it.db")
+	s.FileExists("../../../workspace/it.db~")
+
+	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+
+	b, err := os.ReadFile("../../../workspace/it.db")
+	s.NoError(err)
+	s.Equal("something", string(b))
+}
+
+// If both temp and current datafiles exist, ensureDatafileIntegrity
+// will use the datafile, as it means that the write of the temp file
+// failed
+//
+// Technically it could also mean the write was successful but the
+// rename wasn't, but there is in any case no guarantee that the data in
+// the temp file is whole so we have to discard the whole file
+func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
+	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	s.NoError(err)
+	p := per.(*Persistence)
+
+	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db"))
+	}
+	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/it.db~"))
+	}
+
+	s.NoError(os.WriteFile("../../../workspace/it.db", []byte("{\"_id\":\"0\",\"hello\":\"world\"}"), 0666))
+	s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("{\"_id\":\"0\",\"hello\":\"other\"}"), 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.FileExists("../../../workspace/it.db~")
+
+	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
+
+	s.FileExists("../../../workspace/it.db")
+	s.FileExists("../../../workspace/it.db~")
+
+	b, err := os.ReadFile("../../../workspace/it.db")
+	s.NoError(err)
+	s.Equal("{\"_id\":\"0\",\"hello\":\"world\"}", string(b))
+	b, err = os.ReadFile("../../../workspace/it.db~")
+	s.NoError(err)
+	s.Equal("{\"_id\":\"0\",\"hello\":\"other\"}", string(b))
+
+	ctx := context.Background()
+
+	docs, _, err := p.LoadDatabase(ctx)
+	s.NoError(err)
+
+	s.Len(docs, 1)
+	s.Equal("world", docs[0].Get("hello"))
+
+	s.FileExists("../../../workspace/it.db")
+	s.NoFileExists("../../../workspace/it.db~")
+}
+
+// persistCachedDatabase should update the contents of the datafile and leave a clean state
+func (s *PersistenceTestSuite) TestCleanDatafile() {
+	ctx := context.Background()
+	_id := uuid.New().String()
+	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
+
+	fileExists, err := s.storage.Exists(testDb)
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb))
+	}
+	fileExists, err = s.storage.Exists(testDb + "~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb + "~"))
+	}
+	s.NoFileExists(testDb)
+
+	s.NoError(os.WriteFile(testDb+"~", []byte("something"), 0666))
+	s.FileExists(testDb + "~")
+
+	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
+	contents, err := os.ReadFile(testDb)
+	s.NoError(err)
+
+	fileExists, err = s.storage.Exists(testDb)
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb))
+	}
+	s.True(fileExists)
+	fileExists, err = s.storage.Exists(testDb + "~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb + "~"))
+	}
+
+	s.False(fileExists)
+
+	d := make(data.M)
+	s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
+	s.Len(d, 2)
+	s.Equal("world", d["hello"])
+	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
+}
+
+// After a persistCachedDatabase, there should be no temp or old filename
+func (s *PersistenceTestSuite) TestNoTempFileAfterPersistCachedDatabase() {
+	ctx := context.Background()
+	_id := uuid.New().String()
+	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
+
+	fileExists, err := s.storage.Exists(testDb)
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb))
+	}
+	fileExists, err = s.storage.Exists(testDb + "~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb + "~"))
+	}
+
+	s.NoFileExists(testDb)
+	s.NoFileExists(testDb + "~")
+
+	s.NoError(os.WriteFile(testDb+"~", []byte("bloup"), 0666))
+	s.FileExists(testDb + "~")
+	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
+	contents, err := os.ReadFile(testDb)
+	s.NoError(err)
+	s.FileExists(testDb)
+	s.NoFileExists(testDb + "~")
+	d := make(data.M)
+	s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
+	s.Len(d, 2)
+	s.Equal("world", d["hello"])
+	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
+}
+
+// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
+func (s *PersistenceTestSuite) TestCleanDatafileIfTempFileExists() {
+	ctx := context.Background()
+	_id := uuid.New().String()
+	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
+
+	fileExists, err := s.storage.Exists(testDb)
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(testDb))
+	}
+	s.NoError(os.WriteFile(testDb+"~", []byte("blabla"), 0666))
+	s.NoFileExists(testDb)
+	s.FileExists(testDb + "~")
+
+	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
+	contents, err := os.ReadFile(testDb)
+	s.NoError(err)
+	s.FileExists(testDb)
+	s.NoFileExists(testDb + "~")
+	d := make(data.M)
+	s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
+	s.Len(d, 2)
+	s.Equal("world", d["hello"])
+	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
+}
+
+// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
+func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
+	const dbFile = "../../../workspace/test2.db"
+
+	fileExists, err := s.storage.Exists(dbFile)
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(dbFile))
+	}
+	fileExists, err = s.storage.Exists(dbFile + "~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove(dbFile + "~"))
+	}
+
+	p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	s.NoError(err)
+
+	ctx := context.Background()
+	_, _, err = p.LoadDatabase(ctx)
+	s.NoError(err)
+	contents, err := os.ReadFile(dbFile)
+	s.NoError(err)
+	s.FileExists(dbFile)
+	s.NoFileExists(dbFile + "~")
+	s.Len(contents, 0)
+}
+
+// Persistence works as expected when everything goes fine
+func (s *PersistenceTestSuite) TestWorkAsExpected() {
+	const dbFile = "../../../workspace/test2.db"
+
+	s.NoError(s.storage.EnsureFileDoesntExist(dbFile))
+	s.NoError(s.storage.EnsureFileDoesntExist(dbFile + "~"))
+
+	p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	s.NoError(err)
+
+	ctx := context.Background()
+	docs, _, err := p.LoadDatabase(ctx)
+	s.NoError(err)
+	s.Len(docs, 0)
+
+	doc1 := data.M{"_id": uuid.New().String(), "a": "hello"}
+	doc2 := data.M{"_id": uuid.New().String(), "a": "world"}
+
+	s.NoError(p.PersistNewState(ctx, doc1, doc2))
+
+	docs, _, err = p.LoadDatabase(ctx)
+	s.NoError(err)
+	s.Len(docs, 2)
+	s.Equal("hello", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
+	s.Equal("world", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
+
+	s.FileExists(dbFile)
+	s.NoFileExists(dbFile + "~")
+
+	p2, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	s.NoError(err)
+	docs, _, err = p2.LoadDatabase(ctx)
+	s.NoError(err)
+	s.Len(docs, 2)
+	s.Equal("hello", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
+	s.Equal("world", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
+
+	s.FileExists(dbFile)
+	s.NoFileExists(dbFile + "~")
+}
+
+func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
+	const N = 500
+	toWrite := new(bytes.Buffer)
+	i := 0
+	// let docI
+
+	// Ensuring the state is clean
+	fileExists, err := s.storage.Exists("../../../workspace/lac.db")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/lac.db"))
+	}
+	fileExists, err = s.storage.Exists("../../../workspace/lac.db~")
+	s.NoError(err)
+	if fileExists {
+		s.NoError(os.Remove("../../../workspace/lac.db~"))
+	}
+
+	// Creating a db file with 150k records (a bit long to load)
+	encoder := json.NewEncoder(toWrite)
+	for i = range N {
+		s.NoError(encoder.Encode(data.M{"_id": fmt.Sprintf("anid_%d", i), "hello": "world"}))
+	}
+	s.NoError(os.WriteFile("../../../workspace/lac.db", toWrite.Bytes(), 0666))
+
+	datafile, err := os.ReadFile("../../../workspace/lac.db")
+	s.NoError(err)
+	datafileLength := len(datafile)
+
+	s.Greater(datafileLength, 5000)
+
+	// Loading it in a separate process that we will crash before finishing the loadDatabase
+	s.Run("loadAndCrash", func() {
+		// don't really like this approach, but testing by
+		// running a main package
+		cmd := exec.Command("go", "run", "../../../test_lac/")
+		err := cmd.Run()
+		e := &exec.ExitError{}
+		s.ErrorAs(err, &e)
+		status := e.Sys().(syscall.WaitStatus).ExitStatus()
+		s.Equal(1, status)
+		s.FileExists("../../../workspace/lac.db")
+		s.FileExists("../../../workspace/lac.db~")
+		f, err := os.ReadFile("../../../workspace/lac.db")
 		s.NoError(err)
-	})
-
-	// Creating a persistent datastore with a bad filename will cause an error
-	s.Run("PersistentBadFilenameError", func() {
-		_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"))
-		s.Error(err)
-	})
-
-	// If no file stat, ensureDatafileIntegrity creates an empty datafile
-	s.Run("CreateEmptyFileIfNoFileStat", func() {
-		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+		s.Len(f, datafileLength)
+		f, err = os.ReadFile("../../../workspace/lac.db~")
 		s.NoError(err)
-		p := per.(*Persistence)
+		s.Len(f, 5000)
 
-		fileExists, err := s.storage.Exists("../../../workspace/it.db")
+		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/lac.db"))
 		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db"))
-		}
-		fileExists, err = s.storage.Exists("../../../workspace/it.db~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db~"))
-		}
-
-		s.NoFileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
-
-		s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
-
-		b, err := os.ReadFile("../../../workspace/it.db")
-		s.NoError(err)
-		s.Len(b, 0)
-
-	})
-
-	// If only datafile stat, ensureDatafileIntegrity will use it
-	s.Run("UseDatafileIfExists", func() {
-		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
-		s.NoError(err)
-		p := per.(*Persistence)
-
-		fileExists, err := s.storage.Exists("../../../workspace/it.db")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db"))
-		}
-		fileExists, err = s.storage.Exists("../../../workspace/it.db~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db~"))
-		}
-
-		s.NoError(os.WriteFile("../../../workspace/it.db", []byte("something"), 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
-
-		s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
-
-		b, err := os.ReadFile("../../../workspace/it.db")
-		s.NoError(err)
-		s.Equal("something", string(b))
-	})
-
-	// If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
-	// will use it (cannot happen except upon first use)
-	s.Run("UseTempDatafileIfExistsUponFirstUse", func() {
-		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
-		s.NoError(err)
-		p := per.(*Persistence)
-
-		fileExists, err := s.storage.Exists("../../../workspace/it.db")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db"))
-		}
-		fileExists, err = s.storage.Exists("../../../workspace/it.db~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db~"))
-		}
-
-		s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("something"), 0666))
-
-		s.NoFileExists("../../../workspace/it.db")
-		s.FileExists("../../../workspace/it.db~")
-
-		s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
-
-		b, err := os.ReadFile("../../../workspace/it.db")
-		s.NoError(err)
-		s.Equal("something", string(b))
-	})
-
-	// If both temp and current datafiles exist, ensureDatafileIntegrity
-	// will use the datafile, as it means that the write of the temp file
-	// failed
-	//
-	// Technically it could also mean the write was successful but the
-	// rename wasn't, but there is in any case no guarantee that the data in
-	// the temp file is whole so we have to discard the whole file
-	s.Run("UseDatafileIfBothExist", func() {
-		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
-		s.NoError(err)
-		p := per.(*Persistence)
-
-		fileExists, err := s.storage.Exists("../../../workspace/it.db")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db"))
-		}
-		fileExists, err = s.storage.Exists("../../../workspace/it.db~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/it.db~"))
-		}
-
-		s.NoError(os.WriteFile("../../../workspace/it.db", []byte("{\"_id\":\"0\",\"hello\":\"world\"}"), 0666))
-		s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("{\"_id\":\"0\",\"hello\":\"other\"}"), 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.FileExists("../../../workspace/it.db~")
-
-		s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
-
-		s.FileExists("../../../workspace/it.db")
-		s.FileExists("../../../workspace/it.db~")
-
-		b, err := os.ReadFile("../../../workspace/it.db")
-		s.NoError(err)
-		s.Equal("{\"_id\":\"0\",\"hello\":\"world\"}", string(b))
-		b, err = os.ReadFile("../../../workspace/it.db~")
-		s.NoError(err)
-		s.Equal("{\"_id\":\"0\",\"hello\":\"other\"}", string(b))
 
 		ctx := context.Background()
+		docs, _, err := per.LoadDatabase(ctx)
+		s.NoError(err)
+		s.FileExists("../../../workspace/lac.db")
+		s.NoFileExists("../../../workspace/lac.db~")
 
+		f, err = os.ReadFile("../../../workspace/lac.db")
+		s.NoError(err)
+		s.Len(f, datafileLength)
+
+		slices.SortFunc(docs, func(a, b domain.Document) int {
+			idA, idB := a.ID().(string), b.ID().(string)
+			if len(idA) != len(idB) {
+				return cmp.Compare(len(idA), len(idB))
+			}
+			return cmp.Compare(idA, idB)
+		})
+
+		s.Len(docs, N)
+		for i, doc := range docs {
+			s.Equal(data.M{"_id": fmt.Sprintf("anid_%d", i), "hello": "world"}, doc)
+		}
+	})
+}
+
+// Cannot cause EMFILE errors by opening too many file descriptors
+//
+// Not run on Windows as there is no clean way to set maximum file
+// descriptors. Not an issue as the code itself is tested.
+func (s *PersistenceTestSuite) TestCannotCauseEMFILEErrorsByOpeningTooManyFileDescriptors() {
+	ctx, cancel := context.WithTimeout(s.T().Context(), 5000*time.Millisecond)
+	defer cancel()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	// not creating another file
+	s.Run("openFdsLaunch", func() {
+		N := 64
+
+		var originalRLimit syscall.Rlimit
+		s.NoError(syscall.Getrlimit(syscall.RLIMIT_NOFILE, &originalRLimit))
+
+		rLimit := syscall.Rlimit{
+			Cur: 128,
+			Max: originalRLimit.Max,
+		}
+		s.NoError(syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit))
+		defer func() {
+			s.NoError(syscall.Setrlimit(syscall.RLIMIT_NOFILE, &originalRLimit))
+		}()
+		var filehandles []*os.File
+		var err error
+		for range N * 2 {
+			var filehandle *os.File
+			filehandle, err = os.OpenFile("../../../test_lac/openFdsTestFile", os.O_RDONLY|os.O_CREATE, 0666)
+			if err != nil {
+				break
+			}
+			filehandles = append(filehandles, filehandle)
+		}
+
+		s.ErrorIs(err, syscall.EMFILE)
+		for _, fh := range filehandles {
+			fh.Close()
+		}
+		filehandles = filehandles[:0]
+
+		for range N {
+			var filehandle *os.File
+			filehandle, err = os.OpenFile("../../../test_lac/openFdsTestFile2", os.O_RDONLY|os.O_CREATE, 0666)
+			if err != nil {
+				break
+			}
+			filehandles = append(filehandles, filehandle)
+		}
+		s.NoError(err)
+		for _, fh := range filehandles {
+			fh.Close()
+		}
+		p, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/openfds.db"))
+		s.NoError(err)
 		docs, _, err := p.LoadDatabase(ctx)
 		s.NoError(err)
 
-		s.Len(docs, 1)
-		s.Equal("world", docs[0].Get("hello"))
-
-		s.FileExists("../../../workspace/it.db")
-		s.NoFileExists("../../../workspace/it.db~")
+		removed := make([]domain.Document, len(docs))
+		for n, doc := range docs {
+			removed[n] = data.M{"_id": doc.ID()}
+		}
+		s.NoError(p.PersistNewState(ctx, removed...))
+		s.NoError(p.PersistNewState(ctx, data.M{"_id": uuid.New().String(), "hello": "world"}))
+		for range N * 2 {
+			if err = p.PersistCachedDatabase(ctx, docs, nil); err != nil {
+				break
+			}
+		}
+		s.NoError(err)
 	})
 
-	// persistCachedDatabase should update the contents of the datafile and leave a clean state
-	s.Run("CleanDatafile", func() {
-		ctx := context.Background()
-		_id := uuid.New().String()
-		s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
-
-		fileExists, err := s.storage.Exists(testDb)
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb))
-		}
-		fileExists, err = s.storage.Exists(testDb + "~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb + "~"))
-		}
-		s.NoFileExists(testDb)
-
-		s.NoError(os.WriteFile(testDb+"~", []byte("something"), 0666))
-		s.FileExists(testDb + "~")
-
-		s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-		contents, err := os.ReadFile(testDb)
-		s.NoError(err)
-
-		fileExists, err = s.storage.Exists(testDb)
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb))
-		}
-		s.True(fileExists)
-		fileExists, err = s.storage.Exists(testDb + "~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb + "~"))
-		}
-
-		s.False(fileExists)
-
-		d := make(data.M)
-		s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
-		s.Len(d, 2)
-		s.Equal("world", d["hello"])
-		s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
-	})
-
-	// After a persistCachedDatabase, there should be no temp or old filename
-	s.Run("NoTempFileAfterPersistCachedDatabase", func() {
-		ctx := context.Background()
-		_id := uuid.New().String()
-		s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
-
-		fileExists, err := s.storage.Exists(testDb)
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb))
-		}
-		fileExists, err = s.storage.Exists(testDb + "~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb + "~"))
-		}
-
-		s.NoFileExists(testDb)
-		s.NoFileExists(testDb + "~")
-
-		s.NoError(os.WriteFile(testDb+"~", []byte("bloup"), 0666))
-		s.FileExists(testDb + "~")
-		s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-		contents, err := os.ReadFile(testDb)
-		s.NoError(err)
-		s.FileExists(testDb)
-		s.NoFileExists(testDb + "~")
-		d := make(data.M)
-		s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
-		s.Len(d, 2)
-		s.Equal("world", d["hello"])
-		s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
-	})
-
-	// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
-	s.Run("CleanDatafileIfTempFileExists", func() {
-		ctx := context.Background()
-		_id := uuid.New().String()
-		s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
-
-		fileExists, err := s.storage.Exists(testDb)
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(testDb))
-		}
-		s.NoError(os.WriteFile(testDb+"~", []byte("blabla"), 0666))
-		s.NoFileExists(testDb)
-		s.FileExists(testDb + "~")
-
-		s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-		contents, err := os.ReadFile(testDb)
-		s.NoError(err)
-		s.FileExists(testDb)
-		s.NoFileExists(testDb + "~")
-		d := make(data.M)
-		s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
-		s.Len(d, 2)
-		s.Equal("world", d["hello"])
-		s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
-	})
-
-	// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
-	s.Run("CleanDatafileIfEmptyTempFileExists", func() {
-		const dbFile = "../../../workspace/test2.db"
-
-		fileExists, err := s.storage.Exists(dbFile)
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(dbFile))
-		}
-		fileExists, err = s.storage.Exists(dbFile + "~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove(dbFile + "~"))
-		}
-
-		p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
-		s.NoError(err)
-
-		ctx := context.Background()
-		_, _, err = p.LoadDatabase(ctx)
-		s.NoError(err)
-		contents, err := os.ReadFile(dbFile)
-		s.NoError(err)
-		s.FileExists(dbFile)
-		s.NoFileExists(dbFile + "~")
-		s.Len(contents, 0)
-	})
-
-	// Persistence works as expected when everything goes fine
-	s.Run("WorkAsExpected", func() {
-		const dbFile = "../../../workspace/test2.db"
-
-		s.NoError(s.storage.EnsureFileDoesntExist(dbFile))
-		s.NoError(s.storage.EnsureFileDoesntExist(dbFile + "~"))
-
-		p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
-		s.NoError(err)
-
-		ctx := context.Background()
-		docs, _, err := p.LoadDatabase(ctx)
-		s.NoError(err)
-		s.Len(docs, 0)
-
-		doc1 := data.M{"_id": uuid.New().String(), "a": "hello"}
-		doc2 := data.M{"_id": uuid.New().String(), "a": "world"}
-
-		s.NoError(p.PersistNewState(ctx, doc1, doc2))
-
-		docs, _, err = p.LoadDatabase(ctx)
-		s.NoError(err)
-		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
-
-		s.FileExists(dbFile)
-		s.NoFileExists(dbFile + "~")
-
-		p2, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
-		s.NoError(err)
-		docs, _, err = p2.LoadDatabase(ctx)
-		s.NoError(err)
-		s.Len(docs, 2)
-		s.Equal("hello", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc1.ID() })].Get("a"))
-		s.Equal("world", docs[slices.IndexFunc(docs, func(a domain.Document) bool { return a.ID() == doc2.ID() })].Get("a"))
-
-		s.FileExists(dbFile)
-		s.NoFileExists(dbFile + "~")
-	})
-
-	s.Run("KeepOldVersionOnCrash", func() {
-		const N = 500
-		toWrite := new(bytes.Buffer)
-		i := 0
-		// let docI
-
-		// Ensuring the state is clean
-		fileExists, err := s.storage.Exists("../../../workspace/lac.db")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/lac.db"))
-		}
-		fileExists, err = s.storage.Exists("../../../workspace/lac.db~")
-		s.NoError(err)
-		if fileExists {
-			s.NoError(os.Remove("../../../workspace/lac.db~"))
-		}
-
-		// Creating a db file with 150k records (a bit long to load)
-		encoder := json.NewEncoder(toWrite)
-		for i = range N {
-			s.NoError(encoder.Encode(data.M{"_id": fmt.Sprintf("anid_%d", i), "hello": "world"}))
-		}
-		s.NoError(os.WriteFile("../../../workspace/lac.db", toWrite.Bytes(), 0666))
-
-		datafile, err := os.ReadFile("../../../workspace/lac.db")
-		s.NoError(err)
-		datafileLength := len(datafile)
-
-		s.Greater(datafileLength, 5000)
-
-		// Loading it in a separate process that we will crash before finishing the loadDatabase
-		s.Run("loadAndCrash", func() {
-			// don't really like this approach, but testing by
-			// running a main package
-			cmd := exec.Command("go", "run", "../../../test_lac/")
-			err := cmd.Run()
-			e := &exec.ExitError{}
-			s.ErrorAs(err, &e)
-			status := e.Sys().(syscall.WaitStatus).ExitStatus()
-			s.Equal(1, status)
-			s.FileExists("../../../workspace/lac.db")
-			s.FileExists("../../../workspace/lac.db~")
-			f, err := os.ReadFile("../../../workspace/lac.db")
-			s.NoError(err)
-			s.Len(f, datafileLength)
-			f, err = os.ReadFile("../../../workspace/lac.db~")
-			s.NoError(err)
-			s.Len(f, 5000)
-
-			per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/lac.db"))
-			s.NoError(err)
-
-			ctx := context.Background()
-			docs, _, err := per.LoadDatabase(ctx)
-			s.NoError(err)
-			s.FileExists("../../../workspace/lac.db")
-			s.NoFileExists("../../../workspace/lac.db~")
-
-			f, err = os.ReadFile("../../../workspace/lac.db")
-			s.NoError(err)
-			s.Len(f, datafileLength)
-
-			slices.SortFunc(docs, func(a, b domain.Document) int {
-				idA, idB := a.ID().(string), b.ID().(string)
-				if len(idA) != len(idB) {
-					return cmp.Compare(len(idA), len(idB))
-				}
-				return cmp.Compare(idA, idB)
-			})
-
-			s.Len(docs, N)
-			for i, doc := range docs {
-				s.Equal(data.M{"_id": fmt.Sprintf("anid_%d", i), "hello": "world"}, doc)
-			}
-		})
-	})
-
-	// Cannot cause EMFILE errors by opening too many file descriptors
-	//
-	// Not run on Windows as there is no clean way to set maximum file
-	// descriptors. Not an issue as the code itself is tested.
-	s.Run("Cannot cause EMFILE errors by opening too many file descriptors", func() {
-		ctx, cancel := context.WithTimeout(s.T().Context(), 5000*time.Millisecond)
-		defer cancel()
-
-		if runtime.GOOS == "windows" {
-			return
-		}
-
-		// not creating another file
-		s.Run("openFdsLaunch", func() {
-			N := 64
-
-			var originalRLimit syscall.Rlimit
-			s.NoError(syscall.Getrlimit(syscall.RLIMIT_NOFILE, &originalRLimit))
-
-			rLimit := syscall.Rlimit{
-				Cur: 128,
-				Max: originalRLimit.Max,
-			}
-			s.NoError(syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit))
-			defer func() {
-				s.NoError(syscall.Setrlimit(syscall.RLIMIT_NOFILE, &originalRLimit))
-			}()
-			var filehandles []*os.File
-			var err error
-			for range N * 2 {
-				var filehandle *os.File
-				filehandle, err = os.OpenFile("../../../test_lac/openFdsTestFile", os.O_RDONLY|os.O_CREATE, 0666)
-				if err != nil {
-					break
-				}
-				filehandles = append(filehandles, filehandle)
-			}
-
-			s.ErrorIs(err, syscall.EMFILE)
-			for _, fh := range filehandles {
-				fh.Close()
-			}
-			filehandles = filehandles[:0]
-
-			for range N {
-				var filehandle *os.File
-				filehandle, err = os.OpenFile("../../../test_lac/openFdsTestFile2", os.O_RDONLY|os.O_CREATE, 0666)
-				if err != nil {
-					break
-				}
-				filehandles = append(filehandles, filehandle)
-			}
-			s.NoError(err)
-			for _, fh := range filehandles {
-				fh.Close()
-			}
-			p, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/openfds.db"))
-			s.NoError(err)
-			docs, _, err := p.LoadDatabase(ctx)
-			s.NoError(err)
-
-			removed := make([]domain.Document, len(docs))
-			for n, doc := range docs {
-				removed[n] = data.M{"_id": doc.ID()}
-			}
-			s.NoError(p.PersistNewState(ctx, removed...))
-			s.NoError(p.PersistNewState(ctx, data.M{"_id": uuid.New().String(), "hello": "world"}))
-			for range N * 2 {
-				if err = p.PersistCachedDatabase(ctx, docs, nil); err != nil {
-					break
-				}
-			}
-			s.NoError(err)
-		})
-
-		select {
-		case <-ctx.Done():
-			s.Fail(ctx.Err().Error())
-		default:
-		}
-	})
-} // ==== End of 'Prevent dataloss when persisting data' ====
+	select {
+	case <-ctx.Done():
+		s.Fail(ctx.Err().Error())
+	default:
+	}
+}
 
 // NOTE: Most part of the this original test suite are Datastore related, not
 // persistence. Im just adding a few tests so this is not empty.
