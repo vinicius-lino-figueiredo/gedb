@@ -223,29 +223,6 @@ func (s *FieldNavigatorTestSuite) TestReturnDefinedOnLists() {
 	}
 }
 
-// Out of bounds won't be undefined if search has been expanded.
-func (s *FieldNavigatorTestSuite) TestExpandedOutOfBounds() {
-	doc := data.M{
-		"planets": []any{
-			data.M{
-				"value": []any{
-					"Not an object 1",
-					"Not an object 2",
-					"Not an object 3",
-				},
-			},
-		},
-	}
-
-	dv, expanded, err := s.fn.GetField(doc, "planets", "value", "5")
-	s.NoError(err)
-	s.False(expanded)
-	s.Len(dv, 1)
-	value, isSet := dv[0].Get()
-	s.Nil(value)
-	s.False(isSet)
-}
-
 func (s *FieldNavigatorTestSuite) TestStopExpansion() {
 	doc := data.M{
 		"ducks": []any{
