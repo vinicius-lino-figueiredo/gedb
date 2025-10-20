@@ -62,7 +62,7 @@ func (fn *FieldNavigator) getField(obj any, fieldParts []string, ensure bool) ([
 	}
 
 	if len(fieldParts) == 0 {
-		return invalid, false, nil
+		return []domain.GetSetter{NewReadOnlyGetSetter(obj)}, false, nil
 	}
 
 	ctx := &navCtx{

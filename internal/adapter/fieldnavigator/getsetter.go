@@ -42,6 +42,14 @@ func NewGetSetterWithDoc(doc domain.Document, key string) domain.GetSetter {
 	}
 }
 
+// NewReadOnlyGetSetter returns a new implementation of [domain.GetSetter] that
+// can be read but cannot modified.
+func NewReadOnlyGetSetter(v any) domain.GetSetter {
+	return &GetSetter{
+		get: func() (any, bool) { return v, true },
+	}
+}
+
 // NewGetSetterEmpty returns a new [domain.GetSetter] of an undefined value.
 func NewGetSetterEmpty() domain.GetSetter {
 	return &GetSetter{}
