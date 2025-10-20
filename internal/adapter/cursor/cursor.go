@@ -237,8 +237,8 @@ func (c *Cursor) Err() error {
 	return c.storedErr
 }
 
-// Exec implements domain.Cursor.
-func (c *Cursor) Exec(ctx context.Context, target any) error {
+// Scan implements domain.Cursor.
+func (c *Cursor) Scan(ctx context.Context, target any) error {
 	innerCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	go func() {

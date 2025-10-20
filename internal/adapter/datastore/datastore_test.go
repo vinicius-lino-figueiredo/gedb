@@ -68,7 +68,7 @@ func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]data.M, error) {
 	ctx := context.Background()
 	for cur.Next() {
 		n := make(data.M)
-		if err := cur.Exec(ctx, &n); err != nil {
+		if err := cur.Scan(ctx, &n); err != nil {
 			return nil, err
 		}
 		res = append(res, n)

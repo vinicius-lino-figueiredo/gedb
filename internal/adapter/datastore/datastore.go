@@ -488,7 +488,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	if !cur.Next() {
 		return fmt.Errorf("expected exactly one record, got 0")
 	}
-	return cur.Exec(ctx, target)
+	return cur.Scan(ctx, target)
 }
 
 // GetAllData implements domain.GEDB.
@@ -845,7 +845,7 @@ func (d *Datastore) remove(ctx context.Context, query domain.Document, options .
 	var vals []data.M
 	for cur.Next() {
 		var v data.M
-		if err := cur.Exec(ctx, &v); err != nil {
+		if err := cur.Scan(ctx, &v); err != nil {
 			return 0, err
 		}
 		vals = append(vals, v)
@@ -1012,7 +1012,7 @@ func (d *Datastore) findAndModify(ctx context.Context, qry, modQry domain.Docume
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := cur.Exec(ctx, &oldDoc); err != nil {
+		if err := cur.Scan(ctx, &oldDoc); err != nil {
 			return nil, nil, err
 		}
 		newDoc, err := d.modifier.Modify(oldDoc, modQry)

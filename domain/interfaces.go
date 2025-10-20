@@ -168,8 +168,8 @@ type Persistence interface {
 
 // Cursor provides iteration over query results with pagination support.
 type Cursor interface {
-	// Exec executes the cursor and decodes all results into the target slice.
-	Exec(ctx context.Context, target any) error
+	// Scan executes the cursor and decodes all results into the target slice.
+	Scan(ctx context.Context, target any) error
 	// Next advances the cursor to the next document, returning true if available.
 	Next() bool
 	// Err returns any error that occurred during iteration.
