@@ -13,10 +13,10 @@ var invalid = []domain.GetSetter{NewGetSetterEmpty()}
 
 type navCtx struct {
 	// has to be a list to include expanded queries
-	curr []V
+	curr []field
 	idx  int
 	n    int
-	item V
+	item field
 	part string
 	addr []string
 	// set to true when continuing a query for every item in a list
@@ -24,7 +24,7 @@ type navCtx struct {
 	ensure   bool
 }
 
-type V struct {
+type field struct {
 	v          any
 	expandable bool
 	gs         domain.GetSetter
@@ -68,7 +68,7 @@ func (fn *FieldNavigator) getField(obj any, fieldParts []string, ensure bool) ([
 	}
 
 	ctx := &navCtx{
-		curr:   []V{{v: obj, expandable: true}},
+		curr:   []field{{v: obj, expandable: true}},
 		addr:   fieldParts,
 		ensure: ensure,
 	}
@@ -130,7 +130,7 @@ func (fn *FieldNavigator) enterDoc(ctx *navCtx, t domain.Document) ([]domain.Get
 		}
 
 	}
-	ctx.curr[ctx.n] = V{
+	ctx.curr[ctx.n] = field{
 		v:          t.Get(ctx.part),
 		expandable: true,
 		gs:         NewGetSetterWithDoc(t, ctx.part),
@@ -144,7 +144,7 @@ func (fn *FieldNavigator) enterArr(ctx *navCtx, t []any) ([]domain.GetSetter, bo
 		ctx.expanded = true
 
 		if !ctx.item.expandable {
-			ctx.curr[ctx.n] = V{
+			ctx.curr[ctx.n] = field{
 				v:          nil,
 				expandable: true,
 				gs:         NewGetSetterEmpty(),
@@ -153,9 +153,9 @@ func (fn *FieldNavigator) enterArr(ctx *navCtx, t []any) ([]domain.GetSetter, bo
 			return nil, false, nil
 		}
 
-		tv := make([]V, len(t))
+		tv := make([]field, len(t))
 		for nn, v := range t {
-			tv[nn] = V{v: v, expandable: false, gs: NewGetSetterEmpty()}
+			tv[nn] = field{v: v, expandable: false, gs: NewGetSetterEmpty()}
 		}
 
 		// expanding current list without losing
@@ -183,7 +183,7 @@ func (fn *FieldNavigator) enterArr(ctx *navCtx, t []any) ([]domain.GetSetter, bo
 				t = newT
 				ctx.curr[ctx.n].gs.Set(newT)
 			}
-			ctx.curr[ctx.n] = V{
+			ctx.curr[ctx.n] = field{
 				v:          t[i],
 				expandable: true,
 				gs:         NewGetSetterWithArrayIndex(t, i),
@@ -193,7 +193,7 @@ func (fn *FieldNavigator) enterArr(ctx *navCtx, t []any) ([]domain.GetSetter, bo
 
 		// invalid but expanded
 		if ctx.expanded {
-			ctx.curr[ctx.n] = V{v: nil, expandable: true}
+			ctx.curr[ctx.n] = field{v: nil, expandable: true}
 		}
 
 		// invalid and not expanded
