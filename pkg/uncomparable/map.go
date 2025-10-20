@@ -1,4 +1,7 @@
-package uncomparablemap
+// Package uncomparable contains an implementation that allows user to create
+// a map with key of type [any] the given compare function, which returns an
+// error instead of panicking.
+package uncomparable
 
 import (
 	"iter"
@@ -7,21 +10,26 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-type UncomparableMap[T any] struct {
+// Map represents a map[K]T, where T does not need to me [comparable].
+type Map[T any] struct {
 	buckets  [][]kv[T]
 	hasher   domain.Hasher
 	comparer domain.Comparer
 }
 
-func New[T any](hasher domain.Hasher, comparer domain.Comparer) *UncomparableMap[T] {
-	return &UncomparableMap[T]{
+// New returns a new instance of [Map] with the given [domain.Hasher] and
+// [domain.Comparer].
+func New[T any](hasher domain.Hasher, comparer domain.Comparer) *Map[T] {
+	return &Map[T]{
 		buckets:  make([][]kv[T], 8),
 		hasher:   hasher,
 		comparer: comparer,
 	}
 }
 
-func (m *UncomparableMap[T]) Delete(key any) error {
+// Delete removes a given key from the map, if it exists. If the given key could
+// not be hashed or some comparison failed, it returns the error.
+func (m *Map[T]) Delete(key any) error {
 	bucketIndex, err := m.getBucketIndex(key)
 	if err != nil {
 		return err
@@ -42,7 +50,9 @@ func (m *UncomparableMap[T]) Delete(key any) error {
 	return nil
 }
 
-func (m *UncomparableMap[T]) Get(key any) (T, bool, error) {
+// Get returns the value for the given key with a bool to indicate whether it
+// exists in the map or not. If hash or comparison fails, returns an error.
+func (m *Map[T]) Get(key any) (T, bool, error) {
 	bucketIndex, err := m.getBucketIndex(key)
 	if err != nil {
 		return *new(T), false, err
@@ -62,7 +72,7 @@ func (m *UncomparableMap[T]) Get(key any) (T, bool, error) {
 	return *new(T), false, nil
 }
 
-func (m *UncomparableMap[T]) getBucketIndex(key any) (uint64, error) {
+func (m *Map[T]) getBucketIndex(key any) (uint64, error) {
 	h, err := m.hasher.Hash(key)
 	if err != nil {
 		return 0, err
@@ -70,7 +80,8 @@ func (m *UncomparableMap[T]) getBucketIndex(key any) (uint64, error) {
 	return h % uint64(len(m.buckets)), nil
 }
 
-func (m *UncomparableMap[T]) Keys() iter.Seq[any] {
+// Keys returns an unorderd [iter.Seq] containing all the stored keys.
+func (m *Map[T]) Keys() iter.Seq[any] {
 	return func(yield func(any) bool) {
 		for _, bucket := range m.buckets {
 			for _, v := range bucket {
@@ -82,7 +93,8 @@ func (m *UncomparableMap[T]) Keys() iter.Seq[any] {
 	}
 }
 
-func (m *UncomparableMap[T]) Iter() iter.Seq2[any, T] {
+// Iter returns an unordered [iter.Seq2] containing all the key+value pairs.
+func (m *Map[T]) Iter() iter.Seq2[any, T] {
 	return func(yield func(any, T) bool) {
 		for _, bucket := range m.buckets {
 			for _, v := range bucket {
@@ -94,7 +106,9 @@ func (m *UncomparableMap[T]) Iter() iter.Seq2[any, T] {
 	}
 }
 
-func (m *UncomparableMap[T]) Set(key any, value T) error {
+// Set adds or replaces the given key in the map, returning error on hash or
+// comparison failure.
+func (m *Map[T]) Set(key any, value T) error {
 	bucketIndex, err := m.getBucketIndex(key)
 	if err != nil {
 		return err
@@ -123,7 +137,8 @@ func (m *UncomparableMap[T]) Set(key any, value T) error {
 	return nil
 }
 
-func (m *UncomparableMap[T]) Values() iter.Seq[T] {
+// Values returns an unorderd [iter.Seq] containing all the stored values.
+func (m *Map[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for _, bucket := range m.buckets {
 			for _, v := range bucket {

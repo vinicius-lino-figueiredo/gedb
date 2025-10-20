@@ -21,7 +21,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/ctxsync"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparablemap"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparable"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 	DefaultFileMode os.FileMode = 0o644
 )
 
-type docMap = *uncomparablemap.UncomparableMap[domain.Document]
+type docMap = *uncomparable.Map[domain.Document]
 
 // Persistence implements domain.Persistence.
 type Persistence struct {
@@ -143,7 +143,7 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 		return nil, nil, ctx.Err()
 	default:
 	}
-	dataByID := uncomparablemap.New[domain.Document](p.hasher, p.comparer)
+	dataByID := uncomparable.New[domain.Document](p.hasher, p.comparer)
 
 	indexes := make(map[string]domain.IndexDTO)
 

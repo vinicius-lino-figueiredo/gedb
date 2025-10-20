@@ -11,7 +11,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
-	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparablemap"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparable"
 )
 
 // Index implements domain.Index.
@@ -391,7 +391,7 @@ func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Updat
 // GetMatching implements domain.Index.
 func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 	res := []domain.Document{}
-	_res := uncomparablemap.New[[]domain.Document](i.hasher, i.comparer)
+	_res := uncomparable.New[[]domain.Document](i.hasher, i.comparer)
 	for _, v := range value {
 		found := i.Tree.Search(v)
 		if len(found) == 0 {
