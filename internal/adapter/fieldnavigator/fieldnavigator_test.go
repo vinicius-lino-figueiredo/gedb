@@ -1,6 +1,7 @@
 package fieldnavigator
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -252,6 +253,178 @@ func (s *FieldNavigatorTestSuite) TestStopExpansion() {
 	s.True(expanded)
 	s.Equal([]any{nil, nil}, s.ListGetSetter(dv))
 
+}
+
+// Will return unset fields when looking for out-of-bounds index in an expanded
+// address.
+func (s *FieldNavigatorTestSuite) TestGetExpandedOutOfBounds() {
+	obj := data.M{"existent": []any{data.M{"a": []any{}}}}
+
+	fields, expanded, err := s.fn.GetField(obj, "existent", "a", "3")
+
+	s.True(expanded)
+	s.NoError(err)
+	s.Len(fields, 1)
+	value, defined := fields[0].Get()
+	s.False(defined)
+	s.Nil(value)
+
+	s.Equal(data.M{"existent": []any{data.M{"a": []any{}}}}, obj)
+}
+
+// If address points to obj argument, result is a read-only field.
+func (s *FieldNavigatorTestSuite) TestNoAddress() {
+	obj := data.M{"yes": "indeed"}
+
+	fields, expanded, err := s.fn.GetField(obj)
+	s.NoError(err)
+	s.False(expanded)
+	s.Len(fields, 1)
+
+	field := fields[0]
+
+	// can get
+	value, defined := field.Get()
+	s.True(defined)
+	s.Equal(obj, value)
+
+	// cannot unset
+	field.Unset()
+	s.Equal(data.M{"yes": "indeed"}, obj)
+
+	// cannot set
+	field.Set(data.M{"nope": "not really"})
+	s.Equal(data.M{"yes": "indeed"}, obj)
+}
+
+// Can get a dot notation address.
+func (s *FieldNavigatorTestSuite) TestGetAddress() {
+	r, err := s.fn.GetAddress("")
+	s.NoError(err)
+	s.Equal([]string{""}, r)
+
+	r, err = s.fn.GetAddress(".")
+	s.NoError(err)
+	s.Equal([]string{"", ""}, r)
+
+	r, err = s.fn.GetAddress("a.b")
+	s.NoError(err)
+	s.Equal([]string{"a", "b"}, r)
+
+	r, err = s.fn.GetAddress("cd.e.fg")
+	s.NoError(err)
+	s.Equal([]string{"cd", "e", "fg"}, r)
+
+	r, err = s.fn.GetAddress("h.i.j.k...l.m")
+	s.NoError(err)
+	s.Equal([]string{"h", "i", "j", "k", "", "", "l", "m"}, r)
+}
+
+// Can split a slice of fields without breaking dot notation.
+func (s *FieldNavigatorTestSuite) TestSplitFields() {
+	r, err := s.fn.SplitFields("")
+	s.NoError(err)
+	s.Equal([]string{""}, r)
+
+	r, err = s.fn.SplitFields(",")
+	s.NoError(err)
+	s.Equal([]string{"", ""}, r)
+
+	r, err = s.fn.SplitFields("a.b")
+	s.NoError(err)
+	s.Equal([]string{"a.b"}, r)
+
+	r, err = s.fn.SplitFields("c,d.e.f,g")
+	s.NoError(err)
+	s.Equal([]string{"c", "d.e.f", "g"}, r)
+
+	r, err = s.fn.SplitFields("h,i,j,k,,,l,m")
+	s.NoError(err)
+	s.Equal([]string{"h", "i", "j", "k", "", "", "l", "m"}, r)
+}
+
+// Will ensure an inexistent field, setting it to nil.
+func (s *FieldNavigatorTestSuite) TestEnsureField() {
+	obj := data.M{"existent": "yep"}
+
+	fields, err := s.fn.EnsureField(obj, "nope")
+
+	s.NoError(err)
+	s.Len(fields, 1)
+	value, defined := fields[0].Get()
+	s.True(defined)
+	s.Nil(value)
+
+	s.Equal(data.M{"existent": "yep", "nope": nil}, obj)
+}
+
+// Will create nested objects if ensuring a field.
+func (s *FieldNavigatorTestSuite) TestEnsureNestedField() {
+	obj := data.M{"existent": "yep"}
+
+	fields, err := s.fn.EnsureField(obj, "yes", "indeed")
+
+	s.NoError(err)
+	s.Len(fields, 1)
+	value, defined := fields[0].Get()
+	s.True(defined)
+	s.Nil(value)
+
+	s.Equal(data.M{"existent": "yep", "yes": data.M{"indeed": nil}}, obj)
+}
+
+// EnsureField appends to array if necessary.
+func (s *FieldNavigatorTestSuite) TestEnsureArrayItem() {
+	obj := data.M{"existent": []any{}}
+
+	fields, err := s.fn.EnsureField(obj, "existent", "4")
+
+	s.NoError(err)
+	s.Len(fields, 1)
+	value, defined := fields[0].Get()
+	s.True(defined)
+	s.Nil(value)
+
+	s.Equal(data.M{"existent": []any{nil, nil, nil, nil, nil}}, obj)
+}
+
+// Document factory error does not affect GetField.
+func (s *FieldNavigatorTestSuite) TestGetFieldDocumentFactoryError() {
+	s.fn.docFac = func(any) (domain.Document, error) {
+		return nil, fmt.Errorf("error")
+	}
+	obj := data.M{"yes": "indeed"}
+	fields, expanded, err := s.fn.GetField(obj, "yes")
+	s.NoError(err)
+	s.False(expanded)
+	s.Len(fields, 1)
+	value, defined := fields[0].Get()
+	s.True(defined)
+	s.Equal("indeed", value)
+}
+
+// Document factory error does not affect non-nested EnsureField.
+func (s *FieldNavigatorTestSuite) TestEnsureSimpleFieldDocumentFactoryError() {
+	s.fn.docFac = func(any) (domain.Document, error) {
+		return nil, fmt.Errorf("error")
+	}
+	obj := data.M{}
+	fields, err := s.fn.EnsureField(obj, "yes")
+	s.NoError(err)
+	value, defined := fields[0].Get()
+	s.True(defined)
+	s.Nil(value)
+}
+
+// Document factory error makes nested EnsureField fail.
+func (s *FieldNavigatorTestSuite) TestEnsureNestedFieldDocumentFactoryError() {
+	s.fn.docFac = func(any) (domain.Document, error) {
+		return nil, fmt.Errorf("error")
+	}
+	obj := data.M{}
+	fields, err := s.fn.EnsureField(obj, "yes", "indeed")
+	s.Error(err)
+	s.Nil(fields)
 }
 
 func (s *FieldNavigatorTestSuite) ListGetSetter(gsl []domain.GetSetter) []any {
