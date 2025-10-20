@@ -1,3 +1,5 @@
+// Package fieldnavigator contains the defalt implementation of
+// [domain.FieldNavigator] for GEDB package.
 package fieldnavigator
 
 import (
