@@ -68,6 +68,9 @@ func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 
 // Match implements [domain.Matcher].
 func (m *Matcher) Match(val any, qry any) (bool, error) {
+	if qry == nil {
+		return true, nil
+	}
 	doc, ok := val.(domain.Document)
 	if !ok {
 		return m.nonDocMatch(val, qry)
