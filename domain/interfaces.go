@@ -243,7 +243,7 @@ type GEDB interface {
 	// Insert adds one or more documents to the database and returns the
 	// stored versions, including generated metadata like IDs. Documents
 	// must be structs or maps.
-	Insert(ctx context.Context, newDocs ...any) ([]Document, error)
+	Insert(ctx context.Context, newDocs ...any) (Cursor, error)
 
 	// Count returns the number of documents matching the given query.
 	Count(ctx context.Context, query any) (int64, error)
@@ -257,7 +257,7 @@ type GEDB interface {
 
 	// Update modifies documents that match the query using the updateQuery.
 	// Returns the number of documents updated.
-	Update(ctx context.Context, query any, updateQuery any, options ...UpdateOption) ([]Document, error)
+	Update(ctx context.Context, query any, updateQuery any, options ...UpdateOption) (Cursor, error)
 
 	// Remove deletes documents matching the query. Returns the number of
 	// documents removed.

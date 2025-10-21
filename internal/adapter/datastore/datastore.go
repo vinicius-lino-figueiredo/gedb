@@ -687,12 +687,16 @@ func (d *Datastore) matchingResult(dt []domain.Document, err error) ([]domain.Do
 }
 
 // Insert implements domain.GEDB.
-func (d *Datastore) Insert(ctx context.Context, newDocs ...any) ([]domain.Document, error) {
+func (d *Datastore) Insert(ctx context.Context, newDocs ...any) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
 	}
 	defer d.executor.Unlock()
-	return d.insert(ctx, newDocs...)
+	res, err := d.insert(ctx, newDocs...)
+	if err != nil {
+		return nil, err
+	}
+	return d.cursorFactory(ctx, res)
 }
 
 func (d *Datastore) insert(ctx context.Context, newDocs ...any) ([]domain.Document, error) {
@@ -921,11 +925,19 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...domain.Document) e
 }
 
 // Update implements domain.GEDB.
-func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) ([]domain.Document, error) {
+func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
 	}
 	defer d.executor.Unlock()
+	res, err := d.update(ctx, query, updateQuery, options...)
+	if err != nil {
+		return nil, err
+	}
+	return d.cursorFactory(ctx, res)
+}
+
+func (d *Datastore) update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) ([]domain.Document, error) {
 
 	QryDoc, err := d.documentFactory(query)
 	if err != nil {
