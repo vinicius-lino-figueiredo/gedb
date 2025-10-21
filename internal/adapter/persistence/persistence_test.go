@@ -1270,7 +1270,7 @@ func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
 	s.Run("loadAndCrash", func() {
 		// don't really like this approach, but testing by
 		// running a main package
-		cmd := exec.Command("go", "run", "../../../test_lac/")
+		cmd := exec.Command("go", "run", "../../../test_lac/loadandcrash.go")
 		err := cmd.Run()
 		e := &exec.ExitError{}
 		s.ErrorAs(err, &e)

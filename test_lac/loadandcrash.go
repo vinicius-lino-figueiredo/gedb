@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package main represents a executable file that crashes during persistence
 package main
 
