@@ -74,7 +74,7 @@ func (c *Cursor) apply(dt []domain.Document, opts domain.CursorOptions) error {
 		return nil
 	}
 
-	res, err := c.filterAndSkip(dt, opts)
+	res, err := c.filter(dt, opts)
 	if err != nil {
 		return err
 	}
@@ -111,13 +111,11 @@ func (c *Cursor) apply(dt []domain.Document, opts domain.CursorOptions) error {
 	return nil
 }
 
-func (c *Cursor) filterAndSkip(dt []domain.Document, opts domain.CursorOptions) ([]domain.Document, error) {
+func (c *Cursor) filter(dt []domain.Document, opts domain.CursorOptions) ([]domain.Document, error) {
 	res := make([]domain.Document, 0, len(dt))
 
 	var doesMatch bool
 	var err error
-
-	var skipped int64
 
 	for _, doc := range dt {
 		doesMatch, err = opts.Matcher.Match(doc, opts.Query)
@@ -127,20 +125,9 @@ func (c *Cursor) filterAndSkip(dt []domain.Document, opts domain.CursorOptions) 
 		if !doesMatch {
 			continue
 		}
-		if opts.Sort != nil {
-			res = append(res, doc)
-			continue
-		}
-		if opts.Skip > skipped {
-			skipped++
-			continue
-		}
 
 		res = append(res, doc)
 
-		if opts.Limit > 0 && int(opts.Limit) <= len(res) {
-			break
-		}
 	}
 
 	return res, nil
