@@ -31,6 +31,8 @@ var ctx = context.Background()
 
 type timeGetterMock struct{ mock.Mock }
 
+type S = domain.Sort
+
 func (t *timeGetterMock) GetTime() time.Time { return t.Called().Get(0).(time.Time) }
 
 type DatastoreTestSuite struct {
@@ -968,7 +970,7 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"a": 15, "hello": "home"}))
 
 		cur, err := s.d.Find(ctx, nil,
-			domain.WithFindSort(data.M{"a": 1}),
+			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindLimit(2),
 		)
 		s.NoError(err)
@@ -987,18 +989,18 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"a": 15, "hello": "home"}))
 
 		doc := make(data.M)
-		err := s.d.FindOne(ctx, nil, &doc, domain.WithFindSort(data.M{"a": 1}))
+		err := s.d.FindOne(ctx, nil, &doc, domain.WithFindSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
 		s.Equal("world", doc.Get("hello"))
 
 		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc2, domain.WithFindSort(data.M{"a": 1}))
+		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc2, domain.WithFindSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
 		s.Equal("home", doc2.Get("hello"))
 
 		doc3 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc3,
-			domain.WithFindSort(data.M{"a": 1}),
+			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindSkip(1),
 		)
 		s.NoError(err)
@@ -1006,7 +1008,7 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc4 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc4,
-			domain.WithFindSort(data.M{"a": 1}),
+			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindSkip(2),
 		)
 		s.Error(err) // No documents found

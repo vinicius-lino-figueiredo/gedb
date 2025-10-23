@@ -441,11 +441,6 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 		return nil, err
 	}
 
-	sort := make(map[string]int64)
-	if err := d.decoder.Decode(opt.Sort, &sort); err != nil {
-		return nil, err
-	}
-
 	allData, err := d.getCandidates(ctx, queryDoc, dontExpireStaleDocs)
 	if err != nil {
 		return nil, err
@@ -455,7 +450,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 		domain.WithCursorQuery(queryDoc),
 		domain.WithCursorLimit(opt.Limit),
 		domain.WithCursorSkip(opt.Skip),
-		domain.WithCursorSort(sort),
+		domain.WithCursorSort(opt.Sort),
 		domain.WithCursorProjection(proj),
 		domain.WithCursorMatcher(d.matcher),
 		domain.WithCursorDecoder(d.decoder),

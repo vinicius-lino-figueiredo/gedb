@@ -16,3 +16,10 @@ type Update struct {
 	OldDoc Document
 	NewDoc Document
 }
+
+type Sort []SortName
+
+type SortName struct {
+	Key   string
+	Order int64
+}

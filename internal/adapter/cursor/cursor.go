@@ -389,8 +389,8 @@ func (c *Cursor) sort(candidates []domain.Document, options domain.CursorOptions
 		if err != nil {
 			return 0
 		}
-		for criterion, direction := range options.Sort {
-			comp, cErr := c.compareByCriterion(a, b, options.Comparer, criterion, int(direction))
+		for _, crit := range options.Sort {
+			comp, cErr := c.compareByCriterion(a, b, options.Comparer, crit.Key, int(crit.Order))
 			if cErr != nil {
 				err = cErr
 				return 0

@@ -29,7 +29,7 @@ func WithFindLimit(l int64) FindOption {
 }
 
 // WithFindSort specifies the sort order for query results.
-func WithFindSort(s any) FindOption {
+func WithFindSort(s Sort) FindOption {
 	return func(fo *FindOptions) {
 		fo.Sort = s
 	}
@@ -47,7 +47,7 @@ type FindOptions struct {
 	// Limit specifies the maximum number of documents to return.
 	Limit int64
 	// Sort specifies the sort order for results.
-	Sort any
+	Sort Sort
 }
 
 // WithUpdateMulti enables updating multiple documents that match the query.
@@ -163,7 +163,7 @@ func WithCursorSkip(s int64) CursorOption {
 }
 
 // WithCursorSort sets the sort order for cursor results.
-func WithCursorSort(s map[string]int64) CursorOption {
+func WithCursorSort(s Sort) CursorOption {
 	return func(co *CursorOptions) {
 		co.Sort = s
 	}
@@ -225,7 +225,7 @@ type CursorOptions struct {
 	// Skip specifies the number of documents to skip.
 	Skip int64
 	// Sort specifies the sort order for results.
-	Sort map[string]int64
+	Sort Sort
 	// Projection specifies which fields to include or exclude.
 	Projection map[string]uint64
 	// Matcher provides query evaluation logic.
