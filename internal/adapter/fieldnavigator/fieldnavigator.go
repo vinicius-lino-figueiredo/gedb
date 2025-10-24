@@ -141,65 +141,67 @@ func (fn *FieldNavigator) enterDoc(ctx *navCtx, t domain.Document) ([]domain.Get
 func (fn *FieldNavigator) enterArr(ctx *navCtx, t []any) ([]domain.GetSetter, bool, error) {
 	i, err := strconv.Atoi(ctx.part)
 	if err != nil {
-		ctx.expanded = true
-
-		if !ctx.item.expandable {
-			ctx.curr[ctx.n] = field{
-				v:          nil,
-				expandable: true,
-				gs:         NewGetSetterEmpty(),
-			}
-			ctx.n--
-			return nil, false, nil
-		}
-
-		tv := make([]field, len(t))
-		for nn, v := range t {
-			tv[nn] = field{v: v, expandable: false, gs: NewGetSetterEmpty()}
-		}
-
-		// expanding current list without losing
-		// track of current index by inserting
-		// in current position.
-
-		// removing current item
-		start := ctx.curr[:ctx.n]
-		end := ctx.curr[ctx.n+1:]
-
-		// expanding t
-		ctx.curr = append(append(start, tv...), end...)
-
-		// rerunning current index because the
-		// order was changed by removal
-		ctx.n--
-
-	} else {
-
-		// valid index (within range)
-		if i >= 0 && (i < len(t) || ctx.ensure) {
-			if ctx.ensure && i >= 0 {
-				newT := make([]any, i+1)
-				_ = copy(newT, t)
-				t = newT
-				ctx.curr[ctx.n].gs.Set(newT)
-			}
-			ctx.curr[ctx.n] = field{
-				v:          t[i],
-				expandable: true,
-				gs:         NewGetSetterWithArrayIndex(t, i),
-			}
-			return nil, false, nil
-		}
-
-		// invalid but expanded
-		if ctx.expanded {
-			ctx.curr[ctx.n] = field{v: nil, expandable: true}
-		}
-
-		// invalid and not expanded
-		res := []domain.GetSetter{NewGetSetterEmpty()}
-		return res, true, nil
+		return fn.expandArray(ctx, t)
 	}
+
+	// valid index (within range)
+	if i >= 0 && (i < len(t) || ctx.ensure) {
+		if ctx.ensure && i >= 0 {
+			newT := make([]any, i+1)
+			_ = copy(newT, t)
+			t = newT
+			ctx.curr[ctx.n].gs.Set(newT)
+		}
+		ctx.curr[ctx.n] = field{
+			v:          t[i],
+			expandable: true,
+			gs:         NewGetSetterWithArrayIndex(t, i),
+		}
+		return nil, false, nil
+	}
+
+	// invalid but expanded
+	if ctx.expanded {
+		ctx.curr[ctx.n] = field{v: nil, expandable: true}
+	}
+
+	// invalid and not expanded
+	res := []domain.GetSetter{NewGetSetterEmpty()}
+	return res, true, nil
+}
+
+func (fn *FieldNavigator) expandArray(ctx *navCtx, t []any) ([]domain.GetSetter, bool, error) {
+	ctx.expanded = true
+
+	if !ctx.item.expandable {
+		ctx.curr[ctx.n] = field{
+			v:          nil,
+			expandable: true,
+			gs:         NewGetSetterEmpty(),
+		}
+		ctx.n--
+		return nil, false, nil
+	}
+
+	tv := make([]field, len(t))
+	for nn, v := range t {
+		tv[nn] = field{v: v, expandable: false, gs: NewGetSetterEmpty()}
+	}
+
+	// expanding current list without losing
+	// track of current index by inserting
+	// in current position.
+
+	// removing current item
+	start := ctx.curr[:ctx.n]
+	end := ctx.curr[ctx.n+1:]
+
+	// expanding t
+	ctx.curr = append(append(start, tv...), end...)
+
+	// rerunning current index because the
+	// order was changed by removal
+	ctx.n--
 	return nil, false, nil
 }
 
