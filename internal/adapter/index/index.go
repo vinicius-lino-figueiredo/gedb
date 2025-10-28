@@ -357,6 +357,7 @@ Loop:
 	}
 
 	if err != nil {
+		ctx := context.WithoutCancel(ctx)
 		for n := range failingIndex {
 			_ = i.Remove(ctx, pairs[n].NewDoc)
 		}
