@@ -53,15 +53,13 @@ func (c *Cursor) Err() error {
 
 // Scan implements domain.Cursor.
 func (c *Cursor) Scan(ctx context.Context, target any) error {
-	scanCtx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	go func() {
-		select {
-		case <-c.ctx.Done():
-			cancel(context.Cause(c.ctx))
-		case <-scanCtx.Done():
-		}
-	}()
+	select {
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	if c.index < 0 {
 		return fmt.Errorf("called Scan before calling Next")
 	}
@@ -80,6 +78,11 @@ func (c *Cursor) Close() error {
 
 // Next implements domain.Cursor.
 func (c *Cursor) Next() bool {
+	select {
+	case <-c.ctx.Done():
+		return false
+	default:
+	}
 	if c.index+1 < int64(len(c.data)) {
 		c.index++
 		return true
