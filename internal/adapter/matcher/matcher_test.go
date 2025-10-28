@@ -1345,6 +1345,21 @@ func (s *MatcherTestSuite) TestMixOperators() {
 	))
 }
 
+func (s *MatcherTestSuite) TestNilQuery() {
+	s.Matches(s.mtchr.Match(
+		"anything",
+		nil,
+	))
+	s.Matches(s.mtchr.Match(
+		[]string{"is"},
+		nil,
+	))
+	s.Matches(s.mtchr.Match(
+		func() string { return "valid" },
+		nil,
+	))
+}
+
 func (s *MatcherTestSuite) Matches(matches bool, err error) {
 	s.NoError(err)
 	s.True(matches)
