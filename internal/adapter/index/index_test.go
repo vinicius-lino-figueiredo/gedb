@@ -2,17 +2,92 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/bst"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 )
+
+type comparerMock struct{ mock.Mock }
+
+// Comparable implements [domain.Comparer].
+func (c *comparerMock) Comparable(a any, b any) bool {
+	return c.Called(a, b).Bool(0)
+}
+
+// Compare implements [domain.Comparer].
+func (c *comparerMock) Compare(a any, b any) (int, error) {
+	call := c.Called(a, b)
+	return call.Int(0), call.Error(1)
+}
+
+type contextMock struct{ mock.Mock }
+
+// Deadline implements [context.Context].
+func (c *contextMock) Deadline() (deadline time.Time, ok bool) {
+	call := c.Called()
+	return call.Get(0).(time.Time), call.Bool(1)
+}
+
+// Done implements [context.Context].
+func (c *contextMock) Done() <-chan struct{} {
+	return c.Called().Get(0).(<-chan struct{})
+}
+
+// Err implements [context.Context].
+func (c *contextMock) Err() error {
+	return c.Called().Error(0)
+}
+
+// Value implements [context.Context].
+func (c *contextMock) Value(key any) any {
+	return c.Called(key).Get(0)
+}
+
+// fieldNavigatorMock implements [domain.FieldNavigator].
+type fieldNavigatorMock struct {
+	mock.Mock
+}
+
+// EnsureField implements [domain.FieldNavigator].
+func (f *fieldNavigatorMock) EnsureField(obj any, addr ...string) ([]domain.GetSetter, error) {
+	call := f.Called(obj, addr)
+	return call.Get(0).([]domain.GetSetter), call.Error(1)
+}
+
+// GetAddress implements [domain.FieldNavigator].
+func (f *fieldNavigatorMock) GetAddress(field string) ([]string, error) {
+	call := f.Called(field)
+	return call.Get(0).([]string), call.Error(1)
+}
+
+// GetField implements [domain.FieldNavigator].
+func (f *fieldNavigatorMock) GetField(obj any, addr ...string) ([]domain.GetSetter, bool, error) {
+	call := f.Called(obj, addr)
+	return call.Get(0).([]domain.GetSetter), call.Bool(1), call.Error(2)
+}
+
+// SplitFields implements [domain.FieldNavigator].
+func (f *fieldNavigatorMock) SplitFields(value string) ([]string, error) {
+	call := f.Called(value)
+	return call.Get(0).([]string), call.Error(1)
+}
+
+type hasherMock struct{ mock.Mock }
+
+// Hash implements [domain.Hasher].
+func (h *hasherMock) Hash(v any) (uint64, error) {
+	call := h.Called(v)
+	return uint64(call.Int(0)), call.Error(1)
+}
 
 type IndexesTestSuite struct {
 	suite.Suite
@@ -23,10 +98,19 @@ func (s *IndexesTestSuite) SetupSuite() {
 	s.comparer = comparer.NewComparer()
 }
 
+func (s *IndexesTestSuite) TestNewIndexFailSplitFields() {
+	fn := new(fieldNavigatorMock)
+	fn.On("SplitFields", "").Return([]string{}, fmt.Errorf("error")).Once()
+	idx, err := NewIndex(domain.WithIndexFieldNavigator(fn))
+	s.Error(err)
+	s.Nil(idx)
+}
+
 func (s *IndexesTestSuite) TestInsertion() {
 	// Can insert pointers to documents in the index correctly when they have the field
 	s.Run("Pointers", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -40,7 +124,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.NoError(idx.Insert(ctx, doc3))
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{data.M{"a": 5, "tf": "hello"}}, idx.Tree.Search("hello"))
 		s.Equal([]any{data.M{"a": 8, "tf": "world"}}, idx.Tree.Search("world"))
 		s.Equal([]any{data.M{"a": 2, "tf": "bloup"}}, idx.Tree.Search("bloup"))
@@ -54,6 +138,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 	// Can insert pointers to documents in the index correctly when they have compound fields
 	s.Run("PointersCompound", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf,tg"))
+		s.Equal("tf,tg", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello", "tg": "world"}
@@ -66,7 +151,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.NoError(idx.Insert(ctx, doc3))
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{data.M{"a": 5, "tf": "hello", "tg": "world"}}, idx.Tree.Search(data.M{"tf": "hello", "tg": "world"}))
 		s.Equal([]any{data.M{"a": 8, "tf": "hello", "tg": "bloup"}}, idx.Tree.Search(data.M{"tf": "hello", "tg": "bloup"}))
 		s.Equal([]any{data.M{"a": 2, "tf": "bloup", "tg": "bloup"}}, idx.Tree.Search(data.M{"tf": "bloup", "tg": "bloup"}))
@@ -83,6 +168,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -90,7 +177,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		ctx := context.Background()
 
 		s.NoError(idx.Insert(ctx, doc1))
-		s.Equal(1, idx.Tree.GetNumberOfKeys())
+		s.Equal(1, idx.GetNumberOfKeys())
 		s.Error(idx.Insert(ctx, doc1))
 	})
 
@@ -101,6 +188,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexFieldName("nope"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("nope", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -109,7 +198,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		ctx := context.Background()
 
 		s.NoError(idx.Insert(ctx, doc1))
-		s.Equal(1, idx.Tree.GetNumberOfKeys())
+		s.Equal(1, idx.GetNumberOfKeys())
 		s.Error(idx.Insert(ctx, doc2))
 	})
 
@@ -121,6 +210,9 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexUnique(true),
 			domain.WithIndexSparse(true),
 		)
+		s.Equal("nope", i.FieldName())
+		s.True(i.Unique())
+		s.True(i.Sparse())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -130,7 +222,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
-		s.Equal(0, idx.Tree.GetNumberOfKeys()) // Docs are not indexed
+		s.Equal(0, idx.GetNumberOfKeys()) // Docs are not indexed
 	})
 
 	// Inserting twice for the same compound fieldName in a unique index will result in an error thrown
@@ -139,6 +231,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexFieldName("tf,tg"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf,tg", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello", "tg": "world"}
@@ -146,7 +240,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		ctx := context.Background()
 
 		s.NoError(idx.Insert(ctx, doc1))
-		s.Equal(1, idx.Tree.GetNumberOfKeys())
+		s.Equal(1, idx.GetNumberOfKeys())
 		s.Error(idx.Insert(ctx, doc1))
 	})
 
@@ -157,6 +251,9 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexUnique(true),
 			domain.WithIndexSparse(true),
 		)
+		s.Equal("nope,nopeNope", i.FieldName())
+		s.True(i.Unique())
+		s.True(i.Sparse())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -166,12 +263,13 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
-		s.Equal(0, idx.Tree.GetNumberOfKeys()) // Docs are not indexed
+		s.Equal(0, idx.GetNumberOfKeys()) // Docs are not indexed
 	})
 
 	// Works with dot notation
 	s.Run("DotNotation", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf.nested"))
+		s.Equal("tf.nested", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": data.M{"nested": "hello"}}
@@ -185,7 +283,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.NoError(idx.Insert(ctx, doc3))
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc2}, idx.Tree.Search("world"))
 		s.Equal([]any{doc3}, idx.Tree.Search("bloup"))
@@ -198,6 +296,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 	// Can insert an array of documents
 	s.Run("ArrayOfDoc", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -207,7 +306,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		ctx := context.Background()
 
 		s.NoError(idx.Insert(ctx, doc1, doc2, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc2}, idx.Tree.Search("world"))
 		s.Equal([]any{doc3}, idx.Tree.Search("bloup"))
@@ -219,6 +318,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -232,7 +333,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		e := &bst.ErrViolated{}
 		s.ErrorAs(err, &e)
 
-		s.Equal(0, idx.Tree.GetNumberOfKeys())
+		s.Equal(0, idx.GetNumberOfKeys())
 		s.Equal([]any{}, idx.Tree.Search("hello"))
 		s.Equal([]any{}, idx.Tree.Search("world"))
 		s.Equal([]any{}, idx.Tree.Search("bloup"))
@@ -244,6 +345,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 			obj := data.M{"tf": []any{"aa", "bb"}, "really": "yeah"}
 			obj2 := data.M{"tf": "normal", "yes": "indeed"}
 			i, err := NewIndex(domain.WithIndexFieldName("tf"))
+			s.Equal("tf", i.FieldName())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -262,6 +364,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		s.Run("OneEntryPerElementTypeChecked", func() {
 			obj := data.M{"tf": []any{"42", int64(42), time.Unix(42, 0), int64(42)}, "really": "yeah"}
 			i, err := NewIndex(domain.WithIndexFieldName("tf"))
+			s.Equal("tf", i.FieldName())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -281,6 +384,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 				domain.WithIndexFieldName("tf"),
 				domain.WithIndexUnique(true),
 			)
+			s.Equal("tf", i.FieldName())
+			s.True(i.Unique())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -302,6 +407,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 				domain.WithIndexFieldName("tf"),
 				domain.WithIndexUnique(true),
 			)
+			s.Equal("tf", i.FieldName())
+			s.True(i.Unique())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -319,6 +426,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 			obj := data.M{"tf": []any{"aa", "aa"}, "really": "yeah"}
 			obj2 := data.M{"tf": []any{"cc", "aa", "cc"}, "yes": "indeed"}
 			i, err := NewIndex(domain.WithIndexFieldName("tf"))
+			s.Equal("tf", i.FieldName())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -354,6 +462,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 				domain.WithIndexFieldName("tf"),
 				domain.WithIndexUnique(true),
 			)
+			s.Equal("tf", i.FieldName())
+			s.True(i.Unique())
 			s.NoError(err)
 			idx := i.(*Index)
 
@@ -401,6 +511,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 		// Supports field names separated by commas
 		s.Run("SupportFieldNameSeparatedByComma", func() {
 			i, err := NewIndex(domain.WithIndexFieldName("tf,tf2"))
+			s.Equal("tf,tf2", i.FieldName())
 			s.NoError(err)
 			idx := i.(*Index)
 			doc1 := data.M{"a": int64(5), "tf": "hello", "tf2": int64(7)}
@@ -414,7 +525,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.NoError(idx.Insert(ctx, doc3))
 
 			// The underlying BST now has 3 nodes which contain the docs where it's expected
-			s.Equal(3, idx.Tree.GetNumberOfKeys())
+			s.Equal(3, idx.GetNumberOfKeys())
 			s.Equal([]any{data.M{"a": int64(5), "tf": "hello", "tf2": int64(7)}}, idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(7)}))
 			s.Equal([]any{data.M{"a": int64(8), "tf": "hello", "tf2": int64(6)}}, idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(6)}))
 			s.Equal([]any{data.M{"a": int64(2), "tf": "bloup", "tf2": int64(3)}}, idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)}))
@@ -425,12 +536,57 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.Equal(42, doc3.Get("a"))
 		})
 	})
+
+	s.Run("GetKeysError", func() {
+		fn := new(fieldNavigatorMock)
+
+		fn.On("SplitFields", "tf").Return([]string{"tf"}, nil).Once()
+
+		i, err := NewIndex(
+			domain.WithIndexFieldNavigator(fn),
+			domain.WithIndexFieldName("tf"),
+		)
+		s.Equal("tf", i.FieldName())
+		s.NoError(err)
+		fn.AssertExpectations(s.T())
+
+		e := fmt.Errorf("error")
+
+		fn.On("GetAddress", "tf").Return([]string{}, e).Once()
+
+		s.ErrorIs(i.Insert(context.Background(), data.M{"tf": 1}), e)
+		fn.AssertExpectations(s.T())
+	})
+
+	s.Run("FailedHasing", func() {
+
+		h := new(hasherMock)
+
+		i, err := NewIndex(
+			domain.WithIndexFieldName("tf"),
+			domain.WithIndexHasher(h),
+		)
+		s.Equal("tf", i.FieldName())
+		s.NoError(err)
+
+		doc := data.M{"tf": 1}
+
+		e := fmt.Errorf("error")
+
+		h.On("Hash", 1).Return(0, e).Once()
+
+		s.ErrorIs(i.Insert(context.Background(), doc), e)
+		s.Zero(i.GetNumberOfKeys())
+
+	})
+
 } // ==== End of 'Insertion' ==== //
 
 func (s *IndexesTestSuite) TestRemoval() {
 	// Can remove pointers from the index, even when multiple documents have the same key
 	s.Run("PointersMultipleDocsSameKey", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -444,14 +600,14 @@ func (s *IndexesTestSuite) TestRemoval() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 		s.NoError(idx.Insert(ctx, doc4))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 
 		s.NoError(idx.Remove(ctx, doc1))
-		s.Equal(2, idx.Tree.GetNumberOfKeys())
+		s.Equal(2, idx.GetNumberOfKeys())
 		s.Len(idx.Tree.Search("hello"), 0)
 
 		s.NoError(idx.Remove(ctx, doc2))
-		s.Equal(2, idx.Tree.GetNumberOfKeys())
+		s.Equal(2, idx.GetNumberOfKeys())
 		s.Len(idx.Tree.Search("world"), 1)
 		s.Equal(doc4, idx.Tree.Search("world")[0])
 	})
@@ -462,6 +618,8 @@ func (s *IndexesTestSuite) TestRemoval() {
 			domain.WithIndexFieldName("nope"),
 			domain.WithIndexSparse(true),
 		)
+		s.Equal("nope", i.FieldName())
+		s.True(i.Sparse())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -471,15 +629,16 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
-		s.Equal(0, idx.Tree.GetNumberOfKeys())
+		s.Equal(0, idx.GetNumberOfKeys())
 
 		s.NoError(idx.Remove(ctx, doc1))
-		s.Equal(0, idx.Tree.GetNumberOfKeys())
+		s.Equal(0, idx.GetNumberOfKeys())
 	})
 
 	// Works with dot notation
 	s.Run("DotNotation", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf.nested"))
+		s.Equal("tf.nested", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": data.M{"nested": "hello"}}
@@ -493,14 +652,14 @@ func (s *IndexesTestSuite) TestRemoval() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 		s.NoError(idx.Insert(ctx, doc4))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 
 		s.NoError(idx.Remove(ctx, doc1))
-		s.Equal(2, idx.Tree.GetNumberOfKeys())
+		s.Equal(2, idx.GetNumberOfKeys())
 		s.Len(idx.Tree.Search("hello"), 0)
 
 		s.NoError(idx.Remove(ctx, doc2))
-		s.Equal(2, idx.Tree.GetNumberOfKeys())
+		s.Equal(2, idx.GetNumberOfKeys())
 		s.Len(idx.Tree.Search("world"), 1)
 		s.Equal(doc4, idx.Tree.Search("world")[0])
 	})
@@ -508,6 +667,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 	// Can remove an array of documents
 	s.Run("ArrayOfDocuments", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -517,9 +677,9 @@ func (s *IndexesTestSuite) TestRemoval() {
 		ctx := context.Background()
 
 		s.NoError(idx.Insert(ctx, doc1, doc2, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.NoError(idx.Remove(ctx, doc1, doc3))
-		s.Equal(1, idx.Tree.GetNumberOfKeys())
+		s.Equal(1, idx.GetNumberOfKeys())
 		s.Equal([]any{}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc2}, idx.Tree.Search("world"))
 		s.Equal([]any{}, idx.Tree.Search("bloup"))
@@ -542,11 +702,59 @@ func (s *IndexesTestSuite) TestRemoval() {
 	// 	s.Equal([]any{doc2}, idx.tree.Search("world"))
 	// 	s.Equal([]any{}, idx.tree.Search("bloup"))
 	// })
+
+	s.Run("SparseNoValid", func() {
+		i, err := NewIndex(
+			domain.WithIndexSparse(true),
+			domain.WithIndexFieldName("tf"),
+		)
+		s.Equal("tf", i.FieldName())
+		s.NoError(err)
+
+		s.NoError(i.Insert(context.Background(), data.M{"tg": 1}))
+		s.NoError(i.Remove(context.Background(), data.M{"tf": 1}))
+
+	})
+
 } // ==== End of 'Removal' ==== //
+
+func (s *IndexesTestSuite) TestRemoveFailedNavigation() {
+	fn := new(fieldNavigatorMock)
+	fn.On("SplitFields", "tf").Return([]string{"tf"}, nil).Once()
+	idx, err := NewIndex(
+		domain.WithIndexFieldName("tf"),
+		domain.WithIndexFieldNavigator(fn),
+	)
+	s.NoError(err)
+
+	s.Run("GetAddress", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{}, expectedErr).Once()
+
+		err := idx.(*Index).Remove(context.Background(), nil)
+		s.ErrorIs(err, expectedErr)
+
+		fn.AssertExpectations(s.T())
+	})
+
+	s.Run("GetField", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{"tf"}, nil).Once()
+		fn.On("GetField", data.M{"doc": false}, []string{"tf"}).
+			Return([]domain.GetSetter{}, false, expectedErr).
+			Once()
+
+		err := idx.(*Index).Remove(context.Background(), data.M{"doc": false})
+		s.ErrorIs(err, expectedErr)
+
+		fn.AssertExpectations(s.T())
+	})
+}
 
 func (s *IndexesTestSuite) TestUpdate() {
 	s.Run("UpdateChangedOrUnchangedKey", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -560,15 +768,15 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc2}, idx.Tree.Search("world"))
 
 		s.NoError(idx.Update(ctx, doc2, doc4))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc4}, idx.Tree.Search("world"))
 
 		s.NoError(idx.Update(ctx, doc1, doc5))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc5}, idx.Tree.Search("changed"))
 	})
@@ -579,6 +787,8 @@ func (s *IndexesTestSuite) TestUpdate() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -592,7 +802,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
@@ -601,7 +811,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.ErrorAs(idx.Update(ctx, doc3, bad), &e)
 
 		// No change
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
@@ -610,6 +820,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 	// Can update an array of documents
 	s.Run("ArrayOfDocuments", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -624,11 +835,11 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 
 		s.NoError(idx.UpdateMultipleDocs(ctx, []domain.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		worldMatches, err := idx.GetMatching("world")
 		s.NoError(err)
 		s.Len(worldMatches, 1)
@@ -649,6 +860,8 @@ func (s *IndexesTestSuite) TestUpdate() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -663,12 +876,12 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 
 		e := &bst.ErrViolated{}
 		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []domain.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -686,7 +899,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		e = &bst.ErrViolated{}
 		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []domain.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches2, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches2, 1)
@@ -708,6 +921,8 @@ func (s *IndexesTestSuite) TestUpdate() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -720,11 +935,11 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{doc2}, idx.Tree.Search("world"))
 
 		s.NoError(idx.Update(ctx, doc2, noChange)) // No error returned
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		s.Equal([]any{noChange}, idx.Tree.Search("world"))
 	})
 
@@ -734,6 +949,8 @@ func (s *IndexesTestSuite) TestUpdate() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -752,11 +969,11 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc1))
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 
 		s.NoError(idx.UpdateMultipleDocs(ctx, batchUpdate...))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		worldMatches, err := idx.GetMatching("world")
 		s.NoError(err)
 		s.Len(worldMatches, 1)
@@ -778,7 +995,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 		s.NoError(idx.RevertMultipleUpdates(ctx, batchUpdate...))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -801,7 +1018,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		// Now a simple update
 		s.NoError(idx.Update(ctx, doc2, doc2b))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -823,7 +1040,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 		s.NoError(idx.RevertUpdate(ctx, doc2, doc2b))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -843,6 +1060,29 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(err)
 		s.Equal(doc3, blopMatches[0])
 	})
+
+	s.Run("InvalidRemove", func() {
+		i, err := NewIndex(
+			domain.WithIndexFieldName("tf"),
+			domain.WithIndexUnique(true),
+		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
+		s.NoError(err)
+
+		ctx := new(contextMock)
+
+		open := make(<-chan struct{})
+		closed := make(chan struct{})
+		close(closed)
+
+		ctx.On("Done").Return(open).Once()
+		ctx.On("Done").Return((<-chan struct{})(closed)).Once()
+		ctx.On("Err").Return(fmt.Errorf("error")).Once()
+
+		i.Update(ctx, nil, nil)
+	})
+
 } // ==== End of 'Update' ==== //
 
 func (s *IndexesTestSuite) TestGetMatchingDocuments() {
@@ -850,6 +1090,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 	// Get matching documents
 	s.Run("AllOrEmptyArray", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -881,6 +1122,8 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexUnique(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -907,6 +1150,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 	// Can get all documents for which a field is nil
 	s.Run("GetAllForNilField", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -985,6 +1229,8 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 			domain.WithIndexFieldName("tf"),
 			domain.WithIndexSparse(true),
 		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Sparse())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -1025,6 +1271,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		// slow given that live gedb indexes documents with _id always
 		// set
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello", "_id": "1"}
@@ -1058,6 +1305,7 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 	// Can get all documents whose key is between certain bounds
 	s.Run("AllDocsWithKeyInCertainBounds", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("a"))
+		s.Equal("a", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": int64(5), "tf": "hello"}
@@ -1086,10 +1334,66 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 	})
 } // ==== End of 'Get matching documents' ==== //
 
+func (s *IndexesTestSuite) TestGetMatchingInvalidParameter() {
+	idx, err := NewIndex(domain.WithIndexFieldName("_id"))
+	s.NoError(err)
+
+	ctx := context.Background()
+
+	s.NoError(idx.Insert(ctx, data.M{"_id": []string{}}))
+	s.NoError(idx.Insert(ctx, data.M{"_id": []string{}}))
+
+	data, err := idx.GetMatching([]string{}, []string{})
+	s.Error(err)
+	s.Nil(data)
+}
+
+func (s *IndexesTestSuite) TestGetMatchingInvalidSort() {
+	idx, err := NewIndex(domain.WithIndexFieldName("_id"))
+	s.NoError(err)
+	ctx := context.Background()
+
+	s.NoError(idx.Insert(ctx, data.M{"_id": 1}))
+
+	s.NoError(idx.Insert(ctx, data.M{"_id": 2}))
+
+	s.NoError(idx.Insert(ctx, data.M{"_id": 3}))
+
+	c := new(comparerMock)
+	idx.(*Index).comparer = c
+	c.On("Compare", mock.Anything, mock.Anything).
+		Return(0, fmt.Errorf("error")).
+		Once()
+
+	data, err := idx.GetMatching(1, 2, 3)
+	s.Error(err)
+	s.Nil(data)
+	c.AssertExpectations(s.T())
+}
+
+func (s *IndexesTestSuite) TestGetMatchingInvalidMapGetKey() {
+	idx, err := NewIndex(domain.WithIndexFieldName("_id"))
+	s.NoError(err)
+	ctx := context.Background()
+
+	s.NoError(idx.Insert(ctx, data.M{"_id": 1}))
+
+	c := new(comparerMock)
+	idx.(*Index).comparer = c
+	c.On("Compare", mock.Anything, mock.Anything).
+		Return(0, fmt.Errorf("error")).
+		Once()
+
+	data, err := idx.GetMatching(1)
+	s.Error(err)
+	s.Nil(data)
+}
+
 func (s *IndexesTestSuite) TestResetting() {
 	// Can reset an index without any new data, the index will be empty afterwards
 	s.Run("ResetIndexWithoutData", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -1102,7 +1406,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -1114,7 +1418,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.Len(blopMatches, 1)
 
 		s.NoError(idx.Reset(ctx))
-		s.Equal(0, idx.Tree.GetNumberOfKeys())
+		s.Equal(0, idx.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 0)
@@ -1129,6 +1433,7 @@ func (s *IndexesTestSuite) TestResetting() {
 	// Can reset an index and initialize it with one document
 	s.Run("ResetAndInitialize", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -1142,7 +1447,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -1154,7 +1459,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.Len(blopMatches, 1)
 
 		s.NoError(idx.Reset(ctx, newDoc))
-		s.Equal(1, idx.Tree.GetNumberOfKeys())
+		s.Equal(1, idx.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 0)
@@ -1172,6 +1477,7 @@ func (s *IndexesTestSuite) TestResetting() {
 	// Can reset an index and initialize it with an array of documents
 	s.Run("ResetWithMultipleDocs", func() {
 		i, err := NewIndex(domain.WithIndexFieldName("tf"))
+		s.Equal("tf", i.FieldName())
 		s.NoError(err)
 		idx := i.(*Index)
 		doc1 := data.M{"a": 5, "tf": "hello"}
@@ -1185,7 +1491,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 
-		s.Equal(3, idx.Tree.GetNumberOfKeys())
+		s.Equal(3, idx.GetNumberOfKeys())
 		helloMatches, err := idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 1)
@@ -1197,7 +1503,7 @@ func (s *IndexesTestSuite) TestResetting() {
 		s.Len(blopMatches, 1)
 
 		s.NoError(idx.Reset(ctx, newDocs...))
-		s.Equal(2, idx.Tree.GetNumberOfKeys())
+		s.Equal(2, idx.GetNumberOfKeys())
 		helloMatches, err = idx.GetMatching("hello")
 		s.NoError(err)
 		s.Len(helloMatches, 0)
@@ -1220,6 +1526,7 @@ func (s *IndexesTestSuite) TestResetting() {
 // Get all elements in the index.
 func (s *IndexesTestSuite) TestGetAll() {
 	i, err := NewIndex(domain.WithIndexFieldName("tf"))
+	s.Equal("tf", i.FieldName())
 	s.NoError(err)
 	idx := i.(*Index)
 	doc1 := data.M{"a": 5, "tf": "hello"}
@@ -1233,6 +1540,138 @@ func (s *IndexesTestSuite) TestGetAll() {
 	s.NoError(idx.Insert(ctx, doc3))
 
 	s.Equal([]domain.Document{data.M{"a": 2, "tf": "bloup"}, data.M{"a": 5, "tf": "hello"}, data.M{"a": 8, "tf": "world"}}, idx.GetAll())
+}
+
+func (s *IndexesTestSuite) TestCancelContex() {
+
+	idx, err := NewIndex()
+	s.NoError(err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	<-ctx.Done()
+
+	err = idx.Reset(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = idx.Insert(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = idx.Remove(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = idx.Update(ctx, nil, nil)
+	s.ErrorIs(err, context.Canceled)
+
+	err = idx.UpdateMultipleDocs(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = idx.RevertMultipleUpdates(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	_, err = idx.GetBetweenBounds(ctx, nil)
+	s.ErrorIs(err, context.Canceled)
+
+	ctxMock := new(contextMock)
+
+	ch := make(chan struct{})
+	ctxMock.On("Done").Return((<-chan struct{})(ch)).Once()
+	ctxMock.On("Done").
+		Run(func(mock.Arguments) {
+			close(ch)
+		}).
+		Return((<-chan struct{})(ch)).
+		Once()
+	ctxMock.On("Err").Return(context.Canceled).Once()
+
+	err = idx.UpdateMultipleDocs(ctxMock, domain.Update{})
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *IndexesTestSuite) TestGetKeysMultiFieldFailedNavigation() {
+	fn := new(fieldNavigatorMock)
+	fn.On("SplitFields", "tf").Return([]string{"tf"}, nil).Once()
+	idx, err := NewIndex(
+		domain.WithIndexFieldName("tf"),
+		domain.WithIndexFieldNavigator(fn),
+	)
+	s.NoError(err)
+
+	s.Run("GetAddress", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{}, expectedErr).Once()
+
+		keys, err := idx.(*Index).getKeysMultiField(nil)
+		s.ErrorIs(err, expectedErr)
+		s.Nil(keys)
+
+		fn.AssertExpectations(s.T())
+	})
+
+	s.Run("GetField", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{"tf"}, nil).Once()
+		fn.On("GetField", data.M{"obj": true}, []string{"tf"}).
+			Return([]domain.GetSetter{}, false, expectedErr).
+			Once()
+
+		keys, err := idx.(*Index).getKeysMultiField(data.M{"obj": true})
+		s.ErrorIs(err, expectedErr)
+		s.Nil(keys)
+
+		fn.AssertExpectations(s.T())
+	})
+}
+
+func (s *IndexesTestSuite) TestGetKeysFailedNavigation() {
+	fn := new(fieldNavigatorMock)
+	fn.On("SplitFields", "tf").Return([]string{"tf"}, nil).Once()
+	idx, err := NewIndex(
+		domain.WithIndexFieldName("tf"),
+		domain.WithIndexFieldNavigator(fn),
+	)
+	s.NoError(err)
+
+	s.Run("GetAddress", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{}, expectedErr).Once()
+
+		keys, err := idx.(*Index).getKeys(nil)
+		s.ErrorIs(err, expectedErr)
+		s.Nil(keys)
+
+		fn.AssertExpectations(s.T())
+	})
+
+	s.Run("GetField", func() {
+		expectedErr := fmt.Errorf("error")
+		fn.On("GetAddress", "tf").Return([]string{"tf"}, nil).Once()
+		fn.On("GetField", data.M{"obj": true}, []string{"tf"}).
+			Return([]domain.GetSetter{}, false, expectedErr).
+			Once()
+
+		keys, err := idx.(*Index).getKeys(data.M{"obj": true})
+		s.ErrorIs(err, expectedErr)
+		s.Nil(keys)
+
+		fn.AssertExpectations(s.T())
+	})
+}
+
+func (s *IndexesTestSuite) TestNoField() {
+	idx, err := NewIndex(
+		domain.WithIndexFieldName("tf.a"),
+	)
+	s.Equal("tf.a", idx.FieldName())
+	s.NoError(err)
+	s.NotNil(idx)
+
+	ctx := context.Background()
+	s.NoError(idx.Insert(ctx, data.M{"tf": []any{}}))
+	docs, err := idx.GetMatching(nil)
+	s.NoError(err)
+	s.Equal(data.M{"tf": []any{}}, docs[0])
+
 }
 
 func (s *IndexesTestSuite) compareThings(a any, b any) int {
