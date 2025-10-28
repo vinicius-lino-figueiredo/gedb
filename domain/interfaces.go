@@ -178,6 +178,17 @@ type Cursor interface {
 	Close() error
 }
 
+// Querier treats query options when finding data.
+type Querier interface {
+	Query(data []Document, opts ...QueryOption) ([]Document, error)
+}
+
+// Projector is used to determine which fields to include in the returned
+// documents.
+type Projector interface {
+	Project(doc []Document, proj map[string]uint8) ([]Document, error)
+}
+
 // Index provides fast document lookups based on field values.
 type Index interface {
 	// GetAll returns all documents in the index.

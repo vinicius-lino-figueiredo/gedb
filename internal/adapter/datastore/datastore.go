@@ -24,6 +24,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/modifier"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/querier"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/timegetter"
@@ -57,6 +58,7 @@ type Datastore struct {
 	timeGetter            domain.TimeGetter
 	hasher                domain.Hasher
 	fieldNavigator        domain.FieldNavigator
+	querier               domain.Querier
 }
 
 // LoadDatastore creates a new domain.GEDB and loads the database.
@@ -103,6 +105,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		TimeGetter:            timegetter.NewTimeGetter(),
 		Hasher:                hasher.NewHasher(),
 		FieldNavigator:        fn,
+		Querier:               querier.NewQuerier(),
 	}
 	for _, option := range options {
 		option(&opts)
@@ -156,6 +159,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		hasher:                opts.Hasher,
 		fieldNavigator:        opts.FieldNavigator,
 		matcher:               opts.Matcher,
+		querier:               opts.Querier,
 	}, nil
 }
 
@@ -436,7 +440,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 		option(&opt)
 	}
 
-	proj := make(map[string]uint64)
+	proj := make(map[string]uint8)
 	if err := d.decoder.Decode(opt.Projection, &proj); err != nil {
 		return nil, err
 	}
@@ -446,24 +450,25 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 		return nil, err
 	}
 
-	cursorOptions := []domain.CursorOption{
-		domain.WithCursorQuery(queryDoc),
-		domain.WithCursorLimit(opt.Limit),
-		domain.WithCursorSkip(opt.Skip),
-		domain.WithCursorSort(opt.Sort),
-		domain.WithCursorProjection(proj),
-		domain.WithCursorMatcher(d.matcher),
-		domain.WithCursorDecoder(d.decoder),
-		domain.WithCursorDocumentFactory(d.documentFactory),
-		domain.WithCursorComparer(d.comparer),
+	cursorOptions := []domain.QueryOption{
+		domain.WithQuery(queryDoc),
+		domain.WithQueryLimit(opt.Limit),
+		domain.WithQuerySkip(opt.Skip),
+		domain.WithQuerySort(opt.Sort),
+		domain.WithQueryProjection(proj),
 	}
 
-	allData, err = d.cloneDocs(allData...)
+	res, err := d.querier.Query(allData, cursorOptions...)
 	if err != nil {
 		return nil, err
 	}
 
-	return d.cursorFactory(ctx, allData, cursorOptions...)
+	res, err = d.cloneDocs(res...)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.cursorFactory(ctx, res)
 }
 
 // FindOne implements domain.GEDB.

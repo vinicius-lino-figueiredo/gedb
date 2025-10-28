@@ -140,84 +140,127 @@ type EnsureIndexOptions struct {
 	ExpireAfter time.Duration
 }
 
-// WithCursorQuery sets the query criteria for the cursor.
-func WithCursorQuery(q Document) CursorOption {
-	return func(co *CursorOptions) {
-		co.Query = q
+// WithProjectorFieldNavigator sets the [FieldNavigator] that will be used by
+// [Projector]
+func WithProjectorFieldNavigator(fn FieldNavigator) ProjectorOption {
+	return func(po *ProjectorOptions) {
+		po.FieldNavigator = fn
 	}
 }
 
-// WithCursorLimit sets the maximum number of documents the cursor should
-// return.
-func WithCursorLimit(l int64) CursorOption {
-	return func(co *CursorOptions) {
-		co.Limit = l
+// WithProjectorDocumentFactory sets the [Document] factory function that will
+// be used by [Projector]
+func WithProjectorDocumentFactory(df func(any) (Document, error)) ProjectorOption {
+	return func(po *ProjectorOptions) {
+		po.DocFac = df
 	}
 }
 
-// WithCursorSkip sets the number of documents the cursor should skip.
-func WithCursorSkip(s int64) CursorOption {
-	return func(co *CursorOptions) {
-		co.Skip = s
-	}
-}
-
-// WithCursorSort sets the sort order for cursor results.
-func WithCursorSort(s Sort) CursorOption {
-	return func(co *CursorOptions) {
-		co.Sort = s
-	}
-}
-
-// WithCursorProjection specifies which fields to include or exclude in cursor
-// results.
-func WithCursorProjection(p map[string]uint64) CursorOption {
-	return func(co *CursorOptions) {
-		co.Projection = p
-	}
-}
-
-// WithCursorMatcher sets the matcher implementation for query evaluation.
-func WithCursorMatcher(m Matcher) CursorOption {
-	return func(co *CursorOptions) {
-		co.Matcher = m
-	}
-}
-
-// WithCursorDecoder sets the decoder for converting cursor results.
-func WithCursorDecoder(d Decoder) CursorOption {
-	return func(co *CursorOptions) {
-		co.Decoder = d
-	}
-}
-
-// WithCursorDocumentFactory sets the factory function for creating documents.
-func WithCursorDocumentFactory(d func(any) (Document, error)) CursorOption {
-	return func(co *CursorOptions) {
-		co.DocumentFactory = d
-	}
-}
-
-// WithCursorComparer sets the comparer implementation for sorting operations.
-func WithCursorComparer(c Comparer) CursorOption {
-	return func(co *CursorOptions) {
-		co.Comparer = c
-	}
-}
-
-// WithCursorFieldNavigator sets the field getter for accessing document fields.
-func WithCursorFieldNavigator(f FieldNavigator) CursorOption {
-	return func(co *CursorOptions) {
-		co.FieldNavigator = f
-	}
-}
-
-// CursorOption configures cursor behavior through the functional options
+// ProjectorOption configures projector behavior through the functional options
 // pattern.
-type CursorOption func(*CursorOptions)
+type ProjectorOption func(*ProjectorOptions)
 
-// CursorOptions contains parameters for customizing cursor behavior.
-type CursorOptions struct {
+// ProjectorOptions contains parameters for customizing projector behavior.
+type ProjectorOptions struct {
+	FieldNavigator FieldNavigator
+	DocFac         func(any) (Document, error)
+}
+
+// WithQuerierDocumentFactory sets the factory function for creating documents.
+func WithQuerierDocumentFactory(df func(any) (Document, error)) QuerierOption {
+	return func(qo *QuerierOptions) {
+		qo.DocFac = df
+	}
+}
+
+// WithQuerierMatcher sets the matcher implementation for querier evaluations.
+func WithQuerierMatcher(m Matcher) QuerierOption {
+	return func(qo *QuerierOptions) {
+		qo.Matcher = m
+	}
+}
+
+// WithQuerierComparer sets the comparer implementation for sorting operations.
+func WithQuerierComparer(c Comparer) QuerierOption {
+	return func(qo *QuerierOptions) {
+		qo.Comparer = c
+	}
+}
+
+// WithQuerierFieldNavigator sets the field getter for accessing document
+// fields.
+func WithQuerierFieldNavigator(f FieldNavigator) QuerierOption {
+	return func(qo *QuerierOptions) {
+		qo.FieldNavigator = f
+	}
+}
+
+// WithQuerierProjector sets the implementation what will be sed to project
+// the resultant documents.
+func WithQuerierProjector(p Projector) QuerierOption {
+	return func(qo *QuerierOptions) {
+		qo.Projector = p
+	}
+}
+
+// QuerierOption configures querier behavior through the functional options
+// pattern.
+type QuerierOption func(*QuerierOptions)
+
+// QuerierOptions contains parameters for customizing querier behavior.
+type QuerierOptions struct {
+	DocFac func(any) (Document, error)
+	// Matcher provides query evaluation logic.
+	Matcher Matcher
+	// Comparer provides sorting operations.
+	Comparer Comparer
+	// FieldNavigator provides field access operations.
+	FieldNavigator FieldNavigator
+	// Projector provides field projection.
+	Projector Projector
+}
+
+// WithQuery sets the query criteria for a [Querier.Query] call.
+func WithQuery(q Document) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Query = q
+	}
+}
+
+// WithQueryLimit sets the maximum number of documents the query should return.
+func WithQueryLimit(l int64) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Limit = l
+	}
+}
+
+// WithQuerySkip sets the number of documents the query should skip.
+func WithQuerySkip(s int64) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Skip = s
+	}
+}
+
+// WithQuerySort sets the sort order for query results.
+func WithQuerySort(s Sort) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Sort = s
+	}
+}
+
+// WithQueryProjection specifies which fields to include or exclude in query
+// results.
+func WithQueryProjection(p map[string]uint8) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Projection = p
+	}
+}
+
+// QueryOption configures query behavior through the functional options pattern.
+type QueryOption func(*QueryOptions)
+
+// QueryOptions contains parameters for customizing query behavior.
+type QueryOptions struct {
 	// Query specifies the criteria for filtering documents.
 	Query Document
 	// Limit specifies the maximum number of documents to return.
@@ -227,17 +270,30 @@ type CursorOptions struct {
 	// Sort specifies the sort order for results.
 	Sort Sort
 	// Projection specifies which fields to include or exclude.
-	Projection map[string]uint64
+	Projection map[string]uint8
 	// Matcher provides query evaluation logic.
 	Matcher Matcher
-	// Decoder converts between data representations.
-	Decoder Decoder
-	// DocumentFactory creates document instances.
-	DocumentFactory func(any) (Document, error)
 	// Comparer provides sorting operations.
 	Comparer Comparer
 	// FieldNavigator provides field access operations.
 	FieldNavigator FieldNavigator
+}
+
+// WithCursorDecoder sets the decoder for converting cursor results.
+func WithCursorDecoder(d Decoder) CursorOption {
+	return func(co *CursorOptions) {
+		co.Decoder = d
+	}
+}
+
+// CursorOption configures cursor behavior through the functional options
+// pattern.
+type CursorOption func(*CursorOptions)
+
+// CursorOptions contains parameters for customizing cursor behavior.
+type CursorOptions struct {
+	// Decoder converts between data representations.
+	Decoder Decoder
 }
 
 // WithMatcherDocumentFactory sets the document factory for creating documents
@@ -676,4 +732,6 @@ type DatastoreOptions struct {
 	Hasher Hasher
 	// FieldNavigator provides field access operations.
 	FieldNavigator FieldNavigator
+	// Querier allows filtering, ordering, limiting and projecting docs.
+	Querier Querier
 }
