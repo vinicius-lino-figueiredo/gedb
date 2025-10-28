@@ -338,6 +338,18 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailFlushingRenamed() {
 	om.AssertExpectations(s.T())
 }
 
+func (s *StorageTestSuite) TestCrashSafeWriteFileLiensForbiddenDir() {
+	dir := s.T().TempDir()
+	dir = filepath.Join(dir, "forbidden")
+	s.NoError(os.Mkdir(dir, 0000))
+	defer os.Remove(dir)
+
+	file := filepath.Join(dir, "file.txt")
+
+	err := s.store.CrashSafeWriteFileLines(file, nil, 0666, 0666)
+	s.Error(err)
+}
+
 // Will not get any error when ensuring integrity of existing file.
 func (s *StorageTestSuite) TestEnsureDatafileIntegrityExistingFile() {
 	file := s.ExistentFile(s.T())
