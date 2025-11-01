@@ -47,23 +47,21 @@ func (i *Index) Unique() bool {
 // NewIndex returns a new implementation of domain.Index.
 func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 
-	docFac := data.NewDocument
 	opts := domain.IndexOptions{
 		FieldName:       "",
 		Unique:          false,
 		Sparse:          false,
 		ExpireAfter:     0,
-		DocumentFactory: docFac,
+		DocumentFactory: data.NewDocument,
 		Comparer:        comparer.NewComparer(),
 		Hasher:          hasher.NewHasher(),
-		FieldNavigator:  fieldnavigator.NewFieldNavigator(docFac),
 	}
 	for _, option := range options {
 		option(&opts)
 	}
 
-	if opts.Comparer == nil {
-		opts.Comparer = comparer.NewComparer()
+	if opts.FieldNavigator == nil {
+		opts.FieldNavigator = fieldnavigator.NewFieldNavigator(opts.DocumentFactory)
 	}
 
 	treeOptions := bst.Options{
@@ -73,16 +71,6 @@ func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 			return comp
 		},
 	}
-	if opts.DocumentFactory == nil {
-		opts.DocumentFactory = data.NewDocument
-	}
-	if opts.Hasher == nil {
-		opts.Hasher = hasher.NewHasher()
-	}
-	if opts.FieldNavigator == nil {
-		opts.FieldNavigator = fieldnavigator.NewFieldNavigator(opts.DocumentFactory)
-	}
-	// fields := strings.Split(options.FieldName, ",")
 	fields, err := opts.FieldNavigator.SplitFields(opts.FieldName)
 	if err != nil {
 		return nil, err
