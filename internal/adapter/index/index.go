@@ -407,6 +407,9 @@ func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 		}
 		return comp
 	})
+	if err != nil {
+		return nil, err
+	}
 	for _, _id := range keys {
 		v, _, err := _res.Get(_id)
 		if err != nil {
