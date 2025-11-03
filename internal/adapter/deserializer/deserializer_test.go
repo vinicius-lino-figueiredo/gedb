@@ -157,6 +157,12 @@ func (s *DeserializerTestSuite) TestNilTarget() {
 	s.Error(err)
 }
 
+func (s *DeserializerTestSuite) TestInvalidSyntax() {
+	target := data.M{}
+	err := s.d.Deserialize(context.Background(), []byte("{"), &target)
+	s.Error(err)
+}
+
 func TestDeserializerTestSuite(t *testing.T) {
 	suite.Run(t, new(DeserializerTestSuite))
 }
