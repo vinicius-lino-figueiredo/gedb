@@ -214,12 +214,12 @@ DocInsertion:
 		l = slices.CompactFunc(l, func(a, b any) bool { return i.compareThings(a, b) == 0 })
 
 		for _, k := range l {
-			if err = i.Tree.Insert(k, d); err != nil {
+			h, err = i.hasher.Hash(k)
+			if err != nil {
 				break DocInsertion
 			}
 
-			h, err = i.hasher.Hash(k)
-			if err != nil {
+			if err = i.Tree.Insert(k, d); err != nil {
 				break DocInsertion
 			}
 
