@@ -1,11 +1,13 @@
 package comparer
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 )
 
 type ComparerTestSuite struct {
@@ -17,8 +19,27 @@ func (s *ComparerTestSuite) SetupTest() {
 	s.c = NewComparer().(*Comparer)
 }
 
+func (s *ComparerTestSuite) TestUndefinedIsSmallest() {
+	otherStuff := [...]any{nil, "string", -1, 0, uint(12), false, data.M{},
+		time.UnixMilli(12345), data.M{"hello": "world"}, []any{}, "",
+		[]any{"quite", 5},
+	}
+	undefined := fieldnavigator.NewGetSetterEmpty()
+	for _, stuff := range otherStuff {
+		comp, err := s.c.Compare(undefined, stuff)
+		s.NoError(err)
+		s.Equal(-1, comp)
+		comp, err = s.c.Compare(stuff, undefined)
+		s.NoError(err)
+		s.Equal(1, comp)
+	}
+	comp, err := s.c.Compare(undefined, undefined)
+	s.NoError(err)
+	s.Zero(comp)
+}
+
 // nil should always be the smallest value.
-func (s *ComparerTestSuite) TestNilIsSmallest() {
+func (s *ComparerTestSuite) TestNilIsSecondSmallest() {
 	otherStuff := [...]any{"string", "", -1, 0, uint(12), false,
 		time.UnixMilli(12345), data.M{}, data.M{"hello": "world"},
 		[]any{}, []any{"quite", 5},
@@ -31,10 +52,13 @@ func (s *ComparerTestSuite) TestNilIsSmallest() {
 		s.NoError(err)
 		s.Equal(1, comp)
 	}
+	comp, err := s.c.Compare(nil, nil)
+	s.NoError(err)
+	s.Zero(comp)
 }
 
 // number should by the second smallest type (any number type).
-func (s *ComparerTestSuite) TestNumberIsSecondSmallest() {
+func (s *ComparerTestSuite) TestNumberIsThirdSmallest() {
 
 	testCases := []struct {
 		arg1 any
@@ -73,7 +97,7 @@ func (s *ComparerTestSuite) TestNumberIsSecondSmallest() {
 }
 
 // string should be the third smallest type.
-func (s *ComparerTestSuite) TestStringIsThirdSmallest() {
+func (s *ComparerTestSuite) TestStringIsFourthSmallest() {
 	testCases := []struct {
 		arg1 string
 		arg2 string
@@ -107,7 +131,7 @@ func (s *ComparerTestSuite) TestStringIsThirdSmallest() {
 }
 
 // bool should be the fourth smallest type.
-func (s *ComparerTestSuite) TestBoolIsFourthSmallest() {
+func (s *ComparerTestSuite) TestBoolIsFifthSmallest() {
 	testCases := []struct {
 		arg1 bool
 		arg2 bool
@@ -141,7 +165,7 @@ func (s *ComparerTestSuite) TestBoolIsFourthSmallest() {
 }
 
 // date should be the fifth smallest type.
-func (s *ComparerTestSuite) TestDateIsFifthSmallest() {
+func (s *ComparerTestSuite) TestDateIsSixthSmallest() {
 	now := time.Now()
 	testCases := []struct {
 		arg1 time.Time
@@ -177,7 +201,7 @@ func (s *ComparerTestSuite) TestDateIsFifthSmallest() {
 }
 
 // []any should be the sixth smallest type.
-func (s *ComparerTestSuite) TestSliceIsSixthSmallest() {
+func (s *ComparerTestSuite) TestSliceIsSeventhSmallest() {
 	testCases := []struct {
 		arg1 []any
 		arg2 []any
@@ -212,7 +236,7 @@ func (s *ComparerTestSuite) TestSliceIsSixthSmallest() {
 }
 
 // Document should be the greatest type.
-func (s *ComparerTestSuite) TestDocumentIsSeventhSmallest() {
+func (s *ComparerTestSuite) TestDocumentIsEighthSmallest() {
 	testCases := []struct {
 		arg1 any
 		arg2 any
@@ -249,6 +273,79 @@ func (s *ComparerTestSuite) TestErrorOnUnknownPair() {
 		_, err := s.c.Compare(tc.arg1, tc.arg2)
 		s.Error(err)
 	}
+}
+
+func (s *ComparerTestSuite) TestComparable() {
+	undefined := fieldnavigator.NewGetSetterEmpty()
+	now := time.Now()
+	arr := []any{1, "2", 3.0}
+	doc := data.M{"key": "value", "number": 123}
+
+	values := []any{nil, false, true, 1, now, "abc", arr, doc}
+
+	cannotCompare := func(v any) func() {
+		return func() {
+			s.False(s.c.Comparable(v, undefined))
+			for _, value := range values {
+				s.False(s.c.Comparable(v, value))
+			}
+		}
+	}
+
+	canCompareSelf := func(v any) func() {
+		return func() {
+			s.False(s.c.Comparable(v, undefined))
+			for _, value := range values {
+				b, _ := json.Marshal(v)
+				b2, _ := json.Marshal(value)
+				if string(b) == string(b2) {
+					s.True(s.c.Comparable(v, value))
+				} else {
+					s.False(s.c.Comparable(v, value))
+				}
+			}
+		}
+	}
+
+	s.Run("Undefined", cannotCompare(undefined))
+	s.Run("Nil", cannotCompare(nil))
+	s.Run("Bool", func() {
+		s.Run("False", cannotCompare(false))
+		s.Run("True", cannotCompare(true))
+	})
+	s.Run("Number", func() {
+		s.Run("Int", canCompareSelf(int(1)))
+		s.Run("Int8", canCompareSelf(int8(1)))
+		s.Run("Int16", canCompareSelf(int16(1)))
+		s.Run("Int32", canCompareSelf(int32(1)))
+		s.Run("Int64", canCompareSelf(int64(1)))
+		s.Run("Uint", canCompareSelf(uint(1)))
+		s.Run("Uint8", canCompareSelf(uint8(1)))
+		s.Run("Uint16", canCompareSelf(uint16(1)))
+		s.Run("Uint32", canCompareSelf(uint32(1)))
+		s.Run("Uint64", canCompareSelf(uint64(1)))
+		s.Run("Float32", canCompareSelf(float32(1)))
+		s.Run("Float64", canCompareSelf(float64(1)))
+	})
+	s.Run("String", canCompareSelf("abc"))
+	s.Run("Time", canCompareSelf(now))
+	s.Run("Array", cannotCompare(arr))
+	s.Run("Document", cannotCompare(doc))
+}
+
+func (s *ComparerTestSuite) TestGetSetterDefinedValues() {
+	a := fieldnavigator.NewGetSetterWithDoc(data.M{
+		"a": data.M{"a": 1, "b": 2},
+	}, "a")
+	b := fieldnavigator.NewGetSetterWithDoc(data.M{
+		"a": data.M{"a": 1, "b": 2, "c": 3},
+	}, "a")
+	comp, err := s.c.Compare(a, b)
+	s.NoError(err)
+	s.Less(comp, 0)
+	comp, err = s.c.Compare(b, a)
+	s.NoError(err)
+	s.Greater(comp, 0)
 }
 
 func TestComparerTestSuite(t *testing.T) {
