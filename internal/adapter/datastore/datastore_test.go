@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"maps"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"sync"
@@ -23,10 +24,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 )
 
-// I don't like this approach, but go test uses package dir as path, and I want
-// to keep the workspace dir where it is in original code.
-const testDb = "../../../workspace/test.db"
-
 var ctx = context.Background()
 
 type timeGetterMock struct{ mock.Mock }
@@ -37,20 +34,24 @@ func (t *timeGetterMock) GetTime() time.Time { return t.Called().Get(0).(time.Ti
 
 type DatastoreTestSuite struct {
 	suite.Suite
-	d *Datastore
+	d         *Datastore
+	testDb    string
+	testDbDir string
 }
 
 func (s *DatastoreTestSuite) SetupTest() {
-	d, err := NewDatastore(domain.WithDatastoreFilename(testDb))
+	s.testDbDir = s.T().TempDir()
+	s.testDb = filepath.Join(s.testDbDir, "test.db")
+	d, err := NewDatastore(domain.WithDatastoreFilename(s.testDb))
 	s.NoError(err)
 	s.d = d.(*Datastore)
-	s.NoError(s.d.persistence.(*persistence.Persistence).EnsureParentDirectoryExists(ctx, testDb, DefaultDirMode))
-	if _, err = os.Stat(testDb); err != nil {
+	s.NoError(s.d.persistence.(*persistence.Persistence).EnsureParentDirectoryExists(ctx, s.testDb, DefaultDirMode))
+	if _, err = os.Stat(s.testDb); err != nil {
 		if !os.IsNotExist(err) {
 			s.FailNow(err.Error())
 		}
 	} else {
-		s.NoError(os.Remove(testDb))
+		s.NoError(os.Remove(s.testDb))
 	}
 
 	s.NoError(s.d.LoadDatabase(ctx))
@@ -97,7 +98,7 @@ func (s *DatastoreTestSuite) TestAutoloading() {
 			fileBytes = append(fileBytes, byte('\n'))
 		}
 
-		const autoDb = "../../../workspace/auto.db"
+		autoDb := filepath.Join(s.testDbDir, "auto.db")
 
 		s.NoError(os.WriteFile(autoDb, fileBytes, 0666))
 		db, err := LoadDatastore(ctx, domain.WithDatastoreFilename(autoDb))
@@ -125,7 +126,7 @@ func (s *DatastoreTestSuite) TestAutoloading() {
 			fileBytes = append(fileBytes, byte('\n'))
 		}
 
-		const autoDb = "../../../workspace/auto.db"
+		autoDb := filepath.Join(s.testDbDir, "auto.db")
 
 		s.NoError(os.WriteFile(autoDb, fileBytes, 0666))
 
@@ -286,7 +287,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Equal("hello", docMaps[5]["b"])
 		s.Equal("world", docMaps[42]["b"])
 
-		b, err := os.ReadFile(testDb)
+		b, err := os.ReadFile(s.testDb)
 		s.NoError(err)
 		lines := bytes.Split(b, []byte("\n"))
 		dt := make([]map[string]any, 0, len(lines))
@@ -325,7 +326,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
-		b, err := os.ReadFile(testDb)
+		b, err := os.ReadFile(s.testDb)
 		s.NoError(err)
 		lines := bytes.Split(b, []byte("\n"))
 		dt := make([]any, 0, len(lines))
@@ -356,7 +357,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -444,7 +445,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -482,7 +483,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -629,7 +630,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -657,7 +658,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		go func() {
 			defer wg.Done()
 			s.NoError(d.WaitCompaction(ctx))
-			b, err := os.ReadFile(testDb)
+			b, err := os.ReadFile(s.testDb)
 			s.NoError(err)
 			s.NotContains(string(b), "world")
 		}()
@@ -671,7 +672,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -727,7 +728,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := LoadDatastore(ctx,
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -1146,7 +1147,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		call := timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(testDb),
+			domain.WithDatastoreFilename(s.testDb),
 			domain.WithDatastoreTimestampData(true),
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
@@ -1834,7 +1835,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				buf = append(buf, append(b, '\n')...)
 			}
 
-			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 
 			s.NoError(s.d.LoadDatabase(ctx))
 			s.Len(s.d.getAllData(), 3)
@@ -1944,7 +1945,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Len(s.d.getAllData(), 0)
 
-			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
 			s.Len(s.d.getAllData(), 2)
@@ -2016,7 +2017,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(s.d.indexes["z"].Sparse())
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
-			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
 			dt := s.d.getAllData()
@@ -2057,7 +2058,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(0, s.d.indexes["a"].GetNumberOfKeys())
 
-			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
 			dt := s.d.getAllData()
@@ -2102,7 +2103,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
-			s.NoError(os.WriteFile(testDb, buf, DefaultFileMode))
+			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			e := &bst.ErrViolated{}
 			s.ErrorAs(s.d.LoadDatabase(ctx), &e)
 			s.Len(s.d.getAllData(), 0)
@@ -2740,7 +2741,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Indexes are persisted to a separate file and recreated upon reload
 		s.Run("PersistAndReload", func() {
-			persDB := "../../../workspace/persistIndexes.db"
+			persDB := filepath.Join(s.testDbDir, "persistIndexes.db")
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
@@ -2792,7 +2793,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Indexes are persisted with their options and recreated even if some db operation happen between loads
 		s.Run("PersistOperationBetweenLoads", func() {
-			persDB := "../../../workspace/persistIndexes.db"
+			persDB := filepath.Join(s.testDbDir, "persistIndexes.db")
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
@@ -2891,7 +2892,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Indexes can also be removed and the remove persisted
 		s.Run("PersistRemove", func() {
-			persDB := "../../../workspace/persistIndexes.db"
+			persDB := filepath.Join(s.testDbDir, "persistIndexes.db")
 
 			if _, err := os.Stat(persDB); !os.IsNotExist(err) {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))

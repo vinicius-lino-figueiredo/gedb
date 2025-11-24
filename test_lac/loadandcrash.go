@@ -18,8 +18,11 @@ import (
 )
 
 func main() {
+
+	file := filepath.Join(os.Args[1], "lac.db")
+
 	per, err := persistence.NewPersistence(
-		domain.WithPersistenceFilename("../../../workspace/lac.db"),
+		domain.WithPersistenceFilename(file),
 		domain.WithPersistenceStorage(fakeStorage{storage.NewStorage()}),
 	)
 	if err != nil {

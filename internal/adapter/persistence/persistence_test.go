@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -27,8 +28,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 )
-
-const testDb = "../../../workspace/test.db"
 
 type serializeFunc func(context.Context, any) ([]byte, error)
 
@@ -126,38 +125,43 @@ type PersistenceTestSuite struct {
 	storage    testStorage
 	serializer domain.Serializer
 	comparer   domain.Comparer
+	testDbDir  string
+	testDb     string
 }
 
 func (s *PersistenceTestSuite) SetupTest() {
 	s.storage.Storage = storage.NewStorage().(*storage.Storage)
 	s.comparer = comparer.NewComparer()
 
+	s.testDbDir = s.T().TempDir()
+	s.testDb = filepath.Join(s.testDbDir, "test.db")
+
 	s.serializer = serializer.NewSerializer(s.comparer, data.NewDocument)
-	if err := s.storage.EnsureParentDirectoryExists(testDb, DefaultDirMode); err != nil {
+	if err := s.storage.EnsureParentDirectoryExists(s.testDb, DefaultDirMode); err != nil {
 		s.FailNow("could not ensure parent directory", err)
 	}
 
-	exists, err := s.storage.Exists(testDb)
+	exists, err := s.storage.Exists(s.testDb)
 	if err != nil {
 		s.FailNow("could not check datafile")
 	}
 
 	if exists {
-		if err := os.Remove(testDb); err != nil {
+		if err := os.Remove(s.testDb); err != nil {
 			s.FailNow("could not remove datafile")
 		}
 	}
 
-	if err := s.storage.EnsureDatafileIntegrity(testDb, DefaultFileMode); err != nil {
+	if err := s.storage.EnsureDatafileIntegrity(s.testDb, DefaultFileMode); err != nil {
 		s.FailNow("could not ensure datafile integrity", err)
 	}
 
-	per, err := NewPersistence(domain.WithPersistenceFilename(testDb))
+	per, err := NewPersistence(domain.WithPersistenceFilename(s.testDb))
 	s.NoError(err)
 
 	p = per.(*Persistence)
 
-	s.Equal(testDb, p.filename)
+	s.Equal(s.testDb, p.filename)
 
 }
 
@@ -380,7 +384,7 @@ func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	s.NoError(p.PersistNewState(ctx, d[0]...))
 	s.NoError(p.PersistNewState(ctx, d[1]...))
 
-	s.NoError(os.Remove(testDb))
+	s.NoError(os.Remove(s.testDb))
 
 	allData, _, err := p.LoadDatabase(ctx)
 	s.NoError(err)
@@ -452,7 +456,7 @@ func (s *PersistenceTestSuite) TestIgnoreEmptyLines() {
 // When treating raw data, refuse to proceed if too much data is corrupt, to
 // avoid data loss.
 func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
-	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	corruptTestFileName := filepath.Join(s.testDbDir, "corruptTest.db")
 	fakeData := "{\"_id\":\"one\",\"hello\":\"world\"}\n" + "Some corrupt data\n" + "{\"_id\":\"two\",\"hello\":\"earth\"}\n" + "{\"_id\":\"three\",\"hello\":\"you\"}\n"
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
 
@@ -493,7 +497,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
 
 // Treat document factory errors as data corruption.
 func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
-	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	corruptTestFileName := filepath.Join(s.testDbDir, "corruptTest.db")
 	fakeData := "{\"_id\":\"one\",\"hello\":\"world\"}\n" + "{\"_id\":\"two\",\"hello\":\"earth\"}\n" + "{\"_id\":\"three\",\"hello\":\"you\"}\n"
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
 
@@ -542,7 +546,7 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 
 // Treat deleted document errors as data corruption.
 func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
-	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	corruptTestFileName := filepath.Join(s.testDbDir, "corruptTest.db")
 	fakeData := `{"_id":"two","$$deleted":true}
 {"_id":"one","hello":"world"}`
 
@@ -597,7 +601,7 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 
 // Malformed indexes are treated as data corruption.
 func (s *PersistenceTestSuite) TestFailIndex() {
-	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	corruptTestFileName := filepath.Join(s.testDbDir, "corruptTest.db")
 	fakeData := `{"$$indexCreated": {"fieldName": "n"}, "$$indexRemoved": 1}
 {"_id":"one","hello":"world"}`
 
@@ -635,7 +639,7 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 
 // Can remove an index.
 func (s *PersistenceTestSuite) TestRemoveIndex() {
-	const corruptTestFileName = "../../../workspace/corruptTest.db"
+	corruptTestFileName := filepath.Join(s.testDbDir, "corruptTest.db")
 	fakeData := `{"$$indexCreated": {"fieldName": "a"}}
 {"$$indexCreated": {"fieldName": "n"}}
 {"$$indexRemoved": "n"}`
@@ -678,14 +682,14 @@ func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceStorage(st),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+	st.On("EnsureParentDirectoryExists", s.testDb, p.dirMode).
 		Return(fmt.Errorf("error")).
 		Once()
 
@@ -702,17 +706,17 @@ func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceStorage(st),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+	st.On("EnsureParentDirectoryExists", s.testDb, p.dirMode).
 		Return(nil).
 		Once()
-	st.On("EnsureDatafileIntegrity", testDb, p.fileMode).
+	st.On("EnsureDatafileIntegrity", s.testDb, p.fileMode).
 		Return(fmt.Errorf("error")).
 		Once()
 
@@ -729,21 +733,21 @@ func (s *PersistenceTestSuite) TestFailReadFile() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceStorage(st),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	st.On("EnsureParentDirectoryExists", testDb, p.dirMode).
+	st.On("EnsureParentDirectoryExists", s.testDb, p.dirMode).
 		Return(nil).
 		Once()
-	st.On("EnsureDatafileIntegrity", testDb, p.fileMode).
+	st.On("EnsureDatafileIntegrity", s.testDb, p.fileMode).
 		Return(nil).
 		Once()
 
-	st.On("ReadFileStream", testDb, p.fileMode).
+	st.On("ReadFileStream", s.testDb, p.fileMode).
 		Return(io.NopCloser(nil), fmt.Errorf("error")).
 		Once()
 
@@ -770,7 +774,7 @@ func (s *PersistenceTestSuite) TestSerializers() {
 	// NOTE: The original code would throw an error when declaring only one
 	// hook, but this check was not added to this code.
 	s.Run("DeclareEitherSerializerOrDeserializer", func() {
-		const hookTestFilename = "../../../workspace/hookTest.db"
+		hookTestFilename := filepath.Join(s.testDbDir, "hookTest.db")
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		s.NoError(os.WriteFile(hookTestFilename, []byte("Some content"), 0666))
 
@@ -807,7 +811,7 @@ func (s *PersistenceTestSuite) TestSerializers() {
 	})
 
 	s.Run("UseSerializerWhenPersistingOrCompacting", func() {
-		const hookTestFilename = "../../../workspace/hookTest.db"
+		hookTestFilename := filepath.Join(s.testDbDir, "hookTest.db")
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
 		per, err := NewPersistence(
@@ -856,7 +860,7 @@ func (s *PersistenceTestSuite) TestSerializers() {
 	})
 
 	s.Run("LoadData", func() {
-		const hookTestFilename = "../../../workspace/hookTest.db"
+		hookTestFilename := filepath.Join(s.testDbDir, "hookTest.db")
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
 		per, err := NewPersistence(
@@ -900,42 +904,42 @@ func (s *PersistenceTestSuite) TestSerializers() {
 // Creating a datastore with in memory as true and a bad filename won't
 // cause an error
 func (s *PersistenceTestSuite) TestInMemoryBadFilenameNoError() {
-	_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"), domain.WithPersistenceInMemoryOnly(true))
+	_, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "bad.db~")), domain.WithPersistenceInMemoryOnly(true))
 	s.NoError(err)
 }
 
 // Creating a persistent datastore with a bad filename will cause an error
 func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
-	_, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/bad.db~"))
+	_, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "bad.db~")))
 	s.Error(err)
 }
 
 // If no file stat, ensureDatafileIntegrity creates an empty datafile
 func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
-	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
-	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	fileExists, err := s.storage.Exists(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db")))
 	}
-	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	fileExists, err = s.storage.Exists(filepath.Join(s.testDbDir, "it.db~"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db~"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db~")))
 	}
 
-	s.NoFileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 
 	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 
-	b, err := os.ReadFile("../../../workspace/it.db")
+	b, err := os.ReadFile(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	s.Len(b, 0)
 
@@ -943,32 +947,32 @@ func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
 
 // If only datafile stat, ensureDatafileIntegrity will use it
 func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
-	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
-	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	fileExists, err := s.storage.Exists(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db")))
 	}
-	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	fileExists, err = s.storage.Exists(filepath.Join(s.testDbDir, "it.db~"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db~"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db~")))
 	}
 
-	s.NoError(os.WriteFile("../../../workspace/it.db", []byte("something"), 0666))
+	s.NoError(os.WriteFile(filepath.Join(s.testDbDir, "it.db"), []byte("something"), 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 
 	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 
-	b, err := os.ReadFile("../../../workspace/it.db")
+	b, err := os.ReadFile(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	s.Equal("something", string(b))
 }
@@ -976,32 +980,32 @@ func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
 // If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
 // will use it (cannot happen except upon first use)
 func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
-	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
-	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	fileExists, err := s.storage.Exists(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db")))
 	}
-	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	fileExists, err = s.storage.Exists(filepath.Join(s.testDbDir, "it.db~"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db~"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db~")))
 	}
 
-	s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("something"), 0666))
+	s.NoError(os.WriteFile(filepath.Join(s.testDbDir, "it.db~"), []byte("something"), 0666))
 
-	s.NoFileExists("../../../workspace/it.db")
-	s.FileExists("../../../workspace/it.db~")
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.FileExists(filepath.Join(s.testDbDir, "it.db~"))
 
 	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 
-	b, err := os.ReadFile("../../../workspace/it.db")
+	b, err := os.ReadFile(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	s.Equal("something", string(b))
 }
@@ -1014,36 +1018,36 @@ func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
 // rename wasn't, but there is in any case no guarantee that the data in
 // the temp file is whole so we have to discard the whole file
 func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
-	per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/it.db"))
+	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
-	fileExists, err := s.storage.Exists("../../../workspace/it.db")
+	fileExists, err := s.storage.Exists(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db")))
 	}
-	fileExists, err = s.storage.Exists("../../../workspace/it.db~")
+	fileExists, err = s.storage.Exists(filepath.Join(s.testDbDir, "it.db~"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/it.db~"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "it.db~")))
 	}
 
-	s.NoError(os.WriteFile("../../../workspace/it.db", []byte("{\"_id\":\"0\",\"hello\":\"world\"}"), 0666))
-	s.NoError(os.WriteFile("../../../workspace/it.db~", []byte("{\"_id\":\"0\",\"hello\":\"other\"}"), 0666))
+	s.NoError(os.WriteFile(filepath.Join(s.testDbDir, "it.db"), []byte("{\"_id\":\"0\",\"hello\":\"world\"}"), 0666))
+	s.NoError(os.WriteFile(filepath.Join(s.testDbDir, "it.db~"), []byte("{\"_id\":\"0\",\"hello\":\"other\"}"), 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.FileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.FileExists(filepath.Join(s.testDbDir, "it.db~"))
 
 	s.NoError(s.storage.EnsureDatafileIntegrity(p.filename, 0666))
 
-	s.FileExists("../../../workspace/it.db")
-	s.FileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.FileExists(filepath.Join(s.testDbDir, "it.db~"))
 
-	b, err := os.ReadFile("../../../workspace/it.db")
+	b, err := os.ReadFile(filepath.Join(s.testDbDir, "it.db"))
 	s.NoError(err)
 	s.Equal("{\"_id\":\"0\",\"hello\":\"world\"}", string(b))
-	b, err = os.ReadFile("../../../workspace/it.db~")
+	b, err = os.ReadFile(filepath.Join(s.testDbDir, "it.db~"))
 	s.NoError(err)
 	s.Equal("{\"_id\":\"0\",\"hello\":\"other\"}", string(b))
 
@@ -1055,8 +1059,8 @@ func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
 	s.Len(docs, 1)
 	s.Equal("world", docs[0].Get("hello"))
 
-	s.FileExists("../../../workspace/it.db")
-	s.NoFileExists("../../../workspace/it.db~")
+	s.FileExists(filepath.Join(s.testDbDir, "it.db"))
+	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 }
 
 // persistCachedDatabase should update the contents of the datafile and leave a clean state
@@ -1065,35 +1069,35 @@ func (s *PersistenceTestSuite) TestCleanDatafile() {
 	_id := uuid.New().String()
 	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
 
-	fileExists, err := s.storage.Exists(testDb)
+	fileExists, err := s.storage.Exists(s.testDb)
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb))
+		s.NoError(os.Remove(s.testDb))
 	}
-	fileExists, err = s.storage.Exists(testDb + "~")
+	fileExists, err = s.storage.Exists(s.testDb + "~")
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb + "~"))
+		s.NoError(os.Remove(s.testDb + "~"))
 	}
-	s.NoFileExists(testDb)
+	s.NoFileExists(s.testDb)
 
-	s.NoError(os.WriteFile(testDb+"~", []byte("something"), 0666))
-	s.FileExists(testDb + "~")
+	s.NoError(os.WriteFile(s.testDb+"~", []byte("something"), 0666))
+	s.FileExists(s.testDb + "~")
 
 	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-	contents, err := os.ReadFile(testDb)
+	contents, err := os.ReadFile(s.testDb)
 	s.NoError(err)
 
-	fileExists, err = s.storage.Exists(testDb)
+	fileExists, err = s.storage.Exists(s.testDb)
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb))
+		s.NoError(os.Remove(s.testDb))
 	}
 	s.True(fileExists)
-	fileExists, err = s.storage.Exists(testDb + "~")
+	fileExists, err = s.storage.Exists(s.testDb + "~")
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb + "~"))
+		s.NoError(os.Remove(s.testDb + "~"))
 	}
 
 	s.False(fileExists)
@@ -1111,27 +1115,27 @@ func (s *PersistenceTestSuite) TestNoTempFileAfterPersistCachedDatabase() {
 	_id := uuid.New().String()
 	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
 
-	fileExists, err := s.storage.Exists(testDb)
+	fileExists, err := s.storage.Exists(s.testDb)
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb))
+		s.NoError(os.Remove(s.testDb))
 	}
-	fileExists, err = s.storage.Exists(testDb + "~")
+	fileExists, err = s.storage.Exists(s.testDb + "~")
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb + "~"))
+		s.NoError(os.Remove(s.testDb + "~"))
 	}
 
-	s.NoFileExists(testDb)
-	s.NoFileExists(testDb + "~")
+	s.NoFileExists(s.testDb)
+	s.NoFileExists(s.testDb + "~")
 
-	s.NoError(os.WriteFile(testDb+"~", []byte("bloup"), 0666))
-	s.FileExists(testDb + "~")
+	s.NoError(os.WriteFile(s.testDb+"~", []byte("bloup"), 0666))
+	s.FileExists(s.testDb + "~")
 	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-	contents, err := os.ReadFile(testDb)
+	contents, err := os.ReadFile(s.testDb)
 	s.NoError(err)
-	s.FileExists(testDb)
-	s.NoFileExists(testDb + "~")
+	s.FileExists(s.testDb)
+	s.NoFileExists(s.testDb + "~")
 	d := make(data.M)
 	s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
 	s.Len(d, 2)
@@ -1145,20 +1149,20 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfTempFileExists() {
 	_id := uuid.New().String()
 	s.NoError(p.PersistNewState(ctx, data.M{"_id": _id, "hello": "world"}))
 
-	fileExists, err := s.storage.Exists(testDb)
+	fileExists, err := s.storage.Exists(s.testDb)
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove(testDb))
+		s.NoError(os.Remove(s.testDb))
 	}
-	s.NoError(os.WriteFile(testDb+"~", []byte("blabla"), 0666))
-	s.NoFileExists(testDb)
-	s.FileExists(testDb + "~")
+	s.NoError(os.WriteFile(s.testDb+"~", []byte("blabla"), 0666))
+	s.NoFileExists(s.testDb)
+	s.FileExists(s.testDb + "~")
 
 	s.NoError(p.PersistCachedDatabase(ctx, []domain.Document{data.M{"_id": _id, "hello": "world"}}, nil))
-	contents, err := os.ReadFile(testDb)
+	contents, err := os.ReadFile(s.testDb)
 	s.NoError(err)
-	s.FileExists(testDb)
-	s.NoFileExists(testDb + "~")
+	s.FileExists(s.testDb)
+	s.NoFileExists(s.testDb + "~")
 	d := make(data.M)
 	s.NoError(json.NewDecoder(bytes.NewReader(contents)).Decode(&d))
 	s.Len(d, 2)
@@ -1168,7 +1172,7 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfTempFileExists() {
 
 // persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
 func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
-	const dbFile = "../../../workspace/test2.db"
+	dbFile := filepath.Join(s.testDbDir, "test2.db")
 
 	fileExists, err := s.storage.Exists(dbFile)
 	s.NoError(err)
@@ -1196,7 +1200,7 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
 
 // Persistence works as expected when everything goes fine
 func (s *PersistenceTestSuite) TestWorkAsExpected() {
-	const dbFile = "../../../workspace/test2.db"
+	dbFile := filepath.Join(s.testDbDir, "test2.db")
 
 	s.NoError(s.storage.EnsureFileDoesntExist(dbFile))
 	s.NoError(s.storage.EnsureFileDoesntExist(dbFile + "~"))
@@ -1242,15 +1246,15 @@ func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
 	// let docI
 
 	// Ensuring the state is clean
-	fileExists, err := s.storage.Exists("../../../workspace/lac.db")
+	fileExists, err := s.storage.Exists(filepath.Join(s.testDbDir, "lac.db"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/lac.db"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "lac.db")))
 	}
-	fileExists, err = s.storage.Exists("../../../workspace/lac.db~")
+	fileExists, err = s.storage.Exists(filepath.Join(s.testDbDir, "lac.db~"))
 	s.NoError(err)
 	if fileExists {
-		s.NoError(os.Remove("../../../workspace/lac.db~"))
+		s.NoError(os.Remove(filepath.Join(s.testDbDir, "lac.db~")))
 	}
 
 	// Creating a db file with 150k records (a bit long to load)
@@ -1258,9 +1262,9 @@ func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
 	for i = range N {
 		s.NoError(encoder.Encode(data.M{"_id": fmt.Sprintf("anid_%d", i), "hello": "world"}))
 	}
-	s.NoError(os.WriteFile("../../../workspace/lac.db", toWrite.Bytes(), 0666))
+	s.NoError(os.WriteFile(filepath.Join(s.testDbDir, "lac.db"), toWrite.Bytes(), 0666))
 
-	datafile, err := os.ReadFile("../../../workspace/lac.db")
+	datafile, err := os.ReadFile(filepath.Join(s.testDbDir, "lac.db"))
 	s.NoError(err)
 	datafileLength := len(datafile)
 
@@ -1270,31 +1274,31 @@ func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
 	s.Run("loadAndCrash", func() {
 		// don't really like this approach, but testing by
 		// running a main package
-		cmd := exec.Command("go", "run", "../../../test_lac/loadandcrash.go")
+		cmd := exec.Command("go", "run", "../../../test_lac/loadandcrash.go", s.testDbDir)
 		err := cmd.Run()
 		e := &exec.ExitError{}
 		s.ErrorAs(err, &e)
 		status := e.Sys().(syscall.WaitStatus).ExitStatus()
 		s.Equal(1, status)
-		s.FileExists("../../../workspace/lac.db")
-		s.FileExists("../../../workspace/lac.db~")
-		f, err := os.ReadFile("../../../workspace/lac.db")
+		s.FileExists(filepath.Join(s.testDbDir, "lac.db"))
+		s.FileExists(filepath.Join(s.testDbDir, "lac.db~"))
+		f, err := os.ReadFile(filepath.Join(s.testDbDir, "lac.db"))
 		s.NoError(err)
 		s.Len(f, datafileLength)
-		f, err = os.ReadFile("../../../workspace/lac.db~")
+		f, err = os.ReadFile(filepath.Join(s.testDbDir, "lac.db~"))
 		s.NoError(err)
 		s.Len(f, 5000)
 
-		per, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/lac.db"))
+		per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "lac.db")))
 		s.NoError(err)
 
 		ctx := context.Background()
 		docs, _, err := per.LoadDatabase(ctx)
 		s.NoError(err)
-		s.FileExists("../../../workspace/lac.db")
-		s.NoFileExists("../../../workspace/lac.db~")
+		s.FileExists(filepath.Join(s.testDbDir, "lac.db"))
+		s.NoFileExists(filepath.Join(s.testDbDir, "lac.db~"))
 
-		f, err = os.ReadFile("../../../workspace/lac.db")
+		f, err = os.ReadFile(filepath.Join(s.testDbDir, "lac.db"))
 		s.NoError(err)
 		s.Len(f, datafileLength)
 
@@ -1369,7 +1373,7 @@ func (s *PersistenceTestSuite) TestCannotCauseEMFILEErrorsByOpeningTooManyFileDe
 		for _, fh := range filehandles {
 			fh.Close()
 		}
-		p, err := NewPersistence(domain.WithPersistenceFilename("../../../workspace/openfds.db"))
+		p, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "openfds.db")))
 		s.NoError(err)
 		docs, _, err := p.LoadDatabase(ctx)
 		s.NoError(err)
@@ -1410,18 +1414,18 @@ func (s *PersistenceTestSuite) TestCannotCauseEMFILEErrorsByOpeningTooManyFileDe
 // Check that the buffer is reset (added).
 func (s *PersistenceTestSuite) TestDropDatabase() {
 	s.Run("RemovesFile", func() {
-		s.FileExists(testDb)
+		s.FileExists(s.testDb)
 		ctx := context.Background()
 		s.NoError(p.DropDatabase(ctx))
-		s.NoFileExists(testDb)
+		s.NoFileExists(s.testDb)
 	})
 	s.SetupTest() // datafile is needed for the next test
 	s.Run("ReloadAfterwards", func() {
-		s.FileExists(testDb)
+		s.FileExists(s.testDb)
 		ctx := context.Background()
 		s.NoError(p.PersistNewState(ctx, data.M{"_id": uuid.New().String(), "hello": "world"}))
-		s.FileExists(testDb)
-		b, err := os.ReadFile(testDb)
+		s.FileExists(s.testDb)
+		b, err := os.ReadFile(s.testDb)
 		s.NoError(err)
 		var lines [][]byte
 		for line := range bytes.SplitSeq(b, []byte("\n")) {
@@ -1431,10 +1435,10 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 		}
 		s.Len(lines, 1)
 		s.NoError(p.DropDatabase(ctx))
-		s.NoFileExists(testDb)
+		s.NoFileExists(s.testDb)
 		s.NoError(p.PersistNewState(ctx, data.M{"_id": uuid.New().String(), "hello": "world"}))
-		s.FileExists(testDb)
-		b, err = os.ReadFile(testDb)
+		s.FileExists(s.testDb)
+		b, err = os.ReadFile(s.testDb)
 		s.NoError(err)
 		lines = lines[:0]
 		for line := range bytes.SplitSeq(b, []byte("\n")) {
@@ -1446,12 +1450,12 @@ func (s *PersistenceTestSuite) TestDropDatabase() {
 	})
 	s.SetupTest()
 	s.Run("CanDropMultipleTimes", func() {
-		s.FileExists(testDb)
+		s.FileExists(s.testDb)
 		ctx := context.Background()
 		s.NoError(p.DropDatabase(ctx))
-		s.NoFileExists(testDb)
+		s.NoFileExists(s.testDb)
 		s.NoError(p.DropDatabase(ctx))
-		s.NoFileExists(testDb)
+		s.NoFileExists(s.testDb)
 	})
 	s.SetupTest()
 	s.Run("ResetBuffer", func() {
@@ -1526,14 +1530,14 @@ func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceStorage(st),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	st.On("Exists", testDb).
+	st.On("Exists", s.testDb).
 		Return(false, fmt.Errorf("error")).
 		Once()
 
@@ -1561,7 +1565,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceSerializer(ser),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
@@ -1574,7 +1578,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 {"_id": 3, "shouldFail": true}
 {"_id": 4, "shouldFail": false}
 `
-	s.NoError(os.WriteFile(testDb, []byte(docsFile), p.fileMode))
+	s.NoError(os.WriteFile(s.testDb, []byte(docsFile), p.fileMode))
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
 	s.Error(err)
@@ -1588,7 +1592,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 {"$$indexCreated": {"fieldName": "shouldFail"}}
 {"$$indexCreated": {"fieldName": "fieldE"}}
 `
-	s.NoError(os.WriteFile(testDb, []byte(indexesFile), p.fileMode))
+	s.NoError(os.WriteFile(s.testDb, []byte(indexesFile), p.fileMode))
 
 	docs, indexes, err = p.LoadDatabase(context.Background())
 	s.Error(err)
@@ -1603,14 +1607,14 @@ func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWriting() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(testDb),
+		domain.WithPersistenceFilename(s.testDb),
 		domain.WithPersistenceStorage(st),
 		domain.WithPersistenceCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	st.On("CrashSafeWriteFileLines", testDb, [][]byte(nil), p.dirMode, p.fileMode).
+	st.On("CrashSafeWriteFileLines", s.testDb, [][]byte(nil), p.dirMode, p.fileMode).
 		Return(fmt.Errorf("error")).
 		Once()
 
