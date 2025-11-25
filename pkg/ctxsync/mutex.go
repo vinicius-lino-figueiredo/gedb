@@ -26,6 +26,11 @@ func (m *Mutex) LockWithContext(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case m.unlock <- struct{}{}:
 		return nil
 	}
