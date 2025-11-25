@@ -1,3 +1,4 @@
+// Package datastore contains the default [domain.GEDB] implementation.
 package datastore
 
 import (

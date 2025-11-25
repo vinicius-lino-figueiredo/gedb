@@ -1,3 +1,4 @@
+// Package cursor contains the default [domain.Cursor] implementation.
 package cursor
 
 import (

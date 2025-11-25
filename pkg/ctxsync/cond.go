@@ -1,3 +1,4 @@
+// Package ctxsync contains context-aware implementations of sync
 package ctxsync
 
 import (

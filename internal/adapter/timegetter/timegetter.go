@@ -1,3 +1,4 @@
+// Package timegetter contains the default [domain.TimeGetter] implementation.
 package timegetter
 
 import (

@@ -1,3 +1,4 @@
+// Package persistence contains the default [domain.Persistence] implementation.
 package persistence
 
 import (

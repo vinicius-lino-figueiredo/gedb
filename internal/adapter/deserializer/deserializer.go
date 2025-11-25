@@ -1,3 +1,5 @@
+// Package deserializer contains the default [domain.Deserializer]
+// implementation.
 package deserializer
 
 import (

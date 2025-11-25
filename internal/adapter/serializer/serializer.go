@@ -1,3 +1,4 @@
+// Package serializer contains the default [domain.Serializer] implementation.
 package serializer
 
 import (

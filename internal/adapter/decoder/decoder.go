@@ -1,3 +1,4 @@
+// Package decoder contains the default [domain.Decoder] implementation.
 package decoder
 
 import (

@@ -1,3 +1,5 @@
+// Package storage contains a [domain.Storage] implementation for
+// datafile-related operations.
 package storage
 
 import (

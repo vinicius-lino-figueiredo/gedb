@@ -1,3 +1,4 @@
+// Package index contains the default [domain.Index] implementation.
 package index
 
 import (

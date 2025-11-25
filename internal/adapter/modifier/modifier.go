@@ -1,3 +1,5 @@
+// Package modifier contains a [domain.Modifier] implementation to apply changes
+// to a doc based on a mongo-like API.
 package modifier
 
 import (

@@ -1,3 +1,4 @@
+// Package projector contains the default [domain.Projector] implementation.
 package projector
 
 import (

@@ -1,3 +1,4 @@
+// Package querier contains the default [domain.Querier] implementation.
 package querier
 
 import (

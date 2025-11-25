@@ -1,3 +1,6 @@
+// Package comparer contains a [domain.Comparer] implementation to compare
+// values treating them like js types (undefined, nil, number, string, boolean,
+// time, array, object)
 package comparer
 
 import (

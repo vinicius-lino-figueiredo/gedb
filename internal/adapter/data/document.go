@@ -1,3 +1,4 @@
+// Package data contains the default [domain.Document] implementation.
 package data
 
 import (

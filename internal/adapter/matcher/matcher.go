@@ -1,3 +1,5 @@
+// Package matcher contains the default implementation of [domain.Matcher]
+// unsing basic mongo-like match API.
 package matcher
 
 import (
