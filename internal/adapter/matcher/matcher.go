@@ -69,22 +69,22 @@ func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 }
 
 // Match implements [domain.Matcher].
-func (m *Matcher) Match(val any, qry any) (bool, error) {
-	if qry == nil {
+func (m *Matcher) Match(value any, query any) (bool, error) {
+	if query == nil {
 		return true, nil
 	}
-	doc, ok := val.(domain.Document)
+	doc, ok := value.(domain.Document)
 	if !ok {
-		return m.nonDocMatch(val, qry)
+		return m.nonDocMatch(value, query)
 	}
 
-	query, ok := qry.(domain.Document)
+	queryDoc, ok := query.(domain.Document)
 	if !ok {
 		// if val is not a doc, there is no non-doc value that can match
 		return false, nil
 	}
 
-	return m.matchDocs(doc, query)
+	return m.matchDocs(doc, queryDoc)
 
 }
 

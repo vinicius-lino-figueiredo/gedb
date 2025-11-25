@@ -13,48 +13,51 @@ import (
 	"time"
 )
 
-// Serializer converts documents to bytes for storage.
+// Serializer converts documents to bytes for storage. The result NEVER contains
+// '\n' char, since this would break deserialization logic.
 type Serializer interface {
 	// Serialize converts a document to bytes for persistence.
-	Serialize(context.Context, any) ([]byte, error)
+	Serialize(ctx context.Context, value any) ([]byte, error)
 }
 
-// Deserializer converts bytes back to documents.
+// Deserializer converts bytes to binary data.
 type Deserializer interface {
-	// Deserialize converts bytes back to a document.
-	Deserialize(context.Context, []byte, any) error
+	// Deserialize converts bytes to compiled data types. Artument target
+	// must be a pointer so it can be changed.
+	Deserialize(ctx context.Context, b []byte, target any) error
 }
 
 // Storage provides low-level file operations with crash-safety guarantees.
 type Storage interface {
 	// AppendFile appends data to a file, creating it if necessary.
-	AppendFile(string, os.FileMode, []byte) (int, error)
+	AppendFile(fileName string, mode os.FileMode, data []byte) (int, error)
 	// Exists checks if a file exists.
-	Exists(string) (bool, error)
+	Exists(fileName string) (bool, error)
 	// EnsureParentDirectoryExists creates parent directories if needed.
-	EnsureParentDirectoryExists(string, os.FileMode) error
+	EnsureParentDirectoryExists(fileName string, mode os.FileMode) error
 	// EnsureDatafileIntegrity verifies or repairs file integrity.
-	EnsureDatafileIntegrity(string, os.FileMode) error
+	EnsureDatafileIntegrity(fileName string, mode os.FileMode) error
 	// CrashSafeWriteFileLines atomically writes multiple lines to a file.
-	CrashSafeWriteFileLines(string, [][]byte, os.FileMode, os.FileMode) error
+	CrashSafeWriteFileLines(fileName string, lines [][]byte, dirMode os.FileMode, fileMode os.FileMode) error
 	// ReadFileStream opens a file for streaming reads.
-	ReadFileStream(string, os.FileMode) (io.ReadCloser, error)
+	ReadFileStream(fileName string, mode os.FileMode) (io.ReadCloser, error)
 	// Remove deletes a file.
-	Remove(string) error
+	Remove(fileName string) error
 }
 
 // Decoder converts between different data representations.
 type Decoder interface {
 	// Decode converts from one data format to another.
-	Decode(any, any) error
+	Decode(source any, target any) error
 }
 
-// Comparer provides ordering and comparison operations for different data types.
+// Comparer provides ordering and comparison operations for different data
+// types.
 type Comparer interface {
 	// Compare returns -1, 0, or 1 based on the comparison of two values.
-	Compare(any, any) (int, error)
+	Compare(a any, b any) (int, error)
 	// Comparable returns true if two values can be compared.
-	Comparable(any, any) bool
+	Comparable(a any, b any) bool
 }
 
 // TimeGetter provides current time for timestamping operations.
@@ -84,7 +87,7 @@ type GetSetter interface {
 	// nor unset.
 	Getter
 	// Set will set a new value for the address.
-	Set(any)
+	Set(value any)
 	// Unset removes the given value from the parent item (object or array).
 	Unset()
 }
@@ -92,20 +95,22 @@ type GetSetter interface {
 // FieldNavigator provides field access operations with dot notation support.
 type FieldNavigator interface {
 	// GetField extracts values from nested documents, following path parts.
-	GetField(any, ...string) ([]GetSetter, bool, error)
-	EnsureField(any, ...string) ([]GetSetter, error)
+	GetField(value any, addr ...string) (fields []GetSetter, expanded bool, err error)
+	// EnsureField fetches fields from nested documents, creating them if
+	// necessary
+	EnsureField(value any, addr ...string) ([]GetSetter, error)
 	// GetAddress extracts nested path from the string address using the
 	// expected notation.
 	GetAddress(field string) ([]string, error)
 	// SplitFields parses compound field names into individual field
 	// components.
-	SplitFields(string) ([]string, error)
+	SplitFields(joinedFields string) ([]string, error)
 }
 
 // Hasher generates hash values for data deduplication and indexing.
 type Hasher interface {
 	// Hash generates a hash value for the given data.
-	Hash(any) (uint64, error)
+	Hash(value any) (uint64, error)
 }
 
 // Document represents a record in the persistence layer, used internally to
@@ -116,13 +121,13 @@ type Document interface {
 	// ID returns the document ID, if any, or an empty string.
 	ID() any
 	// D returns the subdocument for the given key, if any.
-	D(string) Document
+	D(key string) Document
 	// Get returns the value under the given key, or nil if unset.
-	Get(string) any
+	Get(key string) any
 	// Set sets the value under the given key.
-	Set(string, any)
+	Set(key string, value any)
 	// Unset unsets the value under the given key.
-	Unset(string)
+	Unset(key string)
 	// Iter returns an unordered sequence of key-value pairs in the
 	// document.
 	Iter() iter.Seq2[string, any]
@@ -131,7 +136,7 @@ type Document interface {
 	// Values returns an unordered sequence of values in the document.
 	Values() iter.Seq[any]
 	// Has reports whether a value is set under the given key.
-	Has(string) bool
+	Has(key string) bool
 	// Len returns the number of set fields in the document.
 	Len() int
 }
@@ -139,38 +144,43 @@ type Document interface {
 // Matcher evaluates whether values match query criteria.
 type Matcher interface {
 	// Match returns true if the value matches the query.
-	Match(any, any) (bool, error)
+	Match(value any, query any) (bool, error)
 }
 
 // Modifier applies update operations to documents.
 type Modifier interface {
 	// Modify applies an update query to a document and returns the result.
-	Modify(Document, Document) (Document, error)
+	Modify(obj Document, mod Document) (Document, error)
 }
 
 // Persistence manages database serialization and file operations.
 type Persistence interface {
 	// DropDatabase permanently deletes all persisted data.
 	DropDatabase(ctx context.Context) error
-	// LoadDatabase reads the database from storage and returns documents and indexes.
-	LoadDatabase(ctx context.Context) ([]Document, map[string]IndexDTO, error)
+	// LoadDatabase reads the database from storage and returns documents
+	// and indexes.
+	LoadDatabase(ctx context.Context) (docs []Document, indexes map[string]IndexDTO, err error)
 	// PersistNewState appends new documents to the persistence layer.
 	PersistNewState(ctx context.Context, newDocs ...Document) error
 	// SetCorruptAlertThreshold sets the threshold for corruption warnings.
 	SetCorruptAlertThreshold(v float64)
-	// TreatRawStream parses a raw data stream and extracts documents and indexes.
-	TreatRawStream(ctx context.Context, rawStream io.Reader) ([]Document, map[string]IndexDTO, error)
+	// TreatRawStream parses a raw data stream and extracts documents and
+	// indexes.
+	TreatRawStream(ctx context.Context, rawStream io.Reader) (docs []Document, indexes map[string]IndexDTO, err error)
 	// WaitCompaction blocks until any running compaction process completes.
 	WaitCompaction(ctx context.Context) error
-	// PersistCachedDatabase writes all data and indexes to storage in one operation.
+	// PersistCachedDatabase writes all data and indexes to storage in one
+	// operation.
 	PersistCachedDatabase(ctx context.Context, allData []Document, indexes map[string]IndexDTO) error
 }
 
 // Cursor provides iteration over query results with pagination support.
 type Cursor interface {
-	// Scan executes the cursor and decodes all results into the target slice.
+	// Scan executes the cursor and decodes all results into the target
+	// slice.
 	Scan(ctx context.Context, target any) error
-	// Next advances the cursor to the next document, returning true if available.
+	// Next advances the cursor to the next document, returning true if
+	// available.
 	Next() bool
 	// Err returns any error that occurred during iteration.
 	Err() error
@@ -186,7 +196,7 @@ type Querier interface {
 // Projector is used to determine which fields to include in the returned
 // documents.
 type Projector interface {
-	Project(doc []Document, proj map[string]uint8) ([]Document, error)
+	Project(docs []Document, proj map[string]uint8) ([]Document, error)
 }
 
 // Index provides fast document lookups based on field values.

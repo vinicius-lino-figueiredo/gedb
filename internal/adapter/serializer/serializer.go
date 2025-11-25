@@ -64,13 +64,13 @@ func (s *Serializer) copyAny(v any) (any, error) {
 }
 
 // Serialize implements domain.Serializer.
-func (s *Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
+func (s *Serializer) Serialize(ctx context.Context, value any) ([]byte, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
-	if doc, ok := obj.(domain.Document); ok {
+	if doc, ok := value.(domain.Document); ok {
 		cp, err := s.copyDoc(doc)
 		if err != nil {
 			return nil, err
@@ -80,9 +80,9 @@ func (s *Serializer) Serialize(ctx context.Context, obj any) ([]byte, error) {
 				return nil, err
 			}
 		}
-		obj = cp
+		value = cp
 	}
-	return json.Marshal(obj)
+	return json.Marshal(value)
 }
 
 func (s *Serializer) checkKey(k string, v any) error {

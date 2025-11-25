@@ -35,18 +35,18 @@ func NewProjector(opts ...domain.ProjectorOption) domain.Projector {
 }
 
 // Project implements [domain.Projector].
-func (q *Projector) Project(data []domain.Document, p map[string]uint8) ([]domain.Document, error) {
-	if len(p) == 0 {
-		return data, nil
+func (q *Projector) Project(docs []domain.Document, proj map[string]uint8) ([]domain.Document, error) {
+	if len(proj) == 0 {
+		return docs, nil
 	}
 
-	id, idMentioned := p["_id"]
+	id, idMentioned := proj["_id"]
 	keepID := !idMentioned || id != 0
-	_projection := make([][]string, 0, len(p))
+	_projection := make([][]string, 0, len(proj))
 
 	fields := 0
 	oneFields := 0
-	for field, value := range p {
+	for field, value := range proj {
 		if field == "_id" {
 			continue
 		}
@@ -68,8 +68,8 @@ func (q *Projector) Project(data []domain.Document, p map[string]uint8) ([]domai
 		_projection = append(_projection, []string{"_id"})
 	}
 
-	res := make([]domain.Document, len(data))
-	for n, doc := range data {
+	res := make([]domain.Document, len(docs))
+	for n, doc := range docs {
 		projected, err := q.projectDoc(doc, _projection, oneFields != 0)
 		if err != nil {
 			return nil, err

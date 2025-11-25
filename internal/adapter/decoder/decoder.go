@@ -15,13 +15,13 @@ func NewDecoder() domain.Decoder {
 }
 
 // Decode implements domain.Decoder.
-func (d *Decoder) Decode(src any, tgt any) error {
+func (d *Decoder) Decode(source any, target any) error {
 	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName: "gedb",
-		Result:  tgt,
+		Result:  target,
 	})
 	if err != nil {
 		return err
 	}
-	return dec.Decode(src)
+	return dec.Decode(source)
 }

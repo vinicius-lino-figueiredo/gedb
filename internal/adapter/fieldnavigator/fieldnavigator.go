@@ -48,32 +48,32 @@ func (fn *FieldNavigator) GetAddress(field string) ([]string, error) {
 }
 
 // GetField implements [domain.FieldNavigator].
-func (fn *FieldNavigator) GetField(obj any, fieldParts ...string) ([]domain.GetSetter, bool, error) {
-	return fn.getField(obj, fieldParts, false)
+func (fn *FieldNavigator) GetField(value any, addr ...string) (fields []domain.GetSetter, expanded bool, err error) {
+	return fn.getField(value, addr, false)
 }
 
 // EnsureField implements [domain.FieldNavigator].
-func (fn *FieldNavigator) EnsureField(obj any, fieldParts ...string) ([]domain.GetSetter, error) {
-	res, _, err := fn.getField(obj, fieldParts, true)
+func (fn *FieldNavigator) EnsureField(value any, addr ...string) ([]domain.GetSetter, error) {
+	res, _, err := fn.getField(value, addr, true)
 	return res, err
 }
 
-func (fn *FieldNavigator) getField(obj any, fieldParts []string, ensure bool) ([]domain.GetSetter, bool, error) {
-	if obj == nil {
+func (fn *FieldNavigator) getField(value any, addr []string, ensure bool) ([]domain.GetSetter, bool, error) {
+	if value == nil {
 		return invalid, false, nil
 	}
 
-	if len(fieldParts) == 0 {
-		return []domain.GetSetter{NewReadOnlyGetSetter(obj)}, false, nil
+	if len(addr) == 0 {
+		return []domain.GetSetter{NewReadOnlyGetSetter(value)}, false, nil
 	}
 
 	ctx := &navCtx{
-		curr:   []field{{v: obj, expandable: true}},
-		addr:   fieldParts,
+		curr:   []field{{v: value, expandable: true}},
+		addr:   addr,
 		ensure: ensure,
 	}
 
-	for ctx.idx, ctx.part = range fieldParts {
+	for ctx.idx, ctx.part = range addr {
 		for ctx.n = 0; ; ctx.n++ {
 			if ctx.n > len(ctx.curr)-1 {
 				break
@@ -206,6 +206,6 @@ func (fn *FieldNavigator) expandArray(ctx *navCtx, t []any) ([]domain.GetSetter,
 }
 
 // SplitFields implements [domain.FieldNavigator].
-func (fn *FieldNavigator) SplitFields(in string) ([]string, error) {
-	return strings.Split(in, ","), nil
+func (fn *FieldNavigator) SplitFields(joinedFields string) ([]string, error) {
+	return strings.Split(joinedFields, ","), nil
 }

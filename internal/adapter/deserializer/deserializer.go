@@ -53,13 +53,13 @@ func (d *Deserializer) convertAny(v any) any {
 }
 
 // Deserialize implements domain.Deserializer.
-func (d *Deserializer) Deserialize(ctx context.Context, dt []byte, v any) error {
+func (d *Deserializer) Deserialize(ctx context.Context, b []byte, target any) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
-	if v == nil {
+	if target == nil {
 		return errors.New("nil target")
 	}
 	// this should be the only use of Document outside of the context. Here
@@ -67,15 +67,15 @@ func (d *Deserializer) Deserialize(ctx context.Context, dt []byte, v any) error 
 	// unmarshaling json.
 	doc := make(data.M)
 
-	if err := json.NewDecoder(bytes.NewReader(dt)).Decode(&doc); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(b)).Decode(&doc); err != nil {
 		return err
 	}
 
 	d.convertDates(doc)
-	if p, ok := v.(*map[string]any); ok {
+	if p, ok := target.(*map[string]any); ok {
 		*p = doc
 		return nil
 	}
 
-	return d.decoder.Decode(doc, v)
+	return d.decoder.Decode(doc, target)
 }

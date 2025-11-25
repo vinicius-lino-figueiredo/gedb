@@ -138,7 +138,7 @@ func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Doc
 }
 
 // TreatRawStream implements domain.Persistence.
-func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) ([]domain.Document, map[string]domain.IndexDTO, error) {
+func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -146,7 +146,7 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 	}
 	dataByID := uncomparable.New[domain.Document](p.hasher, p.comparer)
 
-	indexes := make(map[string]domain.IndexDTO)
+	indexes = make(map[string]domain.IndexDTO)
 
 	corruptItems := 0
 
@@ -198,8 +198,8 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 			}
 		}
 	}
-	data := slices.Collect(dataByID.Values())
-	return data, indexes, nil
+	docs = slices.Collect(dataByID.Values())
+	return docs, indexes, nil
 }
 
 // if doc is a valid Index record, add or remove from the map; if not, ignore
@@ -235,7 +235,7 @@ func (p *Persistence) addOrDeleteDoc(doc domain.Document, m docMap) error {
 }
 
 // LoadDatabase implements domain.Persistence.
-func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[string]domain.IndexDTO, error) {
+func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -249,7 +249,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 		return nil, nil, nil
 	}
 
-	err := p.EnsureParentDirectoryExists(ctx, p.filename, p.dirMode)
+	err = p.EnsureParentDirectoryExists(ctx, p.filename, p.dirMode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,7 +266,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 	}
 	defer fileStream.Close()
 
-	newDocs, newIdxs, err := p.TreatRawStream(ctx, fileStream)
+	docs, indexes, err = p.TreatRawStream(ctx, fileStream)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -291,11 +291,11 @@ func (p *Persistence) LoadDatabase(ctx context.Context) ([]domain.Document, map[
 	// await this.db.persistence.persistCachedDatabaseAsync()
 	// this.db.executor.processBuffer()
 
-	if err = p.PersistCachedDatabase(ctx, newDocs, newIdxs); err != nil {
+	if err = p.PersistCachedDatabase(ctx, docs, indexes); err != nil {
 		return nil, nil, err
 	}
 
-	return newDocs, newIdxs, nil
+	return docs, indexes, nil
 }
 
 // DropDatabase implements domain.Persistence.

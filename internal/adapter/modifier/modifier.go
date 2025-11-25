@@ -55,8 +55,8 @@ func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer
 }
 
 // Modify implements [domain.Modifier].
-func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (domain.Document, error) {
-	modQry, replace, err := m.modQuery(obj, updateQuery)
+func (m *Modifier) Modify(obj domain.Document, mod domain.Document) (domain.Document, error) {
+	modQry, replace, err := m.modQuery(obj, mod)
 	if err != nil {
 		return nil, err
 	}
@@ -68,11 +68,11 @@ func (m *Modifier) Modify(obj domain.Document, updateQuery domain.Document) (dom
 	return m.dollarMod(obj, modQry)
 }
 
-func (m *Modifier) modQuery(obj domain.Document, updateQuery domain.Document) (map[string]any, bool, error) {
+func (m *Modifier) modQuery(obj domain.Document, mod domain.Document) (map[string]any, bool, error) {
 	dollarFields, total := 0, 0
 
-	query := make(map[string]any, updateQuery.Len())
-	for k, v := range updateQuery.Iter() {
+	query := make(map[string]any, mod.Len())
+	for k, v := range mod.Iter() {
 		total++
 		if err := m.checkMod(obj, k, v); err != nil {
 			return nil, false, err

@@ -26,8 +26,8 @@ func NewHasher() domain.Hasher {
 }
 
 // Hash implements domain.Hasher.
-func (h *Hasher) Hash(a any) (uint64, error) {
-	canonical := h.canonicalize(a)
+func (h *Hasher) Hash(value any) (uint64, error) {
+	canonical := h.canonicalize(value)
 
 	b, err := json.Marshal(canonical)
 	if err != nil {

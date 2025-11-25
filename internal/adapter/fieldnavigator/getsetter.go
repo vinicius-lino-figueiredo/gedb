@@ -4,7 +4,7 @@ import "github.com/vinicius-lino-figueiredo/gedb/domain"
 
 // GetSetter implements [domain.GetSetter].
 type GetSetter struct {
-	get   func() (any, bool)
+	get   func() (value any, defined bool)
 	set   func(any)
 	unset func()
 }
@@ -56,7 +56,7 @@ func NewGetSetterEmpty() domain.GetSetter {
 }
 
 // Get implements [domain.GetSetter].
-func (gs *GetSetter) Get() (any, bool) {
+func (gs *GetSetter) Get() (value any, defined bool) {
 	if gs.get != nil {
 		return gs.get()
 	}
