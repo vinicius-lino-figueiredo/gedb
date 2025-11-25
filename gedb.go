@@ -6,8 +6,6 @@
 package gedb
 
 import (
-	"context"
-
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/datastore"
 )
@@ -60,10 +58,4 @@ type Index = domain.Index
 // NewDB creates a new GEDB instance with the provided configuration options.
 func NewDB(options ...domain.DatastoreOption) (domain.GEDB, error) {
 	return datastore.NewDatastore(options...)
-}
-
-// LoadDB creates and loads a GEDB instance with the provided configuration
-// options. Created for compatibility with NeDB. Its use is not recommended.
-func LoadDB(ctx context.Context, options ...domain.DatastoreOption) (domain.GEDB, error) {
-	return datastore.LoadDatastore(ctx, options...)
 }

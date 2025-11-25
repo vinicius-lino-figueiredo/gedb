@@ -62,18 +62,6 @@ type Datastore struct {
 	querier               domain.Querier
 }
 
-// LoadDatastore creates a new domain.GEDB and loads the database.
-func LoadDatastore(ctx context.Context, options ...domain.DatastoreOption) (domain.GEDB, error) {
-	db, err := NewDatastore(options...)
-	if err != nil {
-		return nil, err
-	}
-	if err := db.LoadDatabase(ctx); err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
 // NewDatastore returns a new implementation of Datastore.
 func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 
