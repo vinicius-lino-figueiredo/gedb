@@ -980,7 +980,7 @@ func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, 
 	if err := cur.Err(); err != nil {
 		return nil, false, err
 	}
-	if count != 1 {
+	if count == 0 {
 		qry, err := d.documentFactory(query)
 		if err != nil {
 			return nil, false, err
