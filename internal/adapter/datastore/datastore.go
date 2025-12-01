@@ -927,12 +927,6 @@ func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, opti
 }
 
 func (d *Datastore) update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) ([]domain.Document, error) {
-
-	QryDoc, err := d.documentFactory(query)
-	if err != nil {
-		return nil, err
-	}
-
 	updateQryDoc, err := d.documentFactory(updateQuery)
 	if err != nil {
 		return nil, err
@@ -949,13 +943,13 @@ func (d *Datastore) update(ctx context.Context, query any, updateQuery any, opti
 	}
 
 	if opts.Upsert {
-		inserted, rtrn, err := d.upsert(ctx, QryDoc, updateQryDoc, limit)
+		inserted, rtrn, err := d.upsert(ctx, query, updateQryDoc, limit)
 		if err != nil || rtrn {
 			return inserted, err
 		}
 	}
 
-	updated, mods, err := d.findAndModify(ctx, QryDoc, updateQryDoc, limit)
+	updated, mods, err := d.findAndModify(ctx, query, updateQryDoc, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -974,8 +968,8 @@ func (d *Datastore) update(ctx context.Context, query any, updateQuery any, opti
 	return d.cloneDocs(updated...)
 }
 
-func (d *Datastore) upsert(ctx context.Context, qry, mod domain.Document, limit int64) ([]domain.Document, bool, error) {
-	cur, err := d.find(ctx, qry, false, domain.WithFindLimit(limit))
+func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, limit int64) ([]domain.Document, bool, error) {
+	cur, err := d.find(ctx, query, false, domain.WithFindLimit(limit))
 	if err != nil {
 		return nil, false, err
 	}
@@ -987,6 +981,10 @@ func (d *Datastore) upsert(ctx context.Context, qry, mod domain.Document, limit 
 		return nil, false, err
 	}
 	if count != 1 {
+		qry, err := d.documentFactory(query)
+		if err != nil {
+			return nil, false, err
+		}
 		if err := d.checkDocuments(mod); err != nil {
 			if mod, err = d.modifier.Modify(qry, mod); err != nil {
 				return nil, false, err
@@ -1001,7 +999,7 @@ func (d *Datastore) upsert(ctx context.Context, qry, mod domain.Document, limit 
 	return nil, false, nil
 }
 
-func (d *Datastore) findAndModify(ctx context.Context, qry, modQry domain.Document, limit int64) ([]domain.Document, []domain.Update, error) {
+func (d *Datastore) findAndModify(ctx context.Context, qry any, modQry domain.Document, limit int64) ([]domain.Document, []domain.Update, error) {
 	cur, err := d.find(ctx, qry, false, domain.WithFindLimit(limit))
 	if err != nil {
 		return nil, nil, err
