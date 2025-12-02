@@ -486,7 +486,13 @@ func (d *Datastore) GetAllData(ctx context.Context) (domain.Cursor, error) {
 		return nil, err
 	}
 	defer d.executor.Unlock()
-	return d.cursorFactory(ctx, d.getAllData())
+
+	data, err := d.cloneDocs(d.getAllData()...)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.cursorFactory(ctx, data)
 }
 
 func (d *Datastore) getAllData() []domain.Document {
