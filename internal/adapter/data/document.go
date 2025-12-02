@@ -206,8 +206,14 @@ func parseField(r goreflect.Value, typ goreflect.StructField) (*field, error) {
 		}
 		tagSegments = tagSegments[1:]
 	}
-	if slices.Contains(tagSegments, "omitempty") && isNullable(typ.Type) && r.IsNil() {
-		return nil, nil
+	if slices.Contains(tagSegments, "omitempty") {
+		k := typ.Type.Kind()
+		if (k == reflect.Slice || k == reflect.Array || k == reflect.Map) && r.Len() == 0 {
+			return nil, nil
+		}
+		if isNullable(typ.Type) && r.IsNil() {
+			return nil, nil
+		}
 	}
 	if slices.Contains(tagSegments, "omitzero") && r.IsZero() {
 		return nil, nil
