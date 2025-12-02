@@ -114,8 +114,9 @@ func (s *MTestSuite) TestEmtpyTag() {
 
 func (s *MTestSuite) TestOmitEmpty() {
 	obj := struct {
-		Compliment1 bool `gedb:"Hello,omitempty"`
-		Compliment2 any  `gedb:"Hi,omitempty"`
+		Compliment1 bool  `gedb:"Hello,omitempty"`
+		Compliment2 any   `gedb:"Hi,omitempty"`
+		Compliment3 []int `gedb:"Sup,omitempty"`
 	}{
 		Compliment1: true,
 	}
