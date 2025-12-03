@@ -357,6 +357,10 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 		domain.WithIndexUnique(opts.Unique),
 		domain.WithIndexSparse(opts.Sparse),
 		domain.WithIndexExpireAfter(opts.ExpireAfter),
+		domain.WithIndexDocumentFactory(d.documentFactory),
+		domain.WithIndexComparer(d.comparer),
+		domain.WithIndexHasher(d.hasher),
+		domain.WithIndexFieldNavigator(d.fieldNavigator),
 	}
 
 	if _, exists := d.indexes[fields]; exists {
