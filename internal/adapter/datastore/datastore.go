@@ -375,9 +375,11 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 	}
 
 	data := d.getAllData()
-	if err := d.indexes[fields].Insert(ctx, data...); err != nil {
-		delete(d.indexes, fields)
-		return err
+	if len(data) > 0 {
+		if err := d.indexes[fields].Insert(ctx, data...); err != nil {
+			delete(d.indexes, fields)
+			return err
+		}
 	}
 
 	dto := domain.IndexDTO{
