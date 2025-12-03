@@ -199,6 +199,12 @@ type Projector interface {
 	Project(docs []Document, proj map[string]uint8) ([]Document, error)
 }
 
+// IDGenerator is used to create unique IDs for new instances of [Document].
+type IDGenerator interface {
+	// GenerateID generates an ID of length l.
+	GenerateID(l int) (string, error)
+}
+
 // Index provides fast document lookups based on field values.
 type Index interface {
 	// GetAll returns all documents in the index.

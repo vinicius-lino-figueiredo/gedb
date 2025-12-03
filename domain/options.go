@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"io"
 	"os"
 	"time"
 )
@@ -467,6 +468,18 @@ type PersistenceOptions struct {
 	FieldNavigator FieldNavigator
 }
 
+func WithIDGeneratorReader(r io.Reader) IDGeneratorOption {
+	return func(igo *IDGeneratorOptions) {
+		igo.Reader = r
+	}
+}
+
+type IDGeneratorOption func(*IDGeneratorOptions)
+
+type IDGeneratorOptions struct {
+	Reader io.Reader
+}
+
 // WithIndexFieldName sets the field name for the index.
 func WithIndexFieldName(f string) IndexOption {
 	return func(io *IndexOptions) {
@@ -687,6 +700,20 @@ func WithDatastoreFieldNavigator(f FieldNavigator) DatastoreOption {
 	}
 }
 
+// WithDatastoreIDGenerator sets the idgenerator to create new document ids.
+func WithDatastoreIDGenerator(ig IDGenerator) DatastoreOption {
+	return func(dso *DatastoreOptions) {
+		dso.IDGenerator = ig
+	}
+}
+
+// WithDatastoreRandomReader sets the reader to be used by the IDGenerator.
+func WithDatastoreRandomReader(r io.Reader) DatastoreOption {
+	return func(dso *DatastoreOptions) {
+		dso.RandomReader = r
+	}
+}
+
 // DatastoreOption configures datastore behavior through the functional options pattern.
 type DatastoreOption func(*DatastoreOptions)
 
@@ -734,4 +761,8 @@ type DatastoreOptions struct {
 	FieldNavigator FieldNavigator
 	// Querier allows filtering, ordering, limiting and projecting docs.
 	Querier Querier
+	// IDGenerator generates IDs for new documents.
+	IDGenerator IDGenerator
+	// RandomReader is used by idGenerator to generate a random ID.
+	RandomReader io.Reader
 }

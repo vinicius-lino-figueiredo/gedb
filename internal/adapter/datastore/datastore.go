@@ -4,9 +4,9 @@ package datastore
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"os"
@@ -22,6 +22,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/idgenerator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/index"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/modifier"
@@ -61,6 +62,8 @@ type Datastore struct {
 	hasher                domain.Hasher
 	fieldNavigator        domain.FieldNavigator
 	querier               domain.Querier
+	idGenerator           domain.IDGenerator
+	randomReader          io.Reader
 }
 
 // NewDatastore returns a new implementation of Datastore.
@@ -96,11 +99,16 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		Hasher:                hasher.NewHasher(),
 		FieldNavigator:        fn,
 		Querier:               querier.NewQuerier(),
+		RandomReader:          rand.Reader,
 	}
 	for _, option := range options {
 		option(&opts)
 	}
-
+	if opts.IDGenerator == nil {
+		opts.IDGenerator = idgenerator.NewIDGenerator(
+			domain.WithIDGeneratorReader(opts.RandomReader),
+		)
+	}
 	if opts.Persistence == nil {
 		var err error
 		persistenceOptions := []domain.PersistenceOption{
@@ -150,6 +158,8 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		fieldNavigator:        opts.FieldNavigator,
 		matcher:               opts.Matcher,
 		querier:               opts.Querier,
+		idGenerator:           opts.IDGenerator,
+		randomReader:          opts.RandomReader,
 	}, nil
 }
 
@@ -289,14 +299,11 @@ func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 
 func (d *Datastore) createNewID() (string, error) {
 	for {
-		buf := make([]byte, 8)
-		_, err := rand.Read(buf)
+		enc, err := d.idGenerator.GenerateID(16)
 		if err != nil {
 			return "", err
 		}
 
-		enc := base64.StdEncoding.EncodeToString(buf)
-		enc = strings.NewReplacer("+", "", "/", "").Replace(enc)
 		m, err := d.indexes["_id"].GetMatching(enc)
 		if err != nil {
 			return "", err
