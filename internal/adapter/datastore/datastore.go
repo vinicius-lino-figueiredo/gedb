@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -181,17 +182,15 @@ func (d *Datastore) checkDocuments(docs ...domain.Document) error {
 			if strings.HasPrefix(k, "$") {
 				switch k {
 				case "$$date":
-					if _, ok := v.(time.Time); ok {
+					if d.isInt(v) {
 						continue
 					}
-					fallthrough
+					return fmt.Errorf("field names cannot begin with the $ character")
 				case "$$deleted":
-					if v != nil {
-						if deleted, _ := v.(bool); deleted {
-							continue
-						}
+					if deleted, _ := v.(bool); deleted {
+						continue
 					}
-					fallthrough
+					return fmt.Errorf("field names cannot begin with the $ character")
 				case "$$indexCreated", "$$indexRemoved":
 					continue
 				default:
@@ -1062,6 +1061,20 @@ func (d *Datastore) updateIndexes(ctx context.Context, mods []domain.Update) err
 		}
 	}
 	return err
+}
+
+func (d *Datastore) isInt(v any) bool {
+	switch n := v.(type) {
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		return true
+	case float32:
+		return float64(n) == math.Floor(float64(n))
+	case float64:
+		return n == math.Floor(n)
+	default:
+		return false
+	}
 }
 
 // WaitCompaction implements domain.GEDB.
