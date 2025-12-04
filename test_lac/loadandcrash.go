@@ -22,8 +22,8 @@ func main() {
 	file := filepath.Join(os.Args[1], "lac.db")
 
 	per, err := persistence.NewPersistence(
-		domain.WithPersistenceFilename(file),
-		domain.WithPersistenceStorage(fakeStorage{storage.NewStorage()}),
+		persistence.WithFilename(file),
+		persistence.WithStorage(fakeStorage{storage.NewStorage()}),
 	)
 	if err != nil {
 		log.Fatal(err)

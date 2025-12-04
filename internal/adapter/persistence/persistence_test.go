@@ -156,7 +156,7 @@ func (s *PersistenceTestSuite) SetupTest() {
 		s.FailNow("could not ensure datafile integrity", err)
 	}
 
-	per, err := NewPersistence(domain.WithPersistenceFilename(s.testDb))
+	per, err := NewPersistence(WithFilename(s.testDb))
 	s.NoError(err)
 
 	p = per.(*Persistence)
@@ -461,7 +461,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
 
 	var err error
-	per, err := NewPersistence(domain.WithPersistenceFilename(corruptTestFileName))
+	per, err := NewPersistence(WithFilename(corruptTestFileName))
 	s.NoError(err)
 	p = per.(*Persistence)
 
@@ -474,7 +474,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
 	s.Equal(4, e.DataLength)
 
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
-	per, err = NewPersistence(domain.WithPersistenceFilename(corruptTestFileName), domain.WithPersistenceCorruptAlertThreshold(1))
+	per, err = NewPersistence(WithFilename(corruptTestFileName), WithCorruptAlertThreshold(1))
 	s.NoError(err)
 	p = per.(*Persistence)
 
@@ -483,7 +483,7 @@ func (s *PersistenceTestSuite) TestRefuseIfTooMuchIsCorrupt() {
 	s.NoError(err, e)
 
 	s.NoError(os.WriteFile(corruptTestFileName, []byte(fakeData), 0777))
-	per, err = NewPersistence(domain.WithPersistenceFilename(corruptTestFileName))
+	per, err = NewPersistence(WithFilename(corruptTestFileName))
 	s.NoError(err)
 	p = per.(*Persistence)
 
@@ -515,9 +515,9 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 	// Allowing no corrupt data it will fail
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(0),
-		domain.WithPersistenceDocFactory(docFac),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(0),
+		WithDocFactory(docFac),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -531,9 +531,9 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 
 	// allowing corrupt data, it will pass
 	per, err = NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(1),
-		domain.WithPersistenceDocFactory(docFac),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(1),
+		WithDocFactory(docFac),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -563,9 +563,9 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	// Allowing no corrupt data it will fail
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(0),
-		domain.WithPersistenceComparer(comp),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(0),
+		WithComparer(comp),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -585,9 +585,9 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 
 	// Allowing corrupt data it will not fail
 	per, err = NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(1),
-		domain.WithPersistenceComparer(comp),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(1),
+		WithComparer(comp),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -610,8 +610,8 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 	// Allowing no corrupt data it will fail
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -624,8 +624,8 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 
 	// Allowing corrupt data it will not fail
 	per, err = NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(1),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(1),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -648,8 +648,8 @@ func (s *PersistenceTestSuite) TestRemoveIndex() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(corruptTestFileName),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(corruptTestFileName),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -682,9 +682,9 @@ func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceStorage(st),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithStorage(st),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -706,9 +706,9 @@ func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceStorage(st),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithStorage(st),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -733,9 +733,9 @@ func (s *PersistenceTestSuite) TestFailReadFile() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceStorage(st),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithStorage(st),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -779,8 +779,8 @@ func (s *PersistenceTestSuite) TestSerializers() {
 		s.NoError(os.WriteFile(hookTestFilename, []byte("Some content"), 0666))
 
 		_, err := NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceSerializer(se),
+			WithFilename(hookTestFilename),
+			WithSerializer(se),
 		)
 		s.NoError(err) // original would throw
 
@@ -789,8 +789,8 @@ func (s *PersistenceTestSuite) TestSerializers() {
 		s.Equal("Some content", string(b)) // Data file left untouched
 
 		_, err = NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceDeserializer(de),
+			WithFilename(hookTestFilename),
+			WithDeserializer(de),
 		)
 		s.NoError(err) // original would throw
 
@@ -799,9 +799,9 @@ func (s *PersistenceTestSuite) TestSerializers() {
 		s.Equal("Some content", string(b)) // Data file left untouched
 
 		_, err = NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceSerializer(se),
-			domain.WithPersistenceDeserializer(de),
+			WithFilename(hookTestFilename),
+			WithSerializer(se),
+			WithDeserializer(de),
 		)
 		s.NoError(err)
 
@@ -815,9 +815,9 @@ func (s *PersistenceTestSuite) TestSerializers() {
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
 		per, err := NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceSerializer(se),
-			domain.WithPersistenceDeserializer(de),
+			WithFilename(hookTestFilename),
+			WithSerializer(se),
+			WithDeserializer(de),
 		)
 		s.NoError(err)
 		p = per.(*Persistence)
@@ -864,9 +864,9 @@ func (s *PersistenceTestSuite) TestSerializers() {
 		s.NoError(s.storage.EnsureFileDoesntExist(hookTestFilename))
 		var err error
 		per, err := NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceSerializer(se),
-			domain.WithPersistenceDeserializer(de),
+			WithFilename(hookTestFilename),
+			WithSerializer(se),
+			WithDeserializer(de),
 		)
 		s.NoError(err)
 		p = per.(*Persistence)
@@ -885,9 +885,9 @@ func (s *PersistenceTestSuite) TestSerializers() {
 
 		// Everything is deserialized correctly, including deletes and indexes
 		per, err = NewPersistence(
-			domain.WithPersistenceFilename(hookTestFilename),
-			domain.WithPersistenceSerializer(se),
-			domain.WithPersistenceDeserializer(de),
+			WithFilename(hookTestFilename),
+			WithSerializer(se),
+			WithDeserializer(de),
 		)
 		s.NoError(err)
 		p = per.(*Persistence)
@@ -904,19 +904,19 @@ func (s *PersistenceTestSuite) TestSerializers() {
 // Creating a datastore with in memory as true and a bad filename won't
 // cause an error
 func (s *PersistenceTestSuite) TestInMemoryBadFilenameNoError() {
-	_, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "bad.db~")), domain.WithPersistenceInMemoryOnly(true))
+	_, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "bad.db~")), WithInMemoryOnly(true))
 	s.NoError(err)
 }
 
 // Creating a persistent datastore with a bad filename will cause an error
 func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
-	_, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "bad.db~")))
+	_, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "bad.db~")))
 	s.Error(err)
 }
 
 // If no file stat, ensureDatafileIntegrity creates an empty datafile
 func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
-	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
+	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
@@ -947,7 +947,7 @@ func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
 
 // If only datafile stat, ensureDatafileIntegrity will use it
 func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
-	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
+	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
@@ -980,7 +980,7 @@ func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
 // If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
 // will use it (cannot happen except upon first use)
 func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
-	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
+	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
@@ -1018,7 +1018,7 @@ func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
 // rename wasn't, but there is in any case no guarantee that the data in
 // the temp file is whole so we have to discard the whole file
 func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
-	per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "it.db")))
+	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
 	p := per.(*Persistence)
 
@@ -1185,7 +1185,7 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
 		s.NoError(os.Remove(dbFile + "~"))
 	}
 
-	p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	p, err := NewPersistence(WithFilename(dbFile))
 	s.NoError(err)
 
 	ctx := context.Background()
@@ -1205,7 +1205,7 @@ func (s *PersistenceTestSuite) TestWorkAsExpected() {
 	s.NoError(s.storage.EnsureFileDoesntExist(dbFile))
 	s.NoError(s.storage.EnsureFileDoesntExist(dbFile + "~"))
 
-	p, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	p, err := NewPersistence(WithFilename(dbFile))
 	s.NoError(err)
 
 	ctx := context.Background()
@@ -1227,7 +1227,7 @@ func (s *PersistenceTestSuite) TestWorkAsExpected() {
 	s.FileExists(dbFile)
 	s.NoFileExists(dbFile + "~")
 
-	p2, err := NewPersistence(domain.WithPersistenceFilename(dbFile))
+	p2, err := NewPersistence(WithFilename(dbFile))
 	s.NoError(err)
 	docs, _, err = p2.LoadDatabase(ctx)
 	s.NoError(err)
@@ -1289,7 +1289,7 @@ func (s *PersistenceTestSuite) TestKeepOldVersionOnCrash() {
 		s.NoError(err)
 		s.Len(f, 5000)
 
-		per, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "lac.db")))
+		per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "lac.db")))
 		s.NoError(err)
 
 		ctx := context.Background()
@@ -1373,7 +1373,7 @@ func (s *PersistenceTestSuite) TestCannotCauseEMFILEErrorsByOpeningTooManyFileDe
 		for _, fh := range filehandles {
 			fh.Close()
 		}
-		p, err := NewPersistence(domain.WithPersistenceFilename(filepath.Join(s.testDbDir, "openfds.db")))
+		p, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "openfds.db")))
 		s.NoError(err)
 		docs, _, err := p.LoadDatabase(ctx)
 		s.NoError(err)
@@ -1506,7 +1506,7 @@ func (s *PersistenceTestSuite) TestPersistCancelledContext() {
 // Won't do anything if file related methods are called in a memory-only
 // persistence instance.
 func (s *PersistenceTestSuite) TestPersistNewStateInMemoryOnly() {
-	p, err := NewPersistence(domain.WithPersistenceInMemoryOnly(true))
+	p, err := NewPersistence(WithInMemoryOnly(true))
 	s.NoError(err)
 
 	err = p.PersistNewState(context.Background())
@@ -1530,9 +1530,9 @@ func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceStorage(st),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithStorage(st),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -1565,9 +1565,9 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceSerializer(ser),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithSerializer(ser),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
@@ -1607,9 +1607,9 @@ func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWriting() {
 
 	var err error
 	per, err := NewPersistence(
-		domain.WithPersistenceFilename(s.testDb),
-		domain.WithPersistenceStorage(st),
-		domain.WithPersistenceCorruptAlertThreshold(0),
+		WithFilename(s.testDb),
+		WithStorage(st),
+		WithCorruptAlertThreshold(0),
 	)
 	s.NoError(err)
 	p = per.(*Persistence)

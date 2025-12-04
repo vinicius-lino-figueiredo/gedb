@@ -237,9 +237,7 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 	s.Run("GetAddress", func() {
 		data := []domain.Document{M{"a": 1}}
 		fnm := new(fieldNavigatorMock)
-		s.p = NewProjector(
-			domain.WithProjectorFieldNavigator(fnm),
-		).(*Projector)
+		s.p = NewProjector(WithFieldNavigator(fnm)).(*Projector)
 		fnm.On("GetAddress", "a").
 			Return(([]string)(nil), fmt.Errorf("error"))
 		docs, err := s.p.Project(
@@ -252,9 +250,7 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 	s.Run("GetField", func() {
 		data := []domain.Document{M{"a": 1}}
 		fnm := new(fieldNavigatorMock)
-		s.p = NewProjector(
-			domain.WithProjectorFieldNavigator(fnm),
-		).(*Projector)
+		s.p = NewProjector(WithFieldNavigator(fnm)).(*Projector)
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
@@ -271,9 +267,7 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 	s.Run("NegativeGetField", func() {
 		data := []domain.Document{M{"a": 1}}
 		fnm := new(fieldNavigatorMock)
-		s.p = NewProjector(
-			domain.WithProjectorFieldNavigator(fnm),
-		).(*Projector)
+		s.p = NewProjector(WithFieldNavigator(fnm)).(*Projector)
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
@@ -287,9 +281,7 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 	s.Run("EnsureField", func() {
 		data := []domain.Document{M{"a": 1}}
 		fnm := new(fieldNavigatorMock)
-		s.p = NewProjector(
-			domain.WithProjectorFieldNavigator(fnm),
-		).(*Projector)
+		s.p = NewProjector(WithFieldNavigator(fnm)).(*Projector)
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
@@ -325,18 +317,14 @@ func (s *ProjectorTestSuite) TestFailedDocumentFactory() {
 	}
 
 	s.Run("positive", func() {
-		s.p = NewProjector(
-			domain.WithProjectorDocumentFactory(docFac),
-		).(*Projector)
+		s.p = NewProjector(WithDocumentFactory(docFac)).(*Projector)
 
 		res, err := s.p.Project(data, P{"a": 1})
 		s.Error(err)
 		s.Nil(res)
 	})
 	s.Run("negative", func() {
-		s.p = NewProjector(
-			domain.WithProjectorDocumentFactory(docFac),
-		).(*Projector)
+		s.p = NewProjector(WithDocumentFactory(docFac)).(*Projector)
 
 		res, err := s.p.Project(data, P{"a": 0})
 		s.Error(err)

@@ -17,7 +17,6 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
@@ -50,51 +49,39 @@ type Persistence struct {
 }
 
 // NewPersistence returns a new implementation of domain.Persistence.
-func NewPersistence(options ...domain.PersistenceOption) (domain.Persistence, error) {
+func NewPersistence(options ...Option) (domain.Persistence, error) {
 
-	comp := comparer.NewComparer()
-	docFac := data.NewDocument
-	dec := decoder.NewDecoder()
-	se := serializer.NewSerializer(comp, docFac)
-	de := deserializer.NewDeserializer(dec)
-	opts := domain.PersistenceOptions{
-		Filename:              "",
-		Comparer:              comp,
-		InMemoryOnly:          false,
-		CorruptAlertThreshold: 0.1,
-		FileMode:              DefaultFileMode,
-		DirMode:               DefaultDirMode,
-		Serializer:            se,
-		Deserializer:          de,
-		Storage:               storage.NewStorage(),
-		Decoder:               dec,
-		DocumentFactory:       docFac,
-		Hasher:                hasher.NewHasher(),
-		FieldNavigator:        fieldnavigator.NewFieldNavigator(docFac),
+	p := Persistence{
+		filename:              "",
+		comparer:              comparer.NewComparer(),
+		inMemoryOnly:          false,
+		corruptAlertThreshold: 0.1,
+		fileMode:              DefaultFileMode,
+		dirMode:               DefaultDirMode,
+		storage:               storage.NewStorage(),
+		decoder:               decoder.NewDecoder(),
+		documentFactory:       data.NewDocument,
+		hasher:                hasher.NewHasher(),
+		broadcaster:           ctxsync.NewCond(),
 	}
 	for _, option := range options {
-		option(&opts)
+		option(&p)
+	}
+	if p.deserializer == nil {
+		p.deserializer = deserializer.NewDeserializer(p.decoder)
+	}
+	if p.serializer == nil {
+		p.serializer = serializer.NewSerializer(
+			p.comparer,
+			p.documentFactory,
+		)
 	}
 
-	if !opts.InMemoryOnly && opts.Filename != "" && strings.HasSuffix(opts.Filename, "~") {
+	if !p.inMemoryOnly && p.filename != "" && strings.HasSuffix(p.filename, "~") {
 		return nil, errors.New("the datafile name cannot end with a ~, which is reserved for crash safe backup files")
 	}
 
-	return &Persistence{
-		inMemoryOnly:          opts.InMemoryOnly || opts.Filename == "",
-		filename:              opts.Filename,
-		corruptAlertThreshold: opts.CorruptAlertThreshold,
-		fileMode:              opts.FileMode,
-		dirMode:               opts.DirMode,
-		serializer:            opts.Serializer,
-		deserializer:          opts.Deserializer,
-		broadcaster:           ctxsync.NewCond(),
-		storage:               opts.Storage,
-		decoder:               opts.Decoder,
-		comparer:              opts.Comparer,
-		documentFactory:       opts.DocumentFactory,
-		hasher:                opts.Hasher,
-	}, nil
+	return &p, nil
 }
 
 // SetCorruptAlertThreshold implements domain.Persistence.

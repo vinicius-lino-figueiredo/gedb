@@ -16,22 +16,15 @@ type Projector struct {
 }
 
 // NewProjector returns a new implementation of [domain.Projector].
-func NewProjector(opts ...domain.ProjectorOption) domain.Projector {
-	options := domain.ProjectorOptions{
-		DocFac: data.NewDocument,
-	}
+func NewProjector(opts ...Option) domain.Projector {
+	p := Projector{docFac: data.NewDocument}
 	for _, opt := range opts {
-		opt(&options)
+		opt(&p)
 	}
-	if options.FieldNavigator == nil {
-		options.FieldNavigator = fieldnavigator.NewFieldNavigator(
-			options.DocFac,
-		)
+	if p.fn == nil {
+		p.fn = fieldnavigator.NewFieldNavigator(p.docFac)
 	}
-	return &Projector{
-		fn:     options.FieldNavigator,
-		docFac: options.DocFac,
-	}
+	return &p
 }
 
 // Project implements [domain.Projector].

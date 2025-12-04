@@ -753,7 +753,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 	// if idGenerator cannot generate an id, insert fails
 	s.Run("FailedGenerateID", func() {
 		s.d.idGenerator = idgenerator.NewIDGenerator(
-			domain.WithIDGeneratorReader(bytes.NewReader(nil)),
+			idgenerator.WithReader(bytes.NewReader(nil)),
 		)
 		cur, err := s.d.Insert(ctx, data.M{"a": 1})
 		s.Error(err)
@@ -2677,8 +2677,8 @@ func (s *DatastoreTestSuite) TestRemove() {
 
 		srMock := new(serializerMock)
 		per, err := persistence.NewPersistence(
-			domain.WithPersistenceFilename(s.testDb),
-			domain.WithPersistenceSerializer(srMock),
+			persistence.WithFilename(s.testDb),
+			persistence.WithSerializer(srMock),
 		)
 		s.NoError(err)
 		s.NotNil(per)

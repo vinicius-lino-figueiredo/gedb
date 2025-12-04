@@ -28,23 +28,16 @@ type Matcher struct {
 }
 
 // NewMatcher returns a new implementation of domain.Matcher.
-func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
-
-	docFac := data.NewDocument
-	opts := domain.MatcherOptions{
-		DocumentFactory: docFac,
-		Comparer:        comparer.NewComparer(),
-		FieldNavigator:  fieldnavigator.NewFieldNavigator(docFac),
-	}
-	for _, option := range options {
-		option(&opts)
-	}
+func NewMatcher(options ...Option) domain.Matcher {
 
 	m := &Matcher{
-		documentFactory: opts.DocumentFactory,
-		comparer:        opts.Comparer,
-		fieldNavigator:  opts.FieldNavigator,
+		documentFactory: data.NewDocument,
+		comparer:        comparer.NewComparer(),
+		fieldNavigator: fieldnavigator.NewFieldNavigator(
+			data.NewDocument,
+		),
 	}
+
 	m.logicOps = map[string]func(domain.Document, any) (bool, error){
 		"$and":   m.and,
 		"$not":   m.not,
@@ -63,6 +56,10 @@ func NewMatcher(options ...domain.MatcherOption) domain.Matcher {
 		"$exists":    m.exists,
 		"$size":      m.size,
 		"$elemMatch": m.elemMatch,
+	}
+
+	for _, option := range options {
+		option(m)
 	}
 
 	return m

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
 type IDGeneratorTestSuite struct {
@@ -40,9 +39,7 @@ func (s *IDGeneratorTestSuite) TestLength() {
 // not result in collision.
 func (s *IDGeneratorTestSuite) TestCollision() {
 	t := `abcdefghijklmnopqrstuvwxy0123456789ABCDEFGHIJKLMNOPQRSTUVWXYãẽĩñõũṽỹáćéǵíḱĺḿńóṕŕśúǘẃ`
-	s.ig = NewIDGenerator(
-		domain.WithIDGeneratorReader(strings.NewReader(t)),
-	).(*IDGenerator)
+	s.ig = NewIDGenerator(WithReader(strings.NewReader(t))).(*IDGenerator)
 
 	id1, err := s.ig.GenerateID(56)
 	s.NoError(err)
@@ -56,9 +53,7 @@ func (s *IDGeneratorTestSuite) TestCollision() {
 }
 
 func (s *IDGeneratorTestSuite) TestReadError() {
-	s.ig = NewIDGenerator(
-		domain.WithIDGeneratorReader(strings.NewReader("")),
-	).(*IDGenerator)
+	s.ig = NewIDGenerator(WithReader(strings.NewReader(""))).(*IDGenerator)
 
 	id, err := s.ig.GenerateID(1)
 	s.ErrorIs(err, io.EOF)

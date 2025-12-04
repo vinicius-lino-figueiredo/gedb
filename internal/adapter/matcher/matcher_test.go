@@ -116,7 +116,7 @@ func (s *MatcherTestSuite) TestInsideArrayDotNotation() {
 // Will return error if GetAddress fails.
 func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 	fn.On("GetAddress", "a").
 		Return([]string{}, fmt.Errorf("error")).
 		Once()
@@ -140,7 +140,7 @@ func (s *MatcherTestSuite) TestEqualInvalidTypesInArray() {
 // Will return error if GetField fails.
 func (s *MatcherTestSuite) TestFailedGetField() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 	fn.On("GetAddress", "a").
 		Return([]string{"a"}, nil).
 		Once()
@@ -361,7 +361,7 @@ func (s *MatcherTestSuite) TestExists() {
 // Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestExistsFailGetField() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 
 	fn.On("GetAddress", "needAKey").
 		Return([]string{"needAKey"}, nil).
@@ -377,7 +377,7 @@ func (s *MatcherTestSuite) TestExistsFailGetField() {
 func (s *MatcherTestSuite) TestCompareError() {
 
 	c := new(comparerMock)
-	s.mtchr = NewMatcher(domain.WithMatcherComparer(c)).(*Matcher)
+	s.mtchr = NewMatcher(WithComparer(c)).(*Matcher)
 
 	c.On("Comparable", mock.Anything, []int{}).
 		Return(true).
@@ -398,7 +398,7 @@ func (s *MatcherTestSuite) TestCompareError() {
 // will return error if matchList cannot get fields.
 func (s *MatcherTestSuite) TestMatchListFailGetField() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 
 	fn.On("GetAddress", "a").
 		Return([]string{"a"}, nil).
@@ -614,7 +614,7 @@ func (s *MatcherTestSuite) TestSizeAcceptsAnyNumber() {
 // Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestSizeFailGetField() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 
 	fn.On("GetAddress", "needAKey").
 		Return([]string{"needAKey"}, nil).
@@ -754,7 +754,7 @@ func (s *MatcherTestSuite) TestElemMatchEmptyArray() {
 // Will return error if FieldNavigator fails getting field value.
 func (s *MatcherTestSuite) TestElemMatchFailGetField() {
 	fn := new(fieldNavigatorMock)
-	s.mtchr = NewMatcher(domain.WithMatcherFieldNavigator(fn)).(*Matcher)
+	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
 
 	fn.On("GetAddress", "needAKey").
 		Return([]string{"needAKey"}, nil).
@@ -1304,7 +1304,7 @@ func (s *MatcherTestSuite) TestNonDocFailNewDoc() {
 	df := func(any) (domain.Document, error) {
 		return nil, fmt.Errorf("error")
 	}
-	s.mtchr = NewMatcher(domain.WithMatcherDocumentFactory(df)).(*Matcher)
+	s.mtchr = NewMatcher(WithDocumentFactory(df)).(*Matcher)
 
 	// should error if document factory fails for the object
 	s.ErrorMatch(s.mtchr.Match("a", "a"))
@@ -1318,7 +1318,7 @@ func (s *MatcherTestSuite) TestNonDocFailNewDoc() {
 		return nil, fmt.Errorf("error")
 	}
 
-	s.mtchr = NewMatcher(domain.WithMatcherDocumentFactory(df)).(*Matcher)
+	s.mtchr = NewMatcher(WithDocumentFactory(df)).(*Matcher)
 
 	// should error if document factory fails for the query as well
 	s.ErrorMatch(s.mtchr.Match("a", "a"))

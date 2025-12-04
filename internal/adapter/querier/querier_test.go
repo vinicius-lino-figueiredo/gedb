@@ -142,8 +142,8 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 		fnm := new(fieldNavigatorMock)
 		s.q.fn = fnm
 		s.q = NewQuerier(
-			domain.WithQuerierFieldNavigator(fnm),
-			domain.WithQuerierMatcher(matcher.NewMatcher()),
+			WithFieldNavigator(fnm),
+			WithMatcher(matcher.NewMatcher()),
 		).(*Querier)
 		fnm.On("GetAddress", "a").
 			Return(([]string)(nil), fmt.Errorf("error")).

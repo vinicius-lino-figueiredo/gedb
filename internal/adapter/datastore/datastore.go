@@ -74,9 +74,9 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 	dec := decoder.NewDecoder()
 	fn := fieldnavigator.NewFieldNavigator(docFac)
 	matchr := matcher.NewMatcher(
-		domain.WithMatcherDocumentFactory(docFac),
-		domain.WithMatcherComparer(comp),
-		domain.WithMatcherFieldNavigator(fn),
+		matcher.WithDocumentFactory(docFac),
+		matcher.WithComparer(comp),
+		matcher.WithFieldNavigator(fn),
 	)
 	opts := domain.DatastoreOptions{
 		Filename:              "",
@@ -106,23 +106,22 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 	}
 	if opts.IDGenerator == nil {
 		opts.IDGenerator = idgenerator.NewIDGenerator(
-			domain.WithIDGeneratorReader(opts.RandomReader),
+			idgenerator.WithReader(opts.RandomReader),
 		)
 	}
 	if opts.Persistence == nil {
 		var err error
-		persistenceOptions := []domain.PersistenceOption{
-			domain.WithPersistenceFilename(opts.Filename),
-			domain.WithPersistenceInMemoryOnly(opts.InMemoryOnly || opts.Filename == ""),
-			domain.WithPersistenceCorruptAlertThreshold(opts.CorruptAlertThreshold),
-			domain.WithPersistenceFileMode(opts.FileMode),
-			domain.WithPersistenceDirMode(opts.DirMode),
-			domain.WithPersistenceSerializer(opts.Serializer),
-			domain.WithPersistenceDeserializer(opts.Deserializer),
-			domain.WithPersistenceStorage(opts.Storage),
-			domain.WithPersistenceDecoder(opts.Decoder),
-			domain.WithPersistenceHasher(opts.Hasher),
-			domain.WithPersistenceFieldNavigator(opts.FieldNavigator),
+		persistenceOptions := []persistence.Option{
+			persistence.WithFilename(opts.Filename),
+			persistence.WithInMemoryOnly(opts.InMemoryOnly || opts.Filename == ""),
+			persistence.WithCorruptAlertThreshold(opts.CorruptAlertThreshold),
+			persistence.WithFileMode(opts.FileMode),
+			persistence.WithDirMode(opts.DirMode),
+			persistence.WithSerializer(opts.Serializer),
+			persistence.WithDeserializer(opts.Deserializer),
+			persistence.WithStorage(opts.Storage),
+			persistence.WithDecoder(opts.Decoder),
+			persistence.WithHasher(opts.Hasher),
 		}
 		opts.Persistence, err = persistence.NewPersistence(persistenceOptions...)
 		if err != nil {

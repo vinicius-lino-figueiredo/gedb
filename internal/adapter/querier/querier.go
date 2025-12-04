@@ -14,45 +14,39 @@ import (
 
 // Querier implements [domain.Querier].
 type Querier struct {
-	mtchr domain.Matcher
-	cmpr  domain.Comparer
-	fn    domain.FieldNavigator
-	proj  domain.Projector
+	mtchr  domain.Matcher
+	cmpr   domain.Comparer
+	fn     domain.FieldNavigator
+	proj   domain.Projector
+	docFac func(any) (domain.Document, error)
 }
 
 // NewQuerier returns a new implementation of [domain.Querier].
-func NewQuerier(opts ...domain.QuerierOption) domain.Querier {
-	options := domain.QuerierOptions{
-		DocFac:   data.NewDocument,
-		Comparer: comparer.NewComparer(),
+func NewQuerier(opts ...Option) domain.Querier {
+	q := Querier{
+		docFac: data.NewDocument,
+		cmpr:   comparer.NewComparer(),
 	}
 	for _, opt := range opts {
-		opt(&options)
+		opt(&q)
 	}
-	if options.FieldNavigator == nil {
-		options.FieldNavigator = fieldnavigator.NewFieldNavigator(
-			options.DocFac,
+	if q.fn == nil {
+		q.fn = fieldnavigator.NewFieldNavigator(q.docFac)
+	}
+	if q.proj == nil {
+		q.proj = projector.NewProjector(
+			projector.WithDocumentFactory(q.docFac),
+			projector.WithFieldNavigator(q.fn),
 		)
 	}
-	if options.Projector == nil {
-		options.Projector = projector.NewProjector(
-			domain.WithProjectorDocumentFactory(options.DocFac),
-			domain.WithProjectorFieldNavigator(options.FieldNavigator),
+	if q.mtchr == nil {
+		q.mtchr = matcher.NewMatcher(
+			matcher.WithComparer(q.cmpr),
+			matcher.WithDocumentFactory(q.docFac),
+			matcher.WithFieldNavigator(q.fn),
 		)
 	}
-	if options.Matcher == nil {
-		options.Matcher = matcher.NewMatcher(
-			domain.WithMatcherComparer(options.Comparer),
-			domain.WithMatcherDocumentFactory(options.DocFac),
-			domain.WithMatcherFieldNavigator(options.FieldNavigator),
-		)
-	}
-	return &Querier{
-		mtchr: options.Matcher,
-		cmpr:  options.Comparer,
-		fn:    options.FieldNavigator,
-		proj:  options.Projector,
-	}
+	return &q
 }
 
 // Query implements [domain.Querier].

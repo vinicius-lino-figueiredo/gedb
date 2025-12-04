@@ -15,12 +15,12 @@ type IDGenerator struct {
 }
 
 // NewIDGenerator implements [domain.IDGenerator]
-func NewIDGenerator(opts ...domain.IDGeneratorOption) domain.IDGenerator {
-	options := domain.IDGeneratorOptions{Reader: rand.Reader}
+func NewIDGenerator(opts ...Option) domain.IDGenerator {
+	i := IDGenerator{reader: rand.Reader}
 	for _, opt := range opts {
-		opt(&options)
+		opt(&i)
 	}
-	return &IDGenerator{reader: options.Reader}
+	return &i
 }
 
 // GenerateID implements [domain.IDGenerator].
