@@ -620,7 +620,7 @@ IndexesLoop:
 		if err != nil {
 			return nil, false, err
 		}
-		if len(parts) == 0 {
+		if len(parts) < 2 {
 			continue
 		}
 
