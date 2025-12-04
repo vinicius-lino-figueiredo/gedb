@@ -1025,7 +1025,7 @@ func (d *Datastore) findAndModify(ctx context.Context, qry any, modQry domain.Do
 	var mods []domain.Update
 	var updatedDocs []domain.Document
 	for cur.Next() {
-		oldDoc, err := data.NewDocument(nil)
+		oldDoc, err := d.documentFactory(nil)
 		if err != nil {
 			return nil, nil, err
 		}
