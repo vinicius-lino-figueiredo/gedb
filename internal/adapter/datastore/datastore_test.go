@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -13,12 +15,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/bst"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/cursor"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/idgenerator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/index"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
@@ -31,6 +36,180 @@ type timeGetterMock struct{ mock.Mock }
 type S = domain.Sort
 
 func (t *timeGetterMock) GetTime() time.Time { return t.Called().Get(0).(time.Time) }
+
+type contextMock struct{ mock.Mock }
+
+// Deadline implements context.Context.
+func (c *contextMock) Deadline() (deadline time.Time, ok bool) {
+	call := c.Called()
+	return call.Get(0).(time.Time), call.Bool(1)
+}
+
+// Done implements context.Context.
+func (c *contextMock) Done() <-chan struct{} {
+	return c.Called().Get(0).(<-chan struct{})
+}
+
+// Err implements context.Context.
+func (c *contextMock) Err() error {
+	return c.Called().Error(0)
+}
+
+// Value implements context.Context.
+func (c *contextMock) Value(key any) any {
+	return c.Called(key).Get(0)
+}
+
+type cursorMock struct{ mock.Mock }
+
+// Close implements domain.Cursor.
+func (c *cursorMock) Close() error {
+	return c.Called().Error(0)
+}
+
+// Err implements domain.Cursor.
+func (c *cursorMock) Err() error {
+	return c.Called().Error(0)
+}
+
+// Next implements domain.Cursor.
+func (c *cursorMock) Next() bool {
+	return c.Called().Bool(0)
+}
+
+// Scan implements domain.Cursor.
+func (c *cursorMock) Scan(ctx context.Context, target any) error {
+	return c.Called(ctx, target).Error(0)
+}
+
+type fieldNavigatorMock struct{ mock.Mock }
+
+// EnsureField implements domain.FieldNavigator.
+func (fn *fieldNavigatorMock) EnsureField(value any, addr ...string) ([]domain.GetSetter, error) {
+	call := fn.Called(value, addr)
+	return call.Get(0).([]domain.GetSetter), call.Error(1)
+}
+
+// GetAddress implements domain.FieldNavigator.
+func (fn *fieldNavigatorMock) GetAddress(field string) ([]string, error) {
+	call := fn.Called(field)
+	return call.Get(0).([]string), call.Error(1)
+}
+
+// GetField implements domain.FieldNavigator.
+func (fn *fieldNavigatorMock) GetField(value any, addr ...string) (fields []domain.GetSetter, expanded bool, err error) {
+	call := fn.Called(value, addr)
+	return call.Get(0).([]domain.GetSetter), call.Bool(1), call.Error(2)
+}
+
+// SplitFields implements domain.FieldNavigator.
+func (fn *fieldNavigatorMock) SplitFields(joinedFields string) ([]string, error) {
+	call := fn.Called(joinedFields)
+	return call.Get(0).([]string), call.Error(1)
+}
+
+type indexMock struct{ mock.Mock }
+
+// FieldName implements domain.Index.
+func (i *indexMock) FieldName() string {
+	return i.Called().String(0)
+}
+
+// GetAll implements domain.Index.
+func (i *indexMock) GetAll() []domain.Document {
+	return i.Called().Get(0).([]domain.Document)
+}
+
+// GetBetweenBounds implements domain.Index.
+func (i *indexMock) GetBetweenBounds(ctx context.Context, query domain.Document) ([]domain.Document, error) {
+	call := i.Called(ctx, query)
+	return call.Get(0).([]domain.Document), call.Error(1)
+}
+
+// GetMatching implements domain.Index.
+func (i *indexMock) GetMatching(value ...any) ([]domain.Document, error) {
+	call := i.Called(value)
+	return call.Get(0).([]domain.Document), call.Error(1)
+}
+
+// GetNumberOfKeys implements domain.Index.
+func (i *indexMock) GetNumberOfKeys() int {
+	return i.Called().Int(0)
+}
+
+// Insert implements domain.Index.
+func (i *indexMock) Insert(ctx context.Context, docs ...domain.Document) error {
+	return i.Called(ctx, docs).Error(0)
+}
+
+// Remove implements domain.Index.
+func (i *indexMock) Remove(ctx context.Context, docs ...domain.Document) error {
+	return i.Called(ctx, docs).Error(0)
+}
+
+// Reset implements domain.Index.
+func (i *indexMock) Reset(ctx context.Context, newData ...domain.Document) error {
+	return i.Called(ctx, newData).Error(0)
+}
+
+// RevertMultipleUpdates implements domain.Index.
+func (i *indexMock) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Update) error {
+	return i.Called(ctx, pairs).Error(0)
+}
+
+// RevertUpdate implements domain.Index.
+func (i *indexMock) RevertUpdate(ctx context.Context, oldDoc domain.Document, newDoc domain.Document) error {
+	return i.Called(ctx, oldDoc, newDoc).Error(0)
+}
+
+// Sparse implements domain.Index.
+func (i *indexMock) Sparse() bool {
+	return i.Called().Bool(0)
+}
+
+// Unique implements domain.Index.
+func (i *indexMock) Unique() bool {
+	return i.Called().Bool(0)
+}
+
+// Update implements domain.Index.
+func (i *indexMock) Update(ctx context.Context, oldDoc domain.Document, newDoc domain.Document) error {
+	return i.Called(ctx, oldDoc, newDoc).Error(0)
+}
+
+// UpdateMultipleDocs implements domain.Index.
+func (i *indexMock) UpdateMultipleDocs(ctx context.Context, pairs ...domain.Update) error {
+	return i.Called(ctx, pairs).Error(0)
+}
+
+type comparerMock struct{ mock.Mock }
+
+// Comparable implements domain.Comparer.
+func (c *comparerMock) Comparable(a any, b any) bool {
+	return c.Called(a, b).Bool(0)
+}
+
+// Compare implements domain.Comparer.
+func (c *comparerMock) Compare(a any, b any) (int, error) {
+	call := c.Called(a, b)
+	return call.Int(0), call.Error(1)
+}
+
+type idGeneratorMock struct{ mock.Mock }
+
+// GenerateID implements domain.IDGenerator.
+func (i *idGeneratorMock) GenerateID(l int) (string, error) {
+	call := i.Called(l)
+	return call.String(0), call.Error(1)
+}
+
+type serializerMock struct{ mock.Mock }
+
+// Serialize implements domain.Serializer.
+func (s *serializerMock) Serialize(ctx context.Context, value any) ([]byte, error) {
+	call := s.Called(ctx, value)
+	return []byte(call.String(0)), call.Error(1)
+}
 
 type DatastoreTestSuite struct {
 	suite.Suite
@@ -82,7 +261,38 @@ func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]data.M, error) {
 	return res, nil
 }
 
+func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
+	db, err := NewDatastore(domain.WithDatastoreInMemoryOnly(true))
+	s.NoError(err)
+	s.NotNil(db)
+
+	s.NoError(db.LoadDatabase(context.Background()))
+}
+
+func (s *DatastoreTestSuite) TestInvalidFilename() {
+	db, err := NewDatastore(domain.WithDatastoreFilename("t~"))
+	s.Error(err)
+	s.Nil(db)
+}
+
+func (s *DatastoreTestSuite) TestFailToCreateIDIndex() {
+	errIdxFac := fmt.Errorf("index fac error")
+	fn := func(...domain.IndexOption) (domain.Index, error) {
+		return nil, errIdxFac
+	}
+	db, err := NewDatastore(domain.WithDatastoreIndexFactory(fn))
+	s.Error(err)
+	s.Nil(db)
+}
+
 func (s *DatastoreTestSuite) TestInsert() {
+
+	s.Run("InsertNoDocs", func() {
+		cur, err := s.d.Insert(ctx)
+		s.NoError(err)
+		s.NotNil(cur)
+		s.False(cur.Next())
+	})
 
 	// Able to insert a document in the database, setting an _id if none provided, and retrieve it even after a reload
 	s.Run("InsertDocAndSetIDIfNotProvidedAndRetrieveAfterReload", func() {
@@ -464,7 +674,189 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Equal("world", doc[0].Get("hello"))
 	})
 
+	s.Run("FailedRemoveFromIndexes", func() {
+		errIdxInsert := fmt.Errorf("index insert error")
+		errIdxRemove := fmt.Errorf("index remove error")
+		errIdxRemove2 := fmt.Errorf("second index remove error")
+
+		idxMock := new(indexMock)
+		s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+			return idxMock, nil
+		}
+
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
+
+		// [Datastore.addToIndexes] is called once per document, and
+		// removes from previous indexes if any addition fails. To reach
+		// [Datastore.removeFromIndexes], at least one addition has to
+		// be successfully made. Insert should return nil error twice
+		// becasue we made the same mock be interpreted by [Datastore]
+		// as two different instances of [domain.Index].
+		idxMock.On("Insert", mock.Anything, mock.Anything).
+			Return(nil).
+			Twice()
+
+		// Similar to addToIndexes, [domain.Index.Insert] is called once
+		// per index, only reaching [domain.Index.Remove] if at least
+		// one index successfully inserted the given document, and
+		// that's why this first call to Insert should not fail.
+		idxMock.On("Insert", mock.Anything, mock.Anything).
+			Return(nil).
+			Once()
+
+		idxMock.On("Insert", mock.Anything, mock.Anything).
+			Return(errIdxInsert).
+			Once()
+		idxMock.On("Remove", mock.Anything, mock.Anything).
+			Return(errIdxRemove).
+			Once()
+		idxMock.On("Remove", mock.Anything, mock.Anything).
+			Return(errIdxRemove2).
+			Once()
+
+		cur, err := s.d.Insert(ctx, data.M{"a": 1}, data.M{"a": 2})
+		s.ErrorIs(err, errIdxInsert)
+		s.ErrorIs(err, errIdxRemove)
+		s.ErrorIs(err, errIdxRemove2)
+		s.Nil(cur)
+	})
+
+	s.Run("NonUniqueID", func() {
+		idGenMock := new(idGeneratorMock)
+		idGenMock.On("GenerateID", 16).Return("123", nil).Once()
+		s.d.idGenerator = idGenMock
+
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		// at this point, GenerateID has been called once
+		idGenMock.AssertExpectations(s.T())
+
+		// now that id "123" has been added to indexes,
+		// [Datastore.createNewID] will loop until a unique id is
+		// returned. It’s a non-halting loop, so I’m capping it at 100
+		// iterations.
+		idGenMock.On("GenerateID", 16).Return("123", nil).Times(100)
+
+		idGenMock.On("GenerateID", 16).Return("1234", nil).Once()
+
+		cur, err = s.d.Insert(ctx, data.M{"b": 2})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		// asserting that GenerateID has been called 100 times
+		idGenMock.AssertExpectations(s.T())
+	})
+
+	// if idGenerator cannot generate an id, insert fails
+	s.Run("FailedGenerateID", func() {
+		s.d.idGenerator = idgenerator.NewIDGenerator(
+			domain.WithIDGeneratorReader(bytes.NewReader(nil)),
+		)
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.Error(err)
+		s.Nil(cur)
+	})
+
+	s.Run("FailCheckIfIDIsUnique", func() {
+		idxMock := new(indexMock)
+		s.d.indexes["_id"] = idxMock
+
+		idGenMock := new(idGeneratorMock)
+		idGenMock.On("GenerateID", 16).Return("123", nil).Once()
+		s.d.idGenerator = idGenMock
+
+		errGetMtch := fmt.Errorf("get matching error")
+		idxMock.On("GetMatching", []any{"123"}).
+			Return([]domain.Document{}, errGetMtch).
+			Once()
+
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.Error(err)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedPersistence", func() {
+		srMock := new(serializerMock)
+		d, err := NewDatastore(
+			domain.WithDatastoreFilename(s.testDb),
+			domain.WithDatastoreSerializer(srMock),
+		)
+		s.NoError(err)
+		s.NotNil(d)
+
+		errSerialize := fmt.Errorf("serialization error")
+		srMock.On("Serialize", mock.Anything, mock.Anything).
+			Return("", errSerialize).
+			Once()
+
+		cur, err := d.Insert(ctx, data.M{"a": 1})
+		s.ErrorIs(err, errSerialize)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedPrepareDoc", func() {
+		errDocFac := fmt.Errorf("doc fac error")
+		s.d.documentFactory = func(any) (domain.Document, error) {
+			return nil, errDocFac
+		}
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.Error(err)
+		s.Nil(cur)
+	})
+
 } // ==== End of 'Insert' ==== //
+
+func (s *DatastoreTestSuite) TestCheckDocument() {
+	dollarDate := data.M{
+		"integer":  data.M{"$$date": int(123)},
+		"unsigned": data.M{"$$date": uint(123)},
+		"float32":  data.M{"$$date": float32(123)},
+		"float64":  data.M{"$$date": float64(123)},
+	}
+
+	invalidDollarDate := data.M{"string": data.M{"$$date": "invalid"}}
+
+	deleted := data.M{"$$deleted": true}
+
+	notDeleted := data.M{"$$deleted": false}
+
+	indexCreated := data.M{"$$indexCreated": 123}
+
+	indexRemoved := data.M{"$$indexRemoved": "abc"}
+
+	containsDot := data.M{"contains.dot": "yes"}
+
+	cur, err := s.d.Insert(ctx, dollarDate)
+	s.NoError(err)
+	s.NotNil(cur)
+
+	cur, err = s.d.Insert(ctx, invalidDollarDate)
+	s.Error(err)
+	s.Nil(cur)
+
+	cur, err = s.d.Insert(ctx, deleted)
+	s.NoError(err)
+	s.NotNil(cur)
+
+	cur, err = s.d.Insert(ctx, notDeleted)
+	s.Error(err)
+	s.Nil(cur)
+
+	cur, err = s.d.Insert(ctx, indexCreated)
+	s.NoError(err)
+	s.NotNil(cur)
+
+	cur, err = s.d.Insert(ctx, indexRemoved)
+	s.NoError(err)
+	s.NotNil(cur)
+
+	cur, err = s.d.Insert(ctx, containsDot)
+	s.Error(err)
+	s.Nil(cur)
+}
 
 func (s *DatastoreTestSuite) TestGetCandidates() {
 	// Can use an index to get docs with a basic match
@@ -491,6 +883,21 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		s.Equal(data.M{"_id": doc2.ID(), "tf": 4, "an": "other"}, doc2)
 	})
 
+	// cannot use simple match of list values
+	s.Run("MatchSlice", func() {
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{4}}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{6}}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{"another"}}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{9}}))
+
+		dt, err := s.d.getCandidates(ctx, data.M{"tf": []any{}}, false)
+		s.NoError(err)
+
+		s.Equal(s.d.getAllData(), dt)
+	})
+
 	// Can use a compound index to get docs with a basic match
 	s.Run("BasicMatchCompoundIndex", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
@@ -515,7 +922,13 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "an": "other"}))
 		_doc2 := s.insert(s.d.Insert(ctx, data.M{"tf": 9}))
 
-		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false)
+		dt, err := s.d.getCandidates(ctx, data.M{"tf": data.M{"$in": 1}}, false)
+		s.NoError(err)
+
+		dt, err = s.d.getCandidates(ctx, data.M{"tg": nil}, false)
+		s.NoError(err)
+
+		dt, err = s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false)
 		s.NoError(err)
 
 		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
@@ -713,6 +1126,105 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		s.Len(docs, 2)
 
 	})
+
+	s.Run("FailedDocumentFactory", func() {
+		tmGetMock := new(timeGetterMock)
+		s.d.timeGetter = tmGetMock
+		err := s.d.EnsureIndex(
+			ctx,
+			domain.WithEnsureIndexFieldNames("a"),
+			domain.WithEnsureIndexExpiry(time.Nanosecond),
+		)
+		cur, err := s.d.Insert(ctx, data.M{"a": time.UnixMilli(10000)})
+		s.NoError(err)
+		s.NotNil(cur)
+		var expected []data.M
+		for cur.Next() {
+			var m data.M
+			s.NoError(cur.Scan(ctx, &m))
+			expected = append(expected, m)
+		}
+
+		tmGetMock.On("GetTime").Return(time.UnixMilli(10001)).Once()
+
+		errDocFac := fmt.Errorf("doc fac error")
+		var c int
+		s.d.documentFactory = func(a any) (domain.Document, error) {
+			if c > 0 {
+				return nil, errDocFac
+			}
+			c++
+			return data.NewDocument(a)
+		}
+
+		cur, err = s.d.Find(ctx, nil)
+		s.ErrorIs(err, errDocFac)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedRemove", func() {
+		tmGetMock := new(timeGetterMock)
+		s.d.timeGetter = tmGetMock
+
+		err := s.d.EnsureIndex(
+			ctx,
+			domain.WithEnsureIndexFieldNames("a"),
+			domain.WithEnsureIndexExpiry(time.Nanosecond),
+		)
+		cur, err := s.d.Insert(ctx, data.M{"a": time.UnixMilli(10000)})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		tmGetMock.On("GetTime").
+			Return(time.UnixMilli(10001)).
+			Once()
+
+		var expected []data.M
+		for cur.Next() {
+			var m data.M
+			s.NoError(cur.Scan(ctx, &m))
+			expected = append(expected, m)
+		}
+
+		errDocFac := fmt.Errorf("doc fac error")
+		var c int
+		s.d.documentFactory = func(in any) (domain.Document, error) {
+			if c < 2 {
+				c++
+				return data.NewDocument(in)
+			}
+			return nil, errDocFac
+		}
+
+		cur, err = s.d.Find(ctx, nil)
+		s.ErrorIs(err, errDocFac)
+		s.Nil(cur)
+	})
+
+	s.Run("NotAllIndexedFields", func() {
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 0, "foo": 1}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 0, "foo": 2}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "th": 1, "foo": 3}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "th": 1, "foo": 4}))
+		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "th": 1}, false)
+		s.NoError(err)
+		s.Len(dt, 4) // using no index
+	})
+
+	s.Run("CompCandidateIgnoreFieldOfValueDoc", func() {
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 0, "j": 1}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 0, "j": 2}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "th": 1, "j": 3}))
+		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "th": 1, "j": 4}))
+		dt, err := s.d.getCandidates(
+			ctx, data.M{"tf": 4, "tg": data.M{}}, false,
+		)
+		s.NoError(err)
+		s.Len(dt, 4) // using no index
+	})
+
 } // ==== End of 'GetCandidates' ==== //
 
 func (s *DatastoreTestSuite) TestFind() {
@@ -1005,7 +1517,163 @@ func (s *DatastoreTestSuite) TestFind() {
 		s.Error(err)
 	})
 
+	s.Run("InvalidProjection", func() {
+		cur, err := s.d.Find(ctx, nil, domain.WithFindProjection(1))
+		s.Error(err)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedGetRawCandidates", func() {
+		err := s.d.EnsureIndex(
+			ctx,
+			domain.WithEnsureIndexFieldNames("a", "b"),
+		)
+		s.NoError(err)
+
+		fn := new(fieldNavigatorMock)
+		s.d.fieldNavigator = fn
+
+		errFieldNav := fmt.Errorf("field navigator error")
+
+		fn.On("SplitFields", "_id").
+			Return([]string{"_id"}, nil).
+			Once().Maybe()
+		fn.On("SplitFields", "a,b").
+			Return([]string{}, errFieldNav).
+			Once()
+
+		cur, err := s.d.Find(ctx, data.M{"c": 1})
+
+		s.ErrorIs(err, errFieldNav)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedCloneDocs", func() {
+		cur, err := s.d.Insert(ctx, data.M{"a": []any{data.M{"b": 1}}})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		errDocFac := fmt.Errorf("doc fac error")
+		var c int
+		s.d.documentFactory = func(v any) (domain.Document, error) {
+			if v == nil {
+				if c > 0 {
+					return nil, errDocFac
+				}
+				c++
+			}
+			return data.NewDocument(v)
+		}
+
+		cur, err = s.d.Find(ctx, data.M{})
+		s.ErrorIs(err, errDocFac)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedMatchingResult", func() {
+		errComp := fmt.Errorf("compare error")
+
+		c := new(comparerMock)
+		c.On("Compare", mock.Anything, mock.Anything).
+			Return(0, errComp).
+			Twice()
+		s.d.comparer = c
+
+		err := s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a"))
+		s.NoError(err)
+
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		cur, err = s.d.Find(ctx, data.M{"a": 1})
+		s.Error(err)
+		s.Nil(cur)
+
+	})
+
 } // ==== End of 'Find' ==== //
+
+func (s *DatastoreTestSuite) TestGetAllData() {
+	docs := []any{
+		data.M{"ch": "oice"},
+		data.M{"ch": "annel"},
+		data.M{"ch": "ase"},
+	}
+
+	type Doc struct {
+		Ch string
+	}
+
+	expected := []Doc{
+		{Ch: "oice"},
+		{Ch: "annel"},
+		{Ch: "ase"},
+	}
+
+	curInsert, err := s.d.Insert(ctx, docs...)
+	s.NoError(err)
+	s.NotNil(curInsert)
+	docsInsert := make([]Doc, 3)
+	for i := 0; curInsert.Next(); i++ {
+		var doc Doc
+		s.NoError(curInsert.Scan(ctx, &doc))
+		docsInsert[i] = doc
+	}
+
+	curFindNil, err := s.d.Find(ctx, nil)
+	s.NoError(err)
+	s.NotNil(curFindNil)
+	docsFindNil := make([]Doc, 3)
+	for i := 0; curFindNil.Next(); i++ {
+		var doc Doc
+		s.NoError(curFindNil.Scan(ctx, &doc))
+		docsFindNil[i] = doc
+	}
+
+	curFindEmpty, err := s.d.Find(ctx, data.M{})
+	s.NoError(err)
+	s.NotNil(curFindEmpty)
+	docsFindEmpty := make([]Doc, 3)
+	for i := 0; curFindEmpty.Next(); i++ {
+		var doc Doc
+		s.NoError(curFindEmpty.Scan(ctx, &doc))
+		docsFindEmpty[i] = doc
+	}
+
+	curGetAllData, err := s.d.GetAllData(ctx)
+	s.NoError(err)
+	s.NotNil(curGetAllData)
+	docsGetAllData := make([]Doc, 3)
+	for i := 0; curGetAllData.Next(); i++ {
+		var doc Doc
+		s.NoError(curGetAllData.Scan(ctx, &doc))
+		docsGetAllData[i] = doc
+	}
+	s.Subset(docsInsert, expected)
+	s.Subset(docsFindNil, expected)
+	s.Subset(docsFindEmpty, expected)
+	s.Subset(docsGetAllData, expected)
+}
+
+func (s *DatastoreTestSuite) TestGetAllDataFailedClone() {
+	cur, err := s.d.Insert(ctx, data.M{"a": 1})
+	s.NoError(err)
+	s.NotNil(cur)
+
+	errDocFac := fmt.Errorf("doc fac error")
+	s.d.documentFactory = func(a any) (domain.Document, error) {
+		if a != nil {
+			return data.NewDocument(a)
+		}
+		return nil, errDocFac
+	}
+
+	cur, err = s.d.GetAllData(ctx)
+	s.ErrorIs(err, errDocFac)
+	s.Nil(cur)
+
+}
 
 func (s *DatastoreTestSuite) TestCount() {
 	// Count all documents if an empty query is used
@@ -1055,6 +1723,25 @@ func (s *DatastoreTestSuite) TestCount() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 		_, err := s.d.Count(ctx, data.M{"$or": data.M{"hello": "world"}})
 		s.Error(err)
+	})
+
+	s.Run("FailedCursor", func() {
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.NoError(err)
+		s.NotNil(cur)
+		s.d.cursorFactory = func(ctx context.Context, d []domain.Document, co ...domain.CursorOption) (domain.Cursor, error) {
+			cur, err := cursor.NewCursor(ctx, d, co...)
+			if err != nil {
+				return nil, err
+			}
+			if err := cur.Close(); err != nil {
+				return nil, err
+			}
+			return cur, nil
+		}
+		c, err := s.d.Count(ctx, nil)
+		s.Error(err)
+		s.Zero(c)
 	})
 
 } // ==== End of 'Count' ==== //
@@ -1317,6 +2004,95 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			_, err := s.d.Update(ctx, data.M{"_id": "1234"}, data.M{"$set": data.M{"$$badfield": 5}}, domain.WithUpsert(true))
 			s.Error(err)
 		})
+
+		s.Run("InvalidQuery", func() {
+			cur, err := s.d.Update(
+				ctx, 1, nil,
+				domain.WithUpsert(true),
+			)
+			s.Error(err)
+			s.Nil(cur)
+		})
+
+		s.Run("MultiResult", func() {
+			cur, err := s.d.Insert(ctx,
+				data.M{"a": 1},
+				data.M{"a": 2},
+			)
+			s.NoError(err)
+			s.NotNil(cur)
+
+			cur, err = s.d.Update(
+				ctx,
+				data.M{"a": data.M{"$gt": 0}},
+				data.M{"b": true},
+				domain.WithUpsert(true),
+				domain.WithUpdateMulti(true),
+			)
+			s.NoError(err)
+			s.NotNil(cur)
+
+			cur, err = s.d.Find(
+				ctx, nil,
+				domain.WithFindProjection(data.M{"_id": 0}),
+				domain.WithFindSort(
+					domain.Sort{{Key: "a", Order: 1}},
+				),
+			)
+			s.NoError(err)
+			res := []domain.Document{}
+			for cur.Next() {
+				m := data.M{}
+				s.NoError(cur.Scan(ctx, &m))
+				res = append(res, m)
+			}
+			s.Equal(
+				[]domain.Document{
+					data.M{"b": true},
+					data.M{"b": true},
+				},
+				res,
+			)
+		})
+
+		s.Run("FailedCursor", func() {
+			cm := new(cursorMock)
+			errCur := fmt.Errorf("cursor error")
+			cm.On("Next").Return(false).Once()
+			cm.On("Err").Return(errCur).Once()
+
+			s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
+				return cm, nil
+			}
+
+			cur, err := s.d.Update(ctx, nil, nil, domain.WithUpsert(true))
+			s.Error(err, errCur)
+			s.Nil(cur)
+			cm.AssertExpectations(s.T())
+		})
+
+		s.Run("FailedDocumentFactory", func() {
+			errDocFac := fmt.Errorf("document factory error")
+			var c int
+			s.d.documentFactory = func(v any) (domain.Document, error) {
+				if c < 2 {
+					c++
+					return data.NewDocument(v)
+				}
+				return nil, errDocFac
+			}
+
+			cur, err := s.d.Update(ctx, nil, nil, domain.WithUpsert(true))
+			s.ErrorIs(err, errDocFac)
+			s.Nil(cur)
+		})
+
+		s.Run("FailedModification", func() {
+			cur, err := s.d.Update(ctx, nil, data.M{"a": 2, "$test": 3}, domain.WithUpsert(true))
+			s.Error(err)
+			s.Nil(cur)
+		})
+
 	}) // ==== End of 'Upserts' ==== //
 
 	// Cannot perform update if the update query is not either registered-modifiers-only or copy-only, or contain badly formatted fields
@@ -1591,6 +2367,75 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	// NOTE: 'Callback signature' tests not added because we don't use
 	// callbacks
 
+	s.Run("FailedDocumentFactory", func() {
+		errDocFac := fmt.Errorf("document factory error")
+		s.d.documentFactory = func(any) (domain.Document, error) {
+			return nil, errDocFac
+		}
+		cur, err := s.d.Update(ctx, data.M{}, data.M{})
+		s.ErrorIs(err, errDocFac)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedNewEmptyDocument", func() {
+		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+
+		errDocFac := fmt.Errorf("document factory error")
+
+		var c int
+		s.d.documentFactory = func(a any) (domain.Document, error) {
+			if c > 2 {
+				return nil, errDocFac
+			}
+			c++
+			return data.NewDocument(a)
+		}
+		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		s.ErrorIs(err, errDocFac)
+		s.Nil(cur)
+	})
+
+	s.Run("FailedCursor", func() {
+		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+
+		curMock := new(cursorMock)
+		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
+			return curMock, nil
+		}
+
+		errCursor := fmt.Errorf("cursor error")
+
+		curMock.On("Next").Return(false).Once()
+		curMock.On("Err").Return(errCursor).Once()
+
+		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		s.ErrorIs(err, errCursor)
+		s.Nil(cur)
+
+		curMock.AssertExpectations(s.T())
+	})
+
+	s.Run("FailedCursorScan", func() {
+		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+
+		curMock := new(cursorMock)
+		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
+			return curMock, nil
+		}
+
+		errCursor := fmt.Errorf("cursor error")
+
+		curMock.On("Next").Return(true).Once()
+		curMock.On("Scan", mock.Anything, mock.Anything).
+			Return(errCursor).
+			Once()
+
+		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		s.ErrorIs(err, errCursor)
+		s.Nil(cur)
+
+		curMock.AssertExpectations(s.T())
+	})
 } // ==== End of 'Update' ==== //
 
 func (s *DatastoreTestSuite) TestRemove() {
@@ -1760,6 +2605,95 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.Equal(5, docs[d3Index].Get("a"))
 	})
 
+	s.Run("FailedRemoveFromIndexes", func() {
+		errIdxRemove := fmt.Errorf("index remove error")
+
+		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		idxMock := new(indexMock)
+		s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+			return idxMock, nil
+		}
+		// when creating a new index, existent docs are inserted.
+		idxMock.On("Insert", mock.Anything, mock.Anything).
+			Return(nil).
+			Once()
+		s.NoError(s.d.EnsureIndex(
+			ctx,
+			domain.WithEnsureIndexFieldNames("a"),
+		))
+
+		idxMock.On("Remove", mock.Anything, mock.Anything).
+			Return(errIdxRemove).
+			Once()
+
+		removed, err := s.d.Remove(ctx, data.M{})
+		s.ErrorIs(err, errIdxRemove)
+		s.Zero(removed)
+	})
+
+	s.Run("FailedDocumentFactory", func() {
+		errDocFac := fmt.Errorf("doc fac error")
+		s.d.documentFactory = func(any) (domain.Document, error) {
+			return nil, errDocFac
+		}
+		count, err := s.d.Remove(ctx, data.M{"a": 1})
+		s.Error(err)
+		s.Zero(count)
+	})
+
+	s.Run("FailedCursor", func() {
+		curMock := new(cursorMock)
+		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
+			return curMock, nil
+		}
+		errCursor := fmt.Errorf("cursor error")
+
+		curMock.On("Next").Return(true).Once()
+		curMock.On("Scan", mock.Anything, mock.Anything).
+			Return(errCursor).
+			Once()
+
+		count, err := s.d.Remove(ctx, nil)
+		s.ErrorIs(err, errCursor)
+		s.Zero(count)
+
+		errCursor2 := fmt.Errorf("second cursor error")
+		curMock.On("Next").Return(false).Once()
+		curMock.On("Err").Return(errCursor2).Once()
+
+		count, err = s.d.Remove(ctx, nil)
+		s.ErrorIs(err, errCursor2)
+		s.Zero(count)
+		curMock.AssertExpectations(s.T())
+	})
+
+	s.Run("FailedPersistence", func() {
+		cur, err := s.d.Insert(ctx, data.M{})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		srMock := new(serializerMock)
+		per, err := persistence.NewPersistence(
+			domain.WithPersistenceFilename(s.testDb),
+			domain.WithPersistenceSerializer(srMock),
+		)
+		s.NoError(err)
+		s.NotNil(per)
+		s.d.persistence = per
+
+		errSerialize := fmt.Errorf("serialization error")
+		srMock.On("Serialize", mock.Anything, mock.Anything).
+			Return("", errSerialize).
+			Once()
+
+		count, err := s.d.Remove(ctx, nil)
+		s.ErrorIs(err, errSerialize)
+		s.Zero(count)
+	})
+
 } // ==== End of 'Remove' ==== //
 
 func (s *DatastoreTestSuite) TestIndexes() {
@@ -1801,6 +2735,23 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(s.d.getAllData()[0], s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
 			s.Equal(s.d.getAllData()[1], s.d.indexes["z"].(*index.Index).Tree.Search("2")[0])
 			s.Equal(s.d.getAllData()[2], s.d.indexes["z"].(*index.Index).Tree.Search("3")[0])
+		})
+
+		s.Run("InvalidIndex", func() {
+			f := s.d.indexFactory
+			defer func() { s.d.indexFactory = f }()
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+
+			cur, err := s.d.Insert(ctx, data.M{"a": true})
+			s.NoError(err)
+			s.NotNil(cur)
+
+			errIdx := errors.New("index error")
+			s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+				return nil, errIdx
+			}
+
+			s.ErrorIs(s.d.LoadDatabase(ctx), errIdx)
 		})
 
 		// ensureIndex can be called twice on the same field, the second call will have no effect
@@ -2087,6 +3038,37 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.RemoveIndex(ctx, "e"))
 			s.Len(s.d.indexes, 1)
 			s.NotContains(s.d.indexes, "e")
+		})
+
+		s.Run("RemoveIndexComma", func() {
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a", "b")))
+			s.Len(s.d.indexes, 2)
+			s.Contains(s.d.indexes, "a,b")
+			s.Error(s.d.RemoveIndex(ctx, "a,b"))
+			s.Len(s.d.indexes, 2)
+			s.Contains(s.d.indexes, "a,b")
+		})
+
+		s.Run("RemoveFailedDocumentFactory", func() {
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("e")))
+			s.Len(s.d.indexes, 2)
+			s.Contains(s.d.indexes, "e")
+			errDocFac := fmt.Errorf("document factory error")
+			s.d.documentFactory = func(any) (domain.Document, error) {
+				return nil, errDocFac
+			}
+			s.ErrorIs(s.d.RemoveIndex(ctx, "e"), errDocFac)
+
+			// removed from cached, but cannot persist deletion
+			s.Len(s.d.indexes, 1)
+			s.NotContains(s.d.indexes, "e")
+
+			s.d.documentFactory = data.NewDocument
+			s.NoError(s.d.LoadDatabase(ctx))
+
+			// index is recreated if db is reloaded
+			s.Len(s.d.indexes, 2)
+			s.Contains(s.d.indexes, "e")
 		})
 
 	}) // ==== End of 'ensureIndex and index initialization in database loading' ==== //
@@ -2684,6 +3666,41 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 		})
 
+		s.Run("FailedRevert", func() {
+			idxMock := new(indexMock)
+			s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+				return idxMock, nil
+			}
+			idxMock.On("Insert", mock.Anything, mock.Anything).
+				Return(nil).
+				Times(4)
+			s.NoError(s.d.EnsureIndex(
+				ctx, domain.WithEnsureIndexFieldNames("a")),
+			)
+			s.NoError(s.d.EnsureIndex(
+				ctx, domain.WithEnsureIndexFieldNames("b")),
+			)
+			_ = s.insert(s.d.Insert(
+				ctx, data.M{"a": 1}, data.M{"a": 2},
+			))
+
+			errUpdMultiDoc := fmt.Errorf("update multi doc error")
+			errRevMultiDoc := fmt.Errorf("revert multi doc error")
+			idxMock.On("UpdateMultipleDocs", mock.Anything, mock.Anything).
+				Return(nil).
+				Once()
+			idxMock.On("UpdateMultipleDocs", mock.Anything, mock.Anything).
+				Return(errUpdMultiDoc).
+				Once()
+			idxMock.On("RevertMultipleUpdates", mock.Anything, mock.Anything).
+				Return(errRevMultiDoc).
+				Once()
+
+			cur, err := s.d.Update(ctx, data.M{}, data.M{})
+			s.Error(err)
+			s.Nil(cur)
+		})
+
 	}) // ==== End of 'Updating indexes upon document remove' ==== //
 
 	// Persisting indexes
@@ -2931,6 +3948,209 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Len(candidates, 1)
 	})
 
+	s.Run("NoFieldname", func() {
+		s.Error(s.d.EnsureIndex(ctx))
+	})
+
+	s.Run("FailedIndexFactory", func() {
+		errIdxFac := fmt.Errorf("index factory error")
+		s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+			return nil, errIdxFac
+		}
+
+		err := s.d.EnsureIndex(
+			ctx, domain.WithEnsureIndexFieldNames("a"),
+		)
+		s.ErrorIs(err, errIdxFac)
+	})
+
+	s.Run("FailedDocumentFactory", func() {
+		errDocFac := fmt.Errorf("document factory error")
+		s.d.documentFactory = func(any) (domain.Document, error) {
+			return nil, errDocFac
+		}
+
+		err := s.d.EnsureIndex(
+			ctx, domain.WithEnsureIndexFieldNames("a"),
+		)
+		s.ErrorIs(err, errDocFac)
+	})
+
+}
+
+func (s *DatastoreTestSuite) TestDropDatabase() {
+	s.Run("RemovesFile", func() {
+		s.FileExists(s.testDb)
+		ctx := context.Background()
+		s.NoError(s.d.DropDatabase(ctx))
+		s.NoFileExists(s.testDb)
+	})
+
+	s.Run("ReloadAfterwards", func() {
+		s.FileExists(s.testDb)
+		ctx := context.Background()
+		cur, err := s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hello": "world"})
+		s.NoError(err)
+		s.NotNil(cur)
+		s.FileExists(s.testDb)
+		b, err := os.ReadFile(s.testDb)
+		s.NoError(err)
+		var lines [][]byte
+		for line := range bytes.SplitSeq(b, []byte("\n")) {
+			if len(line) > 0 {
+				lines = append(lines, line)
+			}
+		}
+		s.Len(lines, 1)
+		s.NoError(s.d.DropDatabase(ctx))
+		s.NoFileExists(s.testDb)
+		cur, err = s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hello": "world"})
+		s.NoError(err)
+		s.NotNil(cur)
+		s.NoError(err)
+		s.NotNil(cur)
+		s.FileExists(s.testDb)
+		b, err = os.ReadFile(s.testDb)
+		s.NoError(err)
+		lines = lines[:0]
+		for line := range bytes.SplitSeq(b, []byte("\n")) {
+			if len(line) > 0 {
+				lines = append(lines, line)
+			}
+		}
+		s.Len(lines, 1)
+	})
+
+	s.Run("CanDropMultipleTimes", func() {
+		s.FileExists(s.testDb)
+		ctx := context.Background()
+		s.NoError(s.d.DropDatabase(ctx))
+		s.NoFileExists(s.testDb)
+		s.NoError(s.d.DropDatabase(ctx))
+		s.NoFileExists(s.testDb)
+	})
+
+	s.Run("ResetBuffer", func() {
+		ctx := context.Background()
+		s.NoError(s.d.DropDatabase(ctx))
+		docs := []any{
+			data.M{"_id": uuid.New().String(), "hello": "world"},
+			data.M{"_id": uuid.New().String(), "hello": "world"},
+			data.M{"_id": uuid.New().String(), "hello": "world"},
+		}
+		cur, err := s.d.Insert(ctx, docs...)
+		s.NoError(err)
+		s.NotNil(cur)
+		s.NoError(s.d.DropDatabase(ctx))
+		cur, err = s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hi": "world"})
+		s.NoError(err)
+		s.NotNil(cur)
+		err = s.d.LoadDatabase(ctx)
+		s.NoError(err)
+		c, err := s.d.Count(ctx, nil)
+		s.NoError(err)
+		s.Equal(int64(1), c)
+	})
+
+	s.Run("FailedIndexFactory", func() {
+		errIdxFac := fmt.Errorf("index factory error")
+		s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+			return nil, errIdxFac
+		}
+
+		err := s.d.DropDatabase(ctx)
+		s.ErrorIs(err, errIdxFac)
+	})
+}
+
+func (s *DatastoreTestSuite) TestLoadDatabaseCancelledContext() {
+	db, err := NewDatastore(domain.WithDatastoreFilename(s.testDb))
+	s.NoError(err)
+	s.NotNil(db)
+
+	open := (<-chan struct{})(make(chan struct{}))
+	c := make(chan struct{})
+	close(c)
+	closed := (<-chan struct{})(c)
+
+	err1 := errors.New("error 1")
+	err2 := errors.New("error 2")
+	err3 := errors.New("error 3")
+	err4 := errors.New("error 4")
+
+	ctxMock := new(contextMock)
+
+	// cannot lock mutex
+	ctxMock.On("Done").Return(closed).Once()
+	ctxMock.On("Err").Return(err1).Once()
+	s.ErrorIs(db.LoadDatabase(ctxMock), err1)
+	ctxMock.AssertExpectations(s.T())
+
+	// cannot reset indexes
+	ctxMock.On("Done").Return(open).Twice()
+	ctxMock.On("Done").Return(closed).Once()
+	ctxMock.On("Err").Return(err2).Once()
+	s.ErrorIs(db.LoadDatabase(ctxMock), err2)
+	ctxMock.AssertExpectations(s.T())
+
+	// cannot load persisted data
+	ctxMock.On("Done").Return(open).Times(4)
+	ctxMock.On("Done").Return(closed).Once()
+	ctxMock.On("Err").Return(err3).Once()
+	s.ErrorIs(db.LoadDatabase(ctxMock), err3)
+	ctxMock.AssertExpectations(s.T())
+
+	// cannot reset index with loaded data
+	ctxMock.On("Done").Return(open).Times(8)
+	ctxMock.On("Done").Return(closed).Twice()
+	ctxMock.On("Err").Return(err4).Twice()
+	s.ErrorIs(db.LoadDatabase(ctxMock), err4)
+	ctxMock.AssertExpectations(s.T())
+}
+
+func (s *DatastoreTestSuite) TestCancelContext() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	<-ctx.Done()
+
+	err := s.d.CompactDatafile(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	count, err := s.d.Count(ctx, nil)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(count)
+
+	err = s.d.DropDatabase(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	err = s.d.EnsureIndex(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	cur, err := s.d.Find(ctx, nil)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(cur)
+
+	err = s.d.FindOne(ctx, nil, nil)
+	s.ErrorIs(err, context.Canceled)
+
+	cur, err = s.d.GetAllData(ctx)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(cur)
+
+	cur, err = s.d.Insert(ctx)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(cur)
+
+	count, err = s.d.Remove(ctx, nil)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(count)
+
+	err = s.d.RemoveIndex(ctx)
+	s.ErrorIs(err, context.Canceled)
+
+	cur, err = s.d.Update(ctx, nil, nil)
+	s.ErrorIs(err, context.Canceled)
+	s.Zero(cur)
 }
 
 func (s *DatastoreTestSuite) insert(in domain.Cursor, err error) []domain.Document {
