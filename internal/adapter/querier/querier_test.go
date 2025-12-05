@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/projector"
 )
 
 type M = data.M
@@ -103,7 +105,11 @@ func (s *QuerierTestSuite) SetupSuite() {
 }
 
 func (s *QuerierTestSuite) SetupTest() {
-	s.q = NewQuerier().(*Querier)
+	s.q = NewQuerier(
+		WithDocumentFactory(data.NewDocument),
+		WithComparer(comparer.NewComparer()),
+		WithProjector(projector.NewProjector()),
+	).(*Querier)
 }
 
 func (s *QuerierTestSuite) SetupSubTest() {

@@ -25,6 +25,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/deserializer"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 )
@@ -156,7 +157,13 @@ func (s *PersistenceTestSuite) SetupTest() {
 		s.FailNow("could not ensure datafile integrity", err)
 	}
 
-	per, err := NewPersistence(WithFilename(s.testDb))
+	per, err := NewPersistence(
+		WithFilename(s.testDb),
+		WithFileMode(DefaultFileMode),
+		WithDirMode(DefaultDirMode),
+		WithDecoder(decoder.NewDecoder()),
+		WithHasher(hasher.NewHasher()),
+	)
 	s.NoError(err)
 
 	p = per.(*Persistence)
