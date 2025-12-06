@@ -3,6 +3,7 @@
 package modifier
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"math/big"
@@ -10,6 +11,70 @@ import (
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
+
+var (
+	// ErrMixedOperators is returned when user provides an update query with
+	// mixed use of normal fields and dollar fields.
+	ErrMixedOperators = errors.New("cannot mix modifiers and normal fields")
+	// ErrNonObject is returned when a modifier value passed by user is not
+	// an object.
+	ErrNonObject = errors.New("modifier value must be an object")
+	// ErrInvalidPushField is returned when user passes some field other
+	// than $slice and $each when using $push modifier.
+	ErrInvalidPushField = errors.New("can only use $slice in conjunction with $each when $push to array")
+	// ErrInvalidAddToSetField is returned when user passes some field other
+	// than $each when using $push modifier.
+	ErrInvalidAddToSetField = errors.New("cannot use another field in conjunction with $each")
+)
+
+// ErrModFieldType is returned when a modification function runs on a document
+// field of a type that is not accepted.
+type ErrModFieldType struct {
+	Mod    string
+	Want   string
+	Actual any
+}
+
+// Error implements [error].
+func (e ErrModFieldType) Error() string {
+	return fmt.Sprintf("%s expects %s field, got %T", e.Mod, e.Want, e.Actual)
+}
+
+// ErrModArgType is returned when a modification function is called with an
+// argument of a type that is not accepted.
+type ErrModArgType struct {
+	Mod    string
+	Want   string
+	Actual any
+}
+
+// Error implements [error].
+func (e ErrModArgType) Error() string {
+	return fmt.Sprintf("%s expects %s arg, got %T", e.Mod, e.Want, e.Actual)
+}
+
+// ErrModQuery is returned when provided modification query does not match the
+// general expected mongo-like structure.
+type ErrModQuery struct {
+	Reason string
+}
+
+// Error implements [error].
+func (e ErrModQuery) Error() string {
+	return fmt.Sprintf("invalid modification query: %s", e.Reason)
+}
+
+// ErrUnknownModifier is returned when the user specifies a modification query
+// with a modification procedure that is not known by the current implementation
+// of [Modifier].
+type ErrUnknownModifier struct {
+	Name string
+}
+
+// Error implements [error].
+func (e ErrUnknownModifier) Error() string {
+	return fmt.Sprintf("unknown modifier %q", e.Name)
+}
 
 type modFunc func(domain.Document, []string, any) error
 
@@ -81,7 +146,7 @@ func (m *Modifier) modQuery(obj domain.Document, mod domain.Document) (map[strin
 			dollarFields++
 		}
 		if dollarFields != 0 && dollarFields != total {
-			return nil, false, fmt.Errorf("you cannot mix modifiers and normal fields")
+			return nil, false, ErrMixedOperators
 		}
 		query[k] = v
 	}
@@ -97,7 +162,7 @@ func (m *Modifier) checkMod(obj domain.Document, key string, value any) error {
 		return err
 	}
 	if c != 0 {
-		return fmt.Errorf("cannot change a document's _id")
+		return domain.ErrCannotModifyID
 	}
 	return nil
 }
@@ -129,11 +194,11 @@ func (m *Modifier) dollarMod(obj domain.Document, qry map[string]any) (domain.Do
 	for modName, arg := range qry {
 		mod, ok := m.mods[modName]
 		if !ok {
-			return nil, fmt.Errorf("unknown modifier %s", modName)
+			return nil, ErrUnknownModifier{Name: modName}
 		}
 		d, ok := arg.(domain.Document)
 		if !ok {
-			return nil, fmt.Errorf("modifier %s's argument must be an object", modName)
+			return nil, ErrNonObject
 		}
 
 		calls[modName] = modCall{
@@ -154,13 +219,13 @@ func (m *Modifier) dollarMod(obj domain.Document, qry map[string]any) (domain.Do
 				return nil, err
 			}
 			if err := call.fn(docCopy, addr, arg); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("modifying field %q: %w", key, err)
 			}
 		}
 	}
 
 	if obj.ID() != docCopy.ID() {
-		return nil, fmt.Errorf("cannot change a document's _id")
+		return nil, domain.ErrCannotModifyID
 	}
 
 	return docCopy, nil
@@ -266,7 +331,7 @@ func (m *Modifier) unset(obj domain.Document, addr []string, _ any) error {
 func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
 	incNum, ok := m.asNumber(v)
 	if !ok {
-		return fmt.Errorf("%v must be a number", v)
+		return ErrModArgType{Mod: "$inc", Want: "number", Actual: v}
 	}
 	fields, err := m.fieldNavigator.EnsureField(obj, addr...)
 	if err != nil {
@@ -282,7 +347,7 @@ func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
 		}
 		num, ok := m.asNumber(value)
 		if !ok {
-			return fmt.Errorf("cannot use the $inc modifier on non-number fields")
+			return ErrModFieldType{Mod: "$inc", Want: "number", Actual: value}
 		}
 		sum := num.Add(num, incNum)
 		sumFloat, _ := sum.Float64()
@@ -307,7 +372,7 @@ func (m *Modifier) push(obj domain.Document, addr []string, v any) error {
 		}
 		array, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("cannot $push an element on non-array values")
+			return ErrModFieldType{Mod: "$push", Want: "array", Actual: value}
 		}
 
 		values := append(array, v)
@@ -339,7 +404,7 @@ func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
 
 	var ok bool
 	if res.each, ok = each.([]any); !ok {
-		return nil, fmt.Errorf("$each requires an array value")
+		return nil, ErrModArgType{Mod: "$each", Want: "array", Actual: each}
 	}
 
 	if s, ok := m.asNumber(d.Get("$slice")); ok && s.IsInt() {
@@ -360,11 +425,11 @@ func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
 func (m *Modifier) getPushItems(d domain.Document, array []any) ([]any, error) {
 	props, err := m.getSliceProperties(d)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting properties for $push: %w", err)
 	}
 
 	if d.Len() > props.usedFields {
-		return nil, fmt.Errorf("can only use $slice in conjunction with $each when $push to array")
+		return nil, ErrInvalidPushField
 	}
 
 	res := append(array, props.each...)
@@ -398,16 +463,16 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 		}
 		array, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("cannot $addToSet an element on non-array values")
+			return ErrModFieldType{Mod: "$addToSet", Want: "array", Actual: value}
 		}
 		values := []any{v}
 		if d, ok := v.(domain.Document); ok {
 			props, err := m.getSliceProperties(d)
 			if err != nil {
-				return err
+				return fmt.Errorf("getting properties for $addToSet: %w", err)
 			}
 			if props.hasEach && d.Len() > 1 {
-				return fmt.Errorf("cannot use another field in conjunction with $each")
+				return ErrInvalidAddToSetField
 			}
 			values = props.each
 		}
@@ -438,7 +503,7 @@ func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
 
 	bigN, ok := m.asNumber(v)
 	if !ok || !bigN.IsInt() {
-		return fmt.Errorf("%v isn't an integer, can't use it with $pop", v)
+		return ErrModArgType{Mod: "$pop", Want: "integer", Actual: v}
 	}
 
 	num64, _ := bigN.Int64()
@@ -461,7 +526,7 @@ func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
 
 		l, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("can't $pop an element from non-array values")
+			return ErrModFieldType{Mod: "$pop", Want: "array", Actual: value}
 		}
 
 		start, end := 0, max(0, len(l)-1) // do not grow larger than l
@@ -486,7 +551,7 @@ func (m *Modifier) pull(obj domain.Document, addr []string, v any) error {
 
 		l, ok := value.([]any)
 		if !ok {
-			return fmt.Errorf("cannot $pull an element from non-array values")
+			return ErrModFieldType{Mod: "$pull", Want: "array", Actual: value}
 		}
 
 		res := make([]any, 0, len(l))

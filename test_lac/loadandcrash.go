@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -153,15 +154,15 @@ func (fs fakeStorage) flushToStorage(filename string, isDir bool, mode os.FileMo
 
 	fileHandle, err := os.OpenFile(filename, flags, mode)
 	if err != nil {
-		return domain.ErrFlushToStorage{ErrorOnFsync: err}
+		return fmt.Errorf("fake error: %w", err)
 	}
 
 	if err := fileHandle.Sync(); err != nil {
-		return domain.ErrFlushToStorage{ErrorOnFsync: err}
+		return fmt.Errorf("fake error: %w", err)
 	}
 
 	if err := fileHandle.Close(); err != nil {
-		return domain.ErrFlushToStorage{ErrorOnClose: err}
+		return fmt.Errorf("fake error: %w", err)
 	}
 
 	return nil

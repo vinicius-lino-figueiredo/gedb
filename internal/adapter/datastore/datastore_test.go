@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -25,7 +26,10 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/idgenerator"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/index"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/matcher"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/modifier"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
+	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/projector"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/serializer"
 )
 
@@ -271,7 +275,10 @@ func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
 
 func (s *DatastoreTestSuite) TestInvalidFilename() {
 	db, err := NewDatastore(domain.WithDatastoreFilename("t~"))
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrDatafileName{
+		Name:   "t~",
+		Reason: "cannot end with '~', reserved for backup files",
+	})
 	s.Nil(db)
 }
 
@@ -281,7 +288,7 @@ func (s *DatastoreTestSuite) TestFailToCreateIDIndex() {
 		return nil, errIdxFac
 	}
 	db, err := NewDatastore(domain.WithDatastoreIndexFactory(fn))
-	s.Error(err)
+	s.ErrorIs(err, errIdxFac)
 	s.Nil(db)
 }
 
@@ -397,7 +404,10 @@ func (s *DatastoreTestSuite) TestInsert() {
 	// Cannot insert a doc that has a field beginning with a $ sign
 	s.Run("CannotInsertFieldWithDollarPrefix", func() {
 		_, err := s.d.Insert(ctx, data.M{"$something": "atest"})
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrFieldName{
+			Field:  "$something",
+			Reason: "cannot start with '$'",
+		})
 	})
 
 	// If an _id is already given when we insert a document, use that instead of generating a random one
@@ -756,7 +766,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			idgenerator.WithReader(bytes.NewReader(nil)),
 		)
 		cur, err := s.d.Insert(ctx, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, io.EOF)
 		s.Nil(cur)
 	})
 
@@ -774,7 +784,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			Once()
 
 		cur, err := s.d.Insert(ctx, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, errGetMtch)
 		s.Nil(cur)
 	})
 
@@ -803,7 +813,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			return nil, errDocFac
 		}
 		cur, err := s.d.Insert(ctx, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, errDocFac)
 		s.Nil(cur)
 	})
 
@@ -834,7 +844,10 @@ func (s *DatastoreTestSuite) TestCheckDocument() {
 	s.NotNil(cur)
 
 	cur, err = s.d.Insert(ctx, invalidDollarDate)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrFieldName{
+		Field:  "$$date",
+		Reason: "cannot start with '$'",
+	})
 	s.Nil(cur)
 
 	cur, err = s.d.Insert(ctx, deleted)
@@ -842,7 +855,10 @@ func (s *DatastoreTestSuite) TestCheckDocument() {
 	s.NotNil(cur)
 
 	cur, err = s.d.Insert(ctx, notDeleted)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrFieldName{
+		Field:  "$$deleted",
+		Reason: "cannot start with '$'",
+	})
 	s.Nil(cur)
 
 	cur, err = s.d.Insert(ctx, indexCreated)
@@ -854,7 +870,10 @@ func (s *DatastoreTestSuite) TestCheckDocument() {
 	s.NotNil(cur)
 
 	cur, err = s.d.Insert(ctx, containsDot)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrFieldName{
+		Field:  "contains.dot",
+		Reason: "cannot contain '.'",
+	})
 	s.Nil(cur)
 }
 
@@ -1300,7 +1319,8 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc2 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"somedata": "nope"}, &doc2)
-		s.Error(err) // Go implementation returns error instead of nil
+		// Go implementation returns error instead of nil
+		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Can find dates and objects (non JS-native types)
@@ -1317,7 +1337,7 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc2 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"now": date2}, &doc2)
-		s.Error(err) // No match
+		s.ErrorIs(err, domain.ErrNotFound)
 
 		doc3 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"sth": data.M{"name": "gedb"}}, &doc3)
@@ -1326,7 +1346,7 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc4 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"sth": data.M{"name": "other"}}, &doc4)
-		s.Error(err) // No match
+		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Can use dot-notation to query subfields
@@ -1340,11 +1360,11 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc2 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"greeting.english": "hellooo"}, &doc2)
-		s.Error(err) // No match
+		s.ErrorIs(err, domain.ErrNotFound)
 
 		doc3 := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"greeting.englis": "hello"}, &doc3)
-		s.Error(err) // No match
+		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Array fields match if any element matches
@@ -1391,12 +1411,12 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 
 		cur, err := s.d.Find(ctx, data.M{"$or": data.M{"hello": "world"}})
-		s.Error(err)
+		s.ErrorAs(err, &matcher.ErrCompArgType{})
 		s.Nil(cur)
 
 		doc := make(data.M)
 		err = s.d.FindOne(ctx, data.M{"$or": data.M{"hello": "world"}}, &doc)
-		s.Error(err)
+		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	// Changing the documents returned by find or findOne do not change the database state
@@ -1474,7 +1494,7 @@ func (s *DatastoreTestSuite) TestFind() {
 			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindSkip(2),
 		)
-		s.Error(err) // No documents found
+		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Can use projections in find
@@ -1494,7 +1514,7 @@ func (s *DatastoreTestSuite) TestFind() {
 		cur, err = s.d.Find(ctx, data.M{"a": 2},
 			domain.WithFindProjection(data.M{"a": 0, "hello": 1}),
 		)
-		s.Error(err)
+		s.ErrorIs(err, projector.ErrMixOmitType)
 		s.Nil(cur)
 	})
 
@@ -1514,12 +1534,12 @@ func (s *DatastoreTestSuite) TestFind() {
 		err = s.d.FindOne(ctx, data.M{"a": 2}, &doc2,
 			domain.WithFindProjection(data.M{"a": 0, "hello": 1}),
 		)
-		s.Error(err)
+		s.ErrorIs(err, projector.ErrMixOmitType)
 	})
 
 	s.Run("InvalidProjection", func() {
 		cur, err := s.d.Find(ctx, nil, domain.WithFindProjection(1))
-		s.Error(err)
+		s.ErrorAs(err, &domain.ErrDecode{})
 		s.Nil(cur)
 	})
 
@@ -1587,7 +1607,7 @@ func (s *DatastoreTestSuite) TestFind() {
 		s.NotNil(cur)
 
 		cur, err = s.d.Find(ctx, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, errComp)
 		s.Nil(cur)
 
 	})
@@ -1722,7 +1742,7 @@ func (s *DatastoreTestSuite) TestCount() {
 	s.Run("BadQuery", func() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 		_, err := s.d.Count(ctx, data.M{"$or": data.M{"hello": "world"}})
-		s.Error(err)
+		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	s.Run("FailedCursor", func() {
@@ -1740,7 +1760,7 @@ func (s *DatastoreTestSuite) TestCount() {
 			return cur, nil
 		}
 		c, err := s.d.Count(ctx, nil)
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrCursorClosed)
 		s.Zero(c)
 	})
 
@@ -2002,7 +2022,10 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		// Performing upsert with badly formatted fields yields a standard error not an exception
 		s.Run("BadField", func() {
 			_, err := s.d.Update(ctx, data.M{"_id": "1234"}, data.M{"$set": data.M{"$$badfield": 5}}, domain.WithUpsert(true))
-			s.Error(err)
+			s.ErrorIs(err, domain.ErrFieldName{
+				Field:  "$$badfield",
+				Reason: "cannot start with '$'",
+			})
 		})
 
 		s.Run("InvalidQuery", func() {
@@ -2010,7 +2033,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 				ctx, 1, nil,
 				domain.WithUpsert(true),
 			)
-			s.Error(err)
+			s.ErrorAs(err, &domain.ErrDocumentType{})
 			s.Nil(cur)
 		})
 
@@ -2066,7 +2089,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			}
 
 			cur, err := s.d.Update(ctx, nil, nil, domain.WithUpsert(true))
-			s.Error(err, errCur)
+			s.ErrorIs(err, errCur)
 			s.Nil(cur)
 			cm.AssertExpectations(s.T())
 		})
@@ -2089,7 +2112,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		s.Run("FailedModification", func() {
 			cur, err := s.d.Update(ctx, nil, data.M{"a": 2, "$test": 3}, domain.WithUpsert(true))
-			s.Error(err)
+			s.ErrorIs(err, modifier.ErrMixedOperators)
 			s.Nil(cur)
 		})
 
@@ -2098,14 +2121,27 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	// Cannot perform update if the update query is not either registered-modifiers-only or copy-only, or contain badly formatted fields
 	s.Run("ErrorBadField", func() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"somethnig": "yup"}))
+
 		_, err := s.d.Update(ctx, nil, data.M{"$badField": 5})
-		s.Error(err)
+		s.ErrorIs(err, modifier.ErrUnknownModifier{Name: "$badField"})
+
 		_, err = s.d.Update(ctx, nil, data.M{"bad.field": 5})
-		s.Error(err)
-		_, err = s.d.Update(ctx, nil, data.M{"$inc": data.M{"test": 5}, "mixed": "rrr"})
-		s.Error(err)
-		_, err = s.d.Update(ctx, nil, data.M{"$inexistent": data.M{"test": 5}})
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrFieldName{
+			Field:  "bad.field",
+			Reason: "cannot contain '.'",
+		})
+
+		_, err = s.d.Update(ctx, nil, data.M{
+			"$inc":  data.M{"test": 5},
+			"mixed": "rrr",
+		})
+		s.ErrorIs(err, modifier.ErrMixedOperators)
+
+		_, err = s.d.Update(ctx, nil, data.M{
+			"$inexistent": data.M{"test": 5},
+		})
+
+		s.ErrorIs(err, modifier.ErrUnknownModifier{Name: "$inexistent"})
 	})
 
 	// Can update documents using multiple modifiers
@@ -2164,14 +2200,14 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	s.Run("BadQuery", func() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 		_, err := s.d.Update(ctx, data.M{"$or": data.M{"hello": "world"}}, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	// If an error is thrown by a modifier, the database state is not changed
 	s.Run("NoChangeIfModificationError", func() {
 		newDocs := s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 		n, err := s.d.Update(ctx, nil, data.M{"$inc": data.M{"hello": 4}})
-		s.Error(err)
+		s.ErrorAs(err, &modifier.ErrModFieldType{})
 		s.Nil(n, 0)
 
 		var doc data.M
@@ -2184,7 +2220,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		newDocs := s.insert(s.d.Insert(ctx, data.M{"a": 2}))
 
 		_, err := s.d.Update(ctx, data.M{"a": 2}, data.M{"a": 2, "_id": "nope"})
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrCannotModifyID)
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
@@ -2197,7 +2233,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Equal(newDocs[0].ID(), docs[0].ID())
 
 		_, err = s.d.Update(ctx, data.M{"a": 2}, data.M{"$set": data.M{"_id": "nope"}})
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrCannotModifyID)
 
 		cur, err = s.d.Find(ctx, nil)
 		s.NoError(err)
@@ -2276,7 +2312,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		qry := data.M{"a": data.M{"$in": []any{4, 5, "abc"}}}
 		update := data.M{"$inc": data.M{"a": 10}}
 		n, err := s.d.Update(ctx, qry, update, domain.WithUpdateMulti(true))
-		s.Error(err)
+		s.ErrorAs(err, &modifier.ErrModFieldType{})
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
@@ -2304,7 +2340,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		qry := data.M{"a": data.M{"$in": []any{4, 5, "abc"}}}
 		update := data.M{"$set": data.M{"a": 10}}
 		n, err := s.d.Update(ctx, qry, update, domain.WithUpdateMulti(true))
-		s.Error(err)
+		s.ErrorIs(err, domain.ErrConstraintViolated)
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
@@ -2514,7 +2550,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
 		badQuery := data.M{"$or": data.M{"hello": "world"}}
 		n, err := s.d.Remove(ctx, badQuery)
-		s.Error(err)
+		s.ErrorAs(err, &matcher.ErrCompArgType{})
 		s.Zero(n)
 	})
 
@@ -2640,7 +2676,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 			return nil, errDocFac
 		}
 		count, err := s.d.Remove(ctx, data.M{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, errDocFac)
 		s.Zero(count)
 	})
 
@@ -2826,8 +2862,16 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// ensureIndex cannot be called with an illegal field name
 		s.Run("IllegalFieldName", func() {
-			s.Error(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet")))
-			s.Error(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet", "other")))
+			err := s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet"))
+			s.ErrorIs(err, domain.ErrFieldName{
+				Field:  "star,planet",
+				Reason: "cannot contain ','",
+			})
+			err = s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet", "other"))
+			s.ErrorIs(err, domain.ErrFieldName{
+				Field:  "star,planet",
+				Reason: "cannot contain ','",
+			})
 		})
 
 		// ensureIndex can be called after the data set was modified and the index still be correct
@@ -3044,7 +3088,11 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a", "b")))
 			s.Len(s.d.indexes, 2)
 			s.Contains(s.d.indexes, "a,b")
-			s.Error(s.d.RemoveIndex(ctx, "a,b"))
+			err := s.d.RemoveIndex(ctx, "a,b")
+			s.ErrorIs(err, domain.ErrFieldName{
+				Field:  "a,b",
+				Reason: "cannot contain ','",
+			})
 			s.Len(s.d.indexes, 2)
 			s.Contains(s.d.indexes, "a,b")
 		})
@@ -3158,7 +3206,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			newDoc2, err := s.d.Insert(ctx, data.M{"a": 5, "z": "yes"})
 			e := &bst.ErrViolated{}
-			s.Error(err, &e)
+			s.ErrorAs(err, &e)
 			s.Nil(newDoc2)
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			// TODO: assert violated key
@@ -3697,7 +3745,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				Once()
 
 			cur, err := s.d.Update(ctx, data.M{}, data.M{})
-			s.Error(err)
+			s.ErrorIs(err, errUpdMultiDoc)
+			s.ErrorIs(err, errRevMultiDoc)
 			s.Nil(cur)
 		})
 
@@ -3949,7 +3998,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 	})
 
 	s.Run("NoFieldname", func() {
-		s.Error(s.d.EnsureIndex(ctx))
+		s.ErrorIs(s.d.EnsureIndex(ctx), domain.ErrNoFieldName)
 	})
 
 	s.Run("FailedIndexFactory", func() {

@@ -3,10 +3,12 @@ package deserializer
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
 )
@@ -154,13 +156,13 @@ func (s *DeserializerTestSuite) TestContext() {
 // Deserialize returns error if target is nil.
 func (s *DeserializerTestSuite) TestNilTarget() {
 	err := s.d.Deserialize(ctx, []byte(`{"a":1}`), nil)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrTargetNil)
 }
 
 func (s *DeserializerTestSuite) TestInvalidSyntax() {
 	target := data.M{}
 	err := s.d.Deserialize(context.Background(), []byte("{"), &target)
-	s.Error(err)
+	s.ErrorIs(err, io.ErrUnexpectedEOF)
 }
 
 func TestDeserializerTestSuite(t *testing.T) {

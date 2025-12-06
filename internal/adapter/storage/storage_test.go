@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,7 +148,7 @@ func (s *StorageTestSuite) TestAppendReadOnlyFile() {
 	file := s.ReadOnlyFile(s.T())
 
 	i, err := s.store.AppendFile(file, 0666, []byte(testLine))
-	s.Error(err)
+	s.ErrorIs(err, os.ErrPermission)
 	s.Zero(i)
 
 }
@@ -184,7 +185,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteInvalidDir() {
 
 	lines := [][]byte{[]byte("abc123")}
 	err := s.store.CrashSafeWriteFileLines(invalidDir, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, ErrFlush)
 }
 
 func (s *StorageTestSuite) TestCrashSafeWriteReadOnlyFile() {
@@ -193,7 +194,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteReadOnlyFile() {
 
 	lines := [][]byte{[]byte("abc123")}
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, ErrFlush)
 }
 
 // Will not overwrite data if program crashes during crash safe write.
@@ -226,7 +227,8 @@ func (s *StorageTestSuite) MakeCrashableTest(name, file, lineVal string, crash t
 		if crash > 0 {
 			time.Sleep(crash)
 			s.NoError(cmd.Process.Kill())
-			s.Error(cmd.Wait())
+			exitErr := &exec.ExitError{}
+			s.ErrorAs(cmd.Wait(), &exitErr)
 			s.False(cmd.ProcessState.Exited())
 		} else {
 			s.NoError(cmd.Wait())
@@ -260,7 +262,8 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesInaccessibleFile() {
 
 	lines := [][]byte{[]byte("abc123")}
 	err := s.store.CrashSafeWriteFileLines(file, lines, filemode, filemode)
-	s.Error(err)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 }
 
 func (s *StorageTestSuite) TestCrashSafeWriteFileLinesInaccessibleTempFile() {
@@ -271,7 +274,8 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesInaccessibleTempFile() {
 
 	lines := [][]byte{[]byte("abc123")}
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 }
 
 func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailWriteTempFileLines() {
@@ -282,11 +286,13 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailWriteTempFileLines() {
 
 	file := filepath.Join(s.T().TempDir(), "file")
 	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+
+	errOpen := fmt.Errorf("open error")
 	om.On("OpenFile", file+"~", flags, os.FileMode(0666)).
-		Return((*os.File)(nil), fmt.Errorf("error")).
+		Return((*os.File)(nil), errOpen).
 		Once()
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, errOpen)
 	om.AssertExpectations(s.T())
 }
 
@@ -302,7 +308,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailFlushingTempFile() {
 		Once()
 
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, ErrFlush)
 	om.AssertExpectations(s.T())
 }
 
@@ -313,12 +319,14 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailRenaming() {
 	s.store.osOpts = om
 
 	file := filepath.Join(s.T().TempDir(), "file")
+
+	errRename := fmt.Errorf("rename error")
 	om.On("Rename", file+"~", file).
-		Return(fmt.Errorf("error")).
+		Return(errRename).
 		Once()
 
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, errRename)
 	om.AssertExpectations(s.T())
 }
 
@@ -334,7 +342,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailFlushingRenamed() {
 		Once()
 
 	err := s.store.CrashSafeWriteFileLines(file, lines, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, ErrFlush)
 	om.AssertExpectations(s.T())
 }
 
@@ -347,7 +355,7 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLiensForbiddenDir() {
 	file := filepath.Join(dir, "file.txt")
 
 	err := s.store.CrashSafeWriteFileLines(file, nil, 0666, 0666)
-	s.Error(err)
+	s.ErrorIs(err, ErrFlush)
 }
 
 // Will not get any error when ensuring integrity of existing file.
@@ -386,9 +394,11 @@ func (s *StorageTestSuite) TestEnsureDatafileIntegrityFailCheckingPrimFile() {
 	om := new(osOptsMock)
 	s.store.osOpts = om
 
-	om.On("Stat", mock.Anything).Return(nil, fmt.Errorf("error")).Once()
+	errStat := fmt.Errorf("stat error")
+	om.On("Stat", mock.Anything).Return(nil, errStat).Once()
 	om.On("IsNotExist", mock.Anything).Return(false).Once()
-	s.Error(s.store.EnsureDatafileIntegrity(file, 0000))
+	err := s.store.EnsureDatafileIntegrity(file, 0000)
+	s.ErrorIs(err, errStat)
 }
 
 func (s *StorageTestSuite) TestEnsureDatafileIntegrityFailCheckingTempFile() {
@@ -397,9 +407,11 @@ func (s *StorageTestSuite) TestEnsureDatafileIntegrityFailCheckingTempFile() {
 	om := &osOptsMock{mockCount: 2}
 	s.store.osOpts = om
 
-	om.On("Stat", mock.Anything).Return(nil, fmt.Errorf("error")).Once()
+	errStat := fmt.Errorf("stat error")
+	om.On("Stat", mock.Anything).Return(nil, errStat).Once()
 	om.On("IsNotExist", mock.Anything).Return(false).Once()
-	s.Error(s.store.EnsureDatafileIntegrity(file, 0000))
+	err := s.store.EnsureDatafileIntegrity(file, 0000)
+	s.ErrorIs(err, errStat)
 }
 
 func (s *StorageTestSuite) TestEnsureParentDirectoryExistsExistingDir() {
@@ -427,7 +439,9 @@ func (s *StorageTestSuite) TestEnsureParentDirectoryExistsFailAbs() {
 	defer func() { s.NoError(os.Chdir(back)) }()
 	s.NoError(os.Remove(abs))
 
-	s.Error(s.store.EnsureParentDirectoryExists("subdir", 0000))
+	err = s.store.EnsureParentDirectoryExists("subdir", 0000)
+	syscallErr := &os.SyscallError{}
+	s.ErrorAs(err, &syscallErr)
 	om.AssertExpectations(s.T())
 
 }
@@ -448,7 +462,10 @@ func (s *StorageTestSuite) TestflushToStorageFailFileSync() {
 	om.On("OpenFile", file, os.O_RDWR, os.FileMode(0666)).
 		Return(f, nil)
 
-	s.Error(s.store.flushToStorage(file, false, 0666))
+	err = s.store.flushToStorage(file, false, 0666)
+	s.ErrorIs(err, ErrFlush)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 
 }
 
@@ -472,7 +489,8 @@ func (s *StorageTestSuite) TestReadFileStream() {
 	s.Equal([]byte(""), b)
 
 	nonexistent, err := s.store.ReadFileStream(nonExistentFile, 0666)
-	s.Error(err)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 	s.Nil(nonexistent)
 }
 
@@ -497,7 +515,10 @@ func (s *StorageTestSuite) TestWriteFileLinesErrorWriting() {
 	lines := [][]byte{
 		[]byte("hello world"),
 	}
-	s.Error(s.store.writeFileLines(file, lines, 0666))
+
+	err = s.store.writeFileLines(file, lines, 0666)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 	om.AssertExpectations(s.T())
 }
 
@@ -506,7 +527,10 @@ func (s *StorageTestSuite) TestRemove() {
 	nonexistent := s.NonexistentFile(s.T())
 
 	s.NoError(s.store.Remove(existent))
-	s.Error(s.store.Remove(nonexistent))
+
+	err := s.store.Remove(nonexistent)
+	fsErr := &fs.PathError{}
+	s.ErrorAs(err, &fsErr)
 }
 
 func (s *StorageTestSuite) ExistentFile(t *testing.T) string {

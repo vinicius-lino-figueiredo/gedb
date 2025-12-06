@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"slices"
@@ -78,7 +77,7 @@ func NewPersistence(options ...Option) (domain.Persistence, error) {
 	}
 
 	if !p.inMemoryOnly && p.filename != "" && strings.HasSuffix(p.filename, "~") {
-		return nil, errors.New("the datafile name cannot end with a ~, which is reserved for crash safe backup files")
+		return nil, domain.ErrDatafileName{Name: p.filename, Reason: "cannot end with '~', reserved for backup files"}
 	}
 
 	return &p, nil

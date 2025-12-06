@@ -2,6 +2,7 @@
 package querier
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
@@ -62,7 +63,7 @@ func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]d
 		if options.Query != nil {
 			matches, err := q.mtchr.Match(doc, options.Query)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("matching document: %w", err)
 			}
 			if !matches {
 				continue
@@ -74,7 +75,11 @@ func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]d
 				continue
 			}
 			if options.Limit > 0 && int64(len(res)) == options.Limit {
-				return q.proj.Project(res, options.Projection)
+				res, err := q.proj.Project(res, options.Projection)
+				if err != nil {
+					return nil, fmt.Errorf("projecting: %w", err)
+				}
+				return res, nil
 			}
 		}
 		res = append(res, doc)
@@ -83,12 +88,16 @@ func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]d
 	if options.Sort != nil {
 		sorted, err := q.sort(res, options.Sort)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("sorting: %w", err)
 		}
 		res = q.skipAndLimit(sorted, options.Skip, options.Limit)
 	}
 
-	return q.proj.Project(res, options.Projection)
+	res, err := q.proj.Project(res, options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("projecting: %w", err)
+	}
+	return res, nil
 }
 
 func (q *Querier) sort(data []domain.Document, sort domain.Sort) ([]domain.Document, error) {
@@ -119,16 +128,16 @@ func (q *Querier) sort(data []domain.Document, sort domain.Sort) ([]domain.Docum
 func (q *Querier) compareByCriterion(a, b domain.Document, crit domain.SortName) (int, error) {
 	addr, err := q.fn.GetAddress(crit.Key)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("getting address: %w", err)
 	}
 
 	criterionA, _, err := q.fn.GetField(a, addr...)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("getting field: %w", err)
 	}
 	criterionB, _, err := q.fn.GetField(b, addr...)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("getting field: %w", err)
 	}
 
 	critA := q.listFields(criterionA)
@@ -136,7 +145,7 @@ func (q *Querier) compareByCriterion(a, b domain.Document, crit domain.SortName)
 
 	comp, err := q.cmpr.Compare(critA, critB)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("comparing: %w", err)
 	}
 	return comp * int(crit.Order), nil
 }

@@ -3,6 +3,7 @@
 package matcher
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -13,6 +14,48 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 )
+
+var (
+	// ErrMixedOperators is returned when user provides a query with mixed
+	// use of normal fields and operators.
+	ErrMixedOperators = errors.New("cannot mix operators and normal fields")
+)
+
+// ErrUnknownOperator is returned when user provides an unknown dollar field.
+type ErrUnknownOperator struct {
+	Operator string
+}
+
+// Error implements [error].
+func (e ErrUnknownOperator) Error() string {
+	return fmt.Sprintf("unknown operator %q", e.Operator)
+}
+
+// ErrUnknownComparison is returned when an unknown compare field is provided.
+type ErrUnknownComparison struct {
+	Comparison string
+}
+
+// Error implements [error].
+func (e ErrUnknownComparison) Error() string {
+	return fmt.Sprintf("unknown comparison %q", e.Comparison)
+}
+
+// ErrCompArgType is returned when a comparison operator is called with an
+// argument of invalid type.
+type ErrCompArgType struct {
+	Comp   string
+	Want   string
+	Actual any
+}
+
+// Error implements [error].
+func (e ErrCompArgType) Error() string {
+	return fmt.Sprintf(
+		"%s value should be of type %s, got %T",
+		e.Comp, e.Want, e.Actual,
+	)
+}
 
 type oper func(domain.Document, []string, any) (bool, error)
 
@@ -130,7 +173,7 @@ func (m *Matcher) matchDocs(obj, qry domain.Document) (bool, error) {
 func (m *Matcher) matchDollarField(obj domain.Document, field string, value any) (bool, error) {
 	fn, ok := m.logicOps[field]
 	if !ok {
-		return false, fmt.Errorf("unknown logical operator %s", field)
+		return false, ErrUnknownOperator{Operator: field}
 	}
 	return fn(obj, value)
 }
@@ -158,7 +201,7 @@ func (m *Matcher) matchSimpleField(obj domain.Document, field string, value any)
 	for op := range qryMap {
 		_, ok := m.compFuncs[op]
 		if !ok {
-			return false, fmt.Errorf("unknown comparison function %s", op)
+			return false, ErrUnknownComparison{Comparison: op}
 		}
 	}
 
@@ -182,7 +225,7 @@ func (m *Matcher) mapQuery(qry domain.Document) (map[string]any, bool, error) {
 			dollarFields++
 		}
 		if dollarFields > 0 && totalFields != dollarFields {
-			return nil, false, fmt.Errorf("you cannot mix operators and normal fields")
+			return nil, false, ErrMixedOperators
 		}
 		// We are saving the values to a map. There is no way to know
 		// how costly it is to iterate over the query fields, and match
@@ -196,7 +239,11 @@ func (m *Matcher) and(obj domain.Document, value any) (bool, error) {
 	value, _ = m.getValue(value)
 	arr, ok := value.([]any)
 	if !ok {
-		return false, fmt.Errorf("$and operator used without an array")
+		return false, ErrCompArgType{
+			Comp:   "$and",
+			Want:   "array",
+			Actual: value,
+		}
 	}
 	for _, item := range arr {
 		matches, err := m.Match(obj, item)
@@ -219,7 +266,11 @@ func (m *Matcher) or(obj domain.Document, value any) (bool, error) {
 	value, _ = m.getValue(value)
 	arr, ok := value.([]any)
 	if !ok {
-		return false, fmt.Errorf("$or operator used without an array")
+		return false, ErrCompArgType{
+			Comp:   "$or",
+			Want:   "array",
+			Actual: value,
+		}
 	}
 	for _, item := range arr {
 		matches, err := m.Match(obj, item)
@@ -243,7 +294,10 @@ func (m *Matcher) where(obj domain.Document, value any) (bool, error) {
 	default:
 		// original code would check the return type but we are not
 		// doing that because it is not worth the cost
-		return false, fmt.Errorf("$where operator used without a function")
+		return false, ErrCompArgType{
+			Comp:   "$where",
+			Want:   "either `func(domain.Document) bool` or `func(domain.Document) (bool, error)`",
+			Actual: value}
 	}
 
 }
@@ -374,7 +428,11 @@ func (m *Matcher) regex(obj domain.Document, addr []string, b any) (bool, error)
 	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
 		rgx, ok := param.(*regexp.Regexp)
 		if !ok {
-			return false, fmt.Errorf("$regex operator called with non regular expression")
+			return false, ErrCompArgType{
+				Comp:   "$regex",
+				Want:   "*regexp.Regexp",
+				Actual: b,
+			}
 		}
 		return m.regexValues(value, rgx)
 	})
@@ -396,7 +454,11 @@ func (m *Matcher) nin(obj domain.Document, addr []string, b any) (bool, error) {
 		concrete, _ := m.getValue(param)
 		arr, ok := concrete.([]any)
 		if !ok {
-			return false, fmt.Errorf("$nin operator called with a non-array")
+			return false, ErrCompArgType{
+				Comp:   "$nin",
+				Want:   "array",
+				Actual: b,
+			}
 		}
 		for _, item := range arr {
 			found, err := m.comparer.Compare(item, value)
@@ -481,7 +543,11 @@ func (m *Matcher) in(obj domain.Document, addr []string, b any) (bool, error) {
 		concrete, _ := m.getValue(param)
 		arr, ok := concrete.([]any)
 		if !ok {
-			return false, fmt.Errorf("$in operator called with a non-array")
+			return false, ErrCompArgType{
+				Comp:   "$in",
+				Want:   "array",
+				Actual: b,
+			}
 		}
 		for _, item := range arr {
 			found, err := m.comparer.Compare(item, value)
@@ -539,7 +605,11 @@ func (m *Matcher) size(obj domain.Document, addr []string, b any) (bool, error) 
 
 	num, ok := m.asInt(b)
 	if !ok {
-		return false, fmt.Errorf("$size operator called without an integer")
+		return false, ErrCompArgType{
+			Comp:   "$size",
+			Want:   "integer",
+			Actual: b,
+		}
 	}
 
 	if expanded {

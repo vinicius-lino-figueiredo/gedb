@@ -171,7 +171,7 @@ func (s *ProjectorTestSuite) TestOmitOnlyExpected() {
 
 func (s *ProjectorTestSuite) TestProjectIncludeAndExclude() {
 	docs, err := s.p.Project(s.docs3, P{"age": 1, "name": 0})
-	s.Error(err)
+	s.ErrorIs(err, ErrMixOmitType)
 	s.Nil(docs)
 
 	docs, err = s.p.Project(s.docs3, P{"age": 1, "_id": 0})
@@ -238,13 +238,15 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 		data := []domain.Document{M{"a": 1}}
 		fnm := new(fieldNavigatorMock)
 		s.p = NewProjector(WithFieldNavigator(fnm)).(*Projector)
+
+		errGetAddr := fmt.Errorf("get address error")
 		fnm.On("GetAddress", "a").
-			Return(([]string)(nil), fmt.Errorf("error"))
+			Return(([]string)(nil), errGetAddr)
 		docs, err := s.p.Project(
 			data,
 			P{"a": 1},
 		)
-		s.Error(err)
+		s.ErrorIs(err, errGetAddr)
 		s.Nil(docs)
 	})
 	s.Run("GetField", func() {
@@ -254,14 +256,15 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
+		errGetAddr := fmt.Errorf("get address error")
 		fnm.On("GetField", M{"a": 1}, []string{"a"}).
-			Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+			Return([]domain.GetSetter{}, false, errGetAddr).
 			Once()
 		docs, err := s.p.Project(
 			data,
 			P{"a": 1},
 		)
-		s.Error(err)
+		s.ErrorIs(err, errGetAddr)
 		s.Nil(docs)
 	})
 	s.Run("NegativeGetField", func() {
@@ -271,11 +274,12 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
+		errGetField := fmt.Errorf("get field error")
 		fnm.On("GetField", M{"a": 1}, []string{"a"}).
-			Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+			Return([]domain.GetSetter{}, false, errGetField).
 			Once()
 		docs, err := s.p.Project(data, P{"a": 0})
-		s.Error(err)
+		s.ErrorIs(err, errGetField)
 		s.Nil(docs)
 	})
 	s.Run("EnsureField", func() {
@@ -294,14 +298,15 @@ func (s *ProjectorTestSuite) TestProjectionFailedFieldNavigation() {
 				nil,
 			).
 			Once()
+		errEnsureField := fmt.Errorf("ensure field error")
 		fnm.On("EnsureField", M{}, []string{"a"}).
-			Return([]domain.GetSetter{}, fmt.Errorf("error")).
+			Return([]domain.GetSetter{}, errEnsureField).
 			Once()
 		docs, err := s.p.Project(
 			data,
 			P{"a": 1},
 		)
-		s.Error(err)
+		s.ErrorIs(err, errEnsureField)
 		s.Nil(docs)
 	})
 }
@@ -320,14 +325,14 @@ func (s *ProjectorTestSuite) TestFailedDocumentFactory() {
 		s.p = NewProjector(WithDocumentFactory(docFac)).(*Projector)
 
 		res, err := s.p.Project(data, P{"a": 1})
-		s.Error(err)
+		s.ErrorIs(err, errDocFac)
 		s.Nil(res)
 	})
 	s.Run("negative", func() {
 		s.p = NewProjector(WithDocumentFactory(docFac)).(*Projector)
 
 		res, err := s.p.Project(data, P{"a": 0})
-		s.Error(err)
+		s.ErrorIs(err, errDocFac)
 		s.Nil(res)
 	})
 

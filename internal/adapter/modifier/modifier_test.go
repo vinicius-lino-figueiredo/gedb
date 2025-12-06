@@ -91,7 +91,7 @@ func (s *ModifierTestSuite) TestModifyID() {
 	}
 
 	_, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrCannotModifyID)
 }
 
 // Return an error if obj and query have invalid _id's.
@@ -100,7 +100,7 @@ func (s *ModifierTestSuite) TestModifyInvalidID() {
 	updateQuery := M{"_id": []string{}}
 
 	_, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 }
 
 // Should not return error when setting unchanged _id.
@@ -118,12 +118,13 @@ func (s *ModifierTestSuite) TestCopyWithFailedNewDoc() {
 	obj := M{}
 	updateQuery := M{}
 
+	errDocFac := fmt.Errorf("document factory error")
 	s.modifier.docFac = func(any) (domain.Document, error) {
-		return nil, fmt.Errorf("")
+		return nil, errDocFac
 	}
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errDocFac)
 	s.Nil(t)
 }
 
@@ -132,12 +133,13 @@ func (s *ModifierTestSuite) TestModifyWithFailedNewDoc() {
 	obj := M{}
 	updateQuery := M{"$unset": M{"a": true}}
 
+	errDocFac := fmt.Errorf("document factory error")
 	s.modifier.docFac = func(any) (domain.Document, error) {
-		return nil, fmt.Errorf("")
+		return nil, errDocFac
 	}
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errDocFac)
 	s.Nil(t)
 }
 
@@ -147,7 +149,7 @@ func (s *ModifierTestSuite) TestMixCopyModify() {
 	updateQuery := M{"replace": "me", "$modify": "metoo"}
 
 	_, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrMixedOperators)
 }
 
 // Return an error if trying to use an inexistent modifier.
@@ -156,7 +158,7 @@ func (s *ModifierTestSuite) TestInexistentModifier() {
 	updateQuery := M{"$set": M{"it": "exists"}, "$modify": "not this one"}
 
 	_, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrUnknownModifier{Name: "$modify"})
 }
 
 // Return an error if a modifier is used with a non-object argument.
@@ -165,7 +167,7 @@ func (s *ModifierTestSuite) TestSetObjectArgument() {
 	updateQuery := M{"$set": "this stat"}
 
 	_, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrNonObject)
 }
 
 // Can change already set fields without modifying the underlying object.
@@ -254,12 +256,13 @@ func (s *ModifierTestSuite) TestSetFailedEnsure() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -331,7 +334,7 @@ func (s *ModifierTestSuite) TestUnsetID() {
 	obj := M{"_id": 123}
 	updateQuery := M{"$unset": M{"_id": true}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrCannotModifyID)
 	s.Nil(t)
 }
 
@@ -343,12 +346,13 @@ func (s *ModifierTestSuite) TestUnsetGetAddressError() {
 	fn := new(fieldNavigatorMock)
 	s.modifier.fieldNavigator = fn
 
+	errGetAddr := fmt.Errorf("error")
 	fn.On("GetAddress", mock.Anything).
-		Return(([]string)(nil), fmt.Errorf("error")).
+		Return(([]string)(nil), errGetAddr).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errGetAddr)
 	s.Nil(t)
 	fn.AssertExpectations(s.T())
 
@@ -367,12 +371,13 @@ func (s *ModifierTestSuite) TestUnsetGetFieldError() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), false, errGetField).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errGetField)
 	s.Nil(t)
 	fn.AssertExpectations(s.T())
 
@@ -391,12 +396,13 @@ func (s *ModifierTestSuite) TestUnsetFailedGetField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), false, errGetField).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errGetField)
 	s.Nil(t)
 }
 
@@ -407,13 +413,13 @@ func (s *ModifierTestSuite) TestIncNonNumberField() {
 	obj := M{"some": "thing", "yup": "yes", "nay": 2}
 	updateQuery := M{"$inc": M{"nay": "notanumber"}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModArgType{})
 	s.Nil(t)
 
 	obj = M{"some": "thing", "yup": "yes", "nay": "nope"}
 	updateQuery = M{"$inc": M{"nay": 1}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 }
 
@@ -481,12 +487,13 @@ func (s *ModifierTestSuite) TestIncFailedEnsure() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("ensure error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -538,13 +545,13 @@ func (s *ModifierTestSuite) TestPushNonSlice() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$push": M{"arr": "world"}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 
 	obj = M{"arr": M{"nested": 45}}
 	updateQuery = M{"$push": M{"arr.nested": "world"}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 }
 
@@ -562,7 +569,7 @@ func (s *ModifierTestSuite) TestPushEach() {
 
 	updateQuery = M{"$push": M{"arr": M{"$each": 45}}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModArgType{})
 	s.Nil(t)
 
 	updateQuery = M{"$push": M{
@@ -571,7 +578,7 @@ func (s *ModifierTestSuite) TestPushEach() {
 	},
 	}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidPushField)
 	s.Nil(t)
 }
 
@@ -626,12 +633,12 @@ func (s *ModifierTestSuite) TestPushAndSlice() {
 
 	updateQuery = M{"$push": M{"arr": M{"$slice": 1, "unauthorized": true}}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidPushField)
 	s.Nil(t)
 
 	updateQuery = M{"$push": M{"arr": M{"$each": A{}, "unauthorized": true}}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidPushField)
 	s.Nil(t)
 }
 
@@ -658,12 +665,13 @@ func (s *ModifierTestSuite) TestPushFailedEnsure() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("ensure error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -697,7 +705,7 @@ func (s *ModifierTestSuite) TestAddToSetNonArray() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$addToSet": M{"arr": "world"}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 }
 
@@ -727,12 +735,12 @@ func (s *ModifierTestSuite) TestAddToSetMultiple() {
 
 	updateQuery = M{"$addToSet": M{"arr": M{"$each": 45}}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModArgType{})
 	s.Nil(t)
 
 	updateQuery = M{"$addToSet": M{"arr": M{"$each": A{"world"}, "unauthorized": true}}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidAddToSetField)
 	s.Nil(t)
 }
 
@@ -749,12 +757,13 @@ func (s *ModifierTestSuite) TestAddToSetFailedEnsureField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("ensure error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -783,7 +792,7 @@ func (s *ModifierTestSuite) TestAddToSetInvalidType() {
 	obj := M{"planets": A{[]string{}}}
 	updateQuery := M{"$addToSet": M{"planets": make(chan int)}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(t)
 }
 
@@ -793,19 +802,19 @@ func (s *ModifierTestSuite) TestPopUnexpectedTypes() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$pop": M{"arr": 1}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 
 	obj = M{"bloup": "nope"}
 	updateQuery = M{"$pop": M{"arr": 1}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 
 	obj = M{"bloup": A{1, 4, 8}}
 	updateQuery = M{"$pop": M{"arr": true}}
 	t, err = s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModArgType{})
 	s.Nil(t)
 }
 
@@ -857,12 +866,13 @@ func (s *ModifierTestSuite) TestPopFailedGetField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), false, errGetField).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errGetField)
 	s.Nil(t)
 }
 
@@ -895,7 +905,7 @@ func (s *ModifierTestSuite) TestPullNonArray() {
 	obj := M{"arr": "hello"}
 	updateQuery := M{"$pull": M{"arr": "world"}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &ErrModFieldType{})
 	s.Nil(t)
 }
 
@@ -942,12 +952,13 @@ func (s *ModifierTestSuite) TestPullFailedGetField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), false, errGetField).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errGetField)
 	s.Nil(t)
 }
 
@@ -959,12 +970,13 @@ func (s *ModifierTestSuite) TestPullFailedMatch() {
 	mtchr := new(matcherMock)
 	s.modifier.matcher = mtchr
 
+	errMatch := fmt.Errorf("match error")
 	mtchr.On("Match", mock.Anything, mock.Anything).
-		Return(false, fmt.Errorf("error")).
+		Return(false, errMatch).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errMatch)
 	s.Nil(t)
 
 	mtchr.AssertExpectations(s.T())
@@ -1021,12 +1033,13 @@ func (s *ModifierTestSuite) TestMaxFailedEnsureField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("ensure error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -1035,7 +1048,7 @@ func (s *ModifierTestSuite) TestMaxCompareInvalid() {
 	obj := M{"some": make(chan struct{})}
 	updateQuery := M{"$max": M{"some": struct{}{}}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(t)
 }
 
@@ -1090,12 +1103,13 @@ func (s *ModifierTestSuite) TestMinFailedEnsureField() {
 		Return(([]string)(nil), nil).
 		Once()
 
+	errEnsure := fmt.Errorf("ensure error")
 	fn.On("EnsureField", mock.Anything, mock.Anything).
-		Return(([]domain.GetSetter)(nil), fmt.Errorf("error")).
+		Return(([]domain.GetSetter)(nil), errEnsure).
 		Once()
 
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(t)
 }
 
@@ -1104,7 +1118,7 @@ func (s *ModifierTestSuite) TestMinCompareInvalid() {
 	obj := M{"some": make(chan struct{})}
 	updateQuery := M{"$min": M{"some": struct{}{}}}
 	t, err := s.modifier.Modify(obj, updateQuery)
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(t)
 }
 
@@ -1120,6 +1134,7 @@ func (s *ModifierTestSuite) TestCopyDollarField() {
 func (s *ModifierTestSuite) TestCopyFailDocFactory() {
 	obj := M{"checks": A{M{"exists": true}}}
 
+	errDocFac := fmt.Errorf("doctory factory error")
 	counter := 0
 	s.modifier.docFac = func(any) (domain.Document, error) {
 		if counter == 0 {
@@ -1128,11 +1143,11 @@ func (s *ModifierTestSuite) TestCopyFailDocFactory() {
 			counter++
 			return M{}, nil
 		}
-		return nil, fmt.Errorf("first error")
+		return nil, errDocFac
 	}
 
 	docCopy, err := s.modifier.copyDoc(obj)
-	s.Error(err)
+	s.ErrorIs(err, errDocFac)
 	s.Nil(docCopy)
 }
 

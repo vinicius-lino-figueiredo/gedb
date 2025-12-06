@@ -94,7 +94,12 @@ func (s *MatcherTestSuite) TestNestedObjectsAreDeepEqualNotSubQuery() {
 	s.NotMatches(s.mtchr.Match(M{"a": M{"b": 5, "c": 3}}, M{"a": M{"b": 5}}))
 
 	s.NotMatches(s.mtchr.Match(M{"a": M{"b": 5}}, M{"a": M{"b": M{"$lt": 10}}}))
-	s.ErrorMatch(s.mtchr.Match(M{"a": M{"b": 5}}, M{"a": M{"$or": A{M{"b": 10}, M{"b": 5}}}}))
+	m, err := s.mtchr.Match(
+		M{"a": M{"b": 5}},
+		M{"a": M{"$or": A{M{"b": 10}, M{"b": 5}}}},
+	)
+	s.ErrorIs(err, ErrUnknownComparison{Comparison: "$or"})
+	s.False(m)
 }
 
 // Can match for field equality inside an array with the dot notation.
@@ -117,24 +122,33 @@ func (s *MatcherTestSuite) TestInsideArrayDotNotation() {
 func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn := new(fieldNavigatorMock)
 	s.mtchr = NewMatcher(WithFieldNavigator(fn)).(*Matcher)
+
+	errGetAddr := fmt.Errorf("get address error")
 	fn.On("GetAddress", "a").
-		Return([]string{}, fmt.Errorf("error")).
+		Return([]string{}, errGetAddr).
 		Once()
-	s.ErrorMatch(s.mtchr.Match(M{"a": 1}, M{"a": 1}))
+	m, err := s.mtchr.Match(M{"a": 1}, M{"a": 1})
+	s.ErrorIs(err, errGetAddr)
+	s.False(m)
+
 	fn.AssertExpectations(s.T())
 }
 
 // Will return error if matching two invalid types.
 func (s *MatcherTestSuite) TestEqualInvalidTypes() {
-	s.ErrorMatch(s.mtchr.Match(M{"a": []string{}}, M{"a": make(chan int)}))
+	m, err := s.mtchr.Match(M{"a": []string{}}, M{"a": make(chan int)})
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
+	s.False(m)
 }
 
 // Will return error if matching two invalid types nested in arrays.
 func (s *MatcherTestSuite) TestEqualInvalidTypesInArray() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": A{[]string{}}},
 		M{"a": A{make(chan int)}},
-	))
+	)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
+	s.False(m)
 }
 
 // Will return error if GetField fails.
@@ -144,10 +158,13 @@ func (s *MatcherTestSuite) TestFailedGetField() {
 	fn.On("GetAddress", "a").
 		Return([]string{"a"}, nil).
 		Once()
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", M{"a": 1}, []string{"a"}).
-		Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+		Return([]domain.GetSetter{}, false, errGetField).
 		Once()
-	s.ErrorMatch(s.mtchr.Match(M{"a": 1}, M{"a": 1}))
+	m, err := s.mtchr.Match(M{"a": 1}, M{"a": 1})
+	s.ErrorIs(err, errGetField)
+	s.False(m)
 	fn.AssertExpectations(s.T())
 }
 
@@ -185,18 +202,20 @@ func (s *MatcherTestSuite) TestMatchStringRegexOperator() {
 
 // Will throw if $regex operator is used with a non regex value.
 func (s *MatcherTestSuite) TestNonRegexInOperator() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"test": "true"},
-		M{"test": M{
-			"$regex": 42,
-		}}),
+		M{"test": M{"$regex": 42}},
 	)
-	s.ErrorMatch(s.mtchr.Match(
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
+
+	m, err = s.mtchr.Match(
 		M{"test": "true"},
-		M{"test": M{
-			"$regex": "true",
-		}}),
+		M{"test": M{"$regex": "true"}},
 	)
+
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 }
 
 // Can use the $regex operator in conjunction with other operators.
@@ -315,7 +334,9 @@ func (s *MatcherTestSuite) TestIn() {
 	s.Matches(s.mtchr.Match(M{"a": 8}, M{"a": M{"$in": A{6, 8, 9}}}))
 	s.Matches(s.mtchr.Match(M{"a": 9}, M{"a": M{"$in": A{6, 8, 9}}}))
 
-	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"a": M{"$in": 5}}))
+	m, err := s.mtchr.Match(M{"a": 5}, M{"a": M{"$in": 5}})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
 	s.NotMatches(s.mtchr.Match(M{"a": []int{}}, M{"a": M{"$in": A{2}}}))
 }
@@ -330,13 +351,17 @@ func (s *MatcherTestSuite) TestNin() {
 
 	s.Matches(s.mtchr.Match(M{"a": 9}, M{"b": M{"$nin": A{6, 8, 9}}}))
 
-	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"a": M{"$nin": 5}}))
+	m, err := s.mtchr.Match(M{"a": 5}, M{"a": M{"$nin": 5}})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
 	// fails if not using valid types
-	s.ErrorMatch(s.mtchr.Match(
+	m, err = s.mtchr.Match(
 		M{"a": make(chan int)},
 		M{"a": M{"$nin": A{[]int{}}}},
-	))
+	)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
+	s.False(m)
 }
 
 // $exists.
@@ -367,11 +392,14 @@ func (s *MatcherTestSuite) TestExistsFailGetField() {
 		Return([]string{"needAKey"}, nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", M{"needAKey": A{}}, []string{"needAKey"}).
-		Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+		Return([]domain.GetSetter{}, false, errGetField).
 		Once()
 
-	s.ErrorMatch(s.mtchr.Match(A{}, M{"$exists": M{}}))
+	m, err := s.mtchr.Match(A{}, M{"$exists": M{}})
+	s.ErrorIs(err, errGetField)
+	s.False(m)
 }
 
 func (s *MatcherTestSuite) TestCompareError() {
@@ -382,17 +410,32 @@ func (s *MatcherTestSuite) TestCompareError() {
 	c.On("Comparable", mock.Anything, []int{}).
 		Return(true).
 		Times(5)
+	errCompare := fmt.Errorf("compare error")
 	c.On("Compare", mock.Anything, mock.Anything).
-		Return(0, fmt.Errorf("error")).
+		Return(0, errCompare).
 		Times(7)
 
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$lt": []int{}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$gte": []int{}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$lte": []int{}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$gt": []int{}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$ne": []int{}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$in": A{[]int{}}}))
-	s.ErrorMatch(s.mtchr.Match([]int{}, M{"$exists": A{[]int{}}}))
+	m, err := s.mtchr.Match([]int{}, M{"$lt": []int{}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$gte": []int{}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$lte": []int{}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$gt": []int{}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$ne": []int{}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$in": A{[]int{}}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+	m, err = s.mtchr.Match([]int{}, M{"$exists": A{[]int{}}})
+	s.ErrorIs(err, errCompare)
+	s.False(m)
 }
 
 // will return error if matchList cannot get fields.
@@ -403,14 +446,18 @@ func (s *MatcherTestSuite) TestMatchListFailGetField() {
 	fn.On("GetAddress", "a").
 		Return([]string{"a"}, nil).
 		Once()
+
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", M{"a": 1}, []string{"a"}).
-		Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+		Return([]domain.GetSetter{}, false, errGetField).
 		Once()
 
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": 1},
 		M{"a": M{"$ne": 2}},
-	))
+	)
+	s.ErrorIs(err, errGetField)
+	s.False(m)
 	fn.AssertExpectations(s.T())
 }
 
@@ -574,20 +621,26 @@ func (s *MatcherTestSuite) TestSizeEmpty() {
 // Should return an error if a query operator is used without comparing to an
 // integer.
 func (s *MatcherTestSuite) TestSizeNonIntegerParam() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"children": A{1, 5}},
 		M{"children": M{"$size": 1.4}},
-	))
+	)
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
-	s.ErrorMatch(s.mtchr.Match(
+	m, err = s.mtchr.Match(
 		M{"children": A{1, 5}},
 		M{"children": M{"$size": "fdf"}},
-	))
+	)
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
-	s.ErrorMatch(s.mtchr.Match(
+	m, err = s.mtchr.Match(
 		M{"children": A{1, 5}},
 		M{"children": M{"$size": M{"$lt": 5}}},
-	))
+	)
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
 }
 
@@ -620,11 +673,14 @@ func (s *MatcherTestSuite) TestSizeFailGetField() {
 		Return([]string{"needAKey"}, nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", M{"needAKey": A{}}, []string{"needAKey"}).
-		Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+		Return([]domain.GetSetter{}, false, errGetField).
 		Once()
 
-	s.ErrorMatch(s.mtchr.Match(A{}, M{"$size": M{}}))
+	m, err := s.mtchr.Match(A{}, M{"$size": M{}})
+	s.ErrorIs(err, errGetField)
+	s.False(m)
 }
 
 // Will not count nil and undefined as len 0 array.
@@ -639,7 +695,9 @@ func (s *MatcherTestSuite) TestNonIntegerNumber() {
 
 	doc := M{"list": A{M{"a": 0}, M{"a": 1}}}
 	for _, num := range broken {
-		s.ErrorMatch(s.mtchr.Match(doc, M{"list": M{"$size": num}}))
+		m, err := s.mtchr.Match(doc, M{"list": M{"$size": num}})
+		s.ErrorAs(err, &ErrCompArgType{})
+		s.False(m)
 	}
 
 }
@@ -760,11 +818,14 @@ func (s *MatcherTestSuite) TestElemMatchFailGetField() {
 		Return([]string{"needAKey"}, nil).
 		Once()
 
+	errGetField := fmt.Errorf("get field error")
 	fn.On("GetField", M{"needAKey": A{}}, []string{"needAKey"}).
-		Return([]domain.GetSetter{}, false, fmt.Errorf("error")).
+		Return([]domain.GetSetter{}, false, errGetField).
 		Once()
 
-	s.ErrorMatch(s.mtchr.Match(A{}, M{"$elemMatch": M{}}))
+	m, err := s.mtchr.Match(A{}, M{"$elemMatch": M{}})
+	s.ErrorIs(err, errGetField)
+	s.False(m)
 }
 
 // Can use more complex comparisons inside nested query documents.
@@ -867,19 +928,23 @@ func (s *MatcherTestSuite) TestNot() {
 		M{"a": 5, "b": 10},
 		M{"$not": M{"a": 5}},
 	))
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": 5, "b": 10},
 		M{"$not": M{"a": M{"$in": 5}}},
-	))
+	)
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 }
 
 // Logical operators are all top-level, only other logical operators can be
 // above.
 func (s *MatcherTestSuite) TestLogicalOperatorsTopLevel() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": M{"b": 7}},
 		M{"a": M{"$or": A{M{"b": 5}, M{"b": 7}}}},
-	))
+	)
+	s.ErrorAs(err, &ErrUnknownComparison{})
+	s.False(m)
 	s.Matches(s.mtchr.Match(
 		M{"a": M{"b": 7}},
 		M{"$or": A{M{"a.b": 5}, M{"a.b": 7}}},
@@ -920,9 +985,15 @@ func (s *MatcherTestSuite) TestMultipleLogicalOps() {
 // Should throw an error if a logical operator is used without an array or if an
 // unknown logical operator is used.
 func (s *MatcherTestSuite) TestLogicOpError() {
-	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$or": M{"a": 5}}))
-	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$and": M{"a": 5}}))
-	s.ErrorMatch(s.mtchr.Match(M{"a": 5}, M{"$unknown": A{M{"a": 5}}}))
+	m, err := s.mtchr.Match(M{"a": 5}, M{"$or": M{"a": 5}})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
+	m, err = s.mtchr.Match(M{"a": 5}, M{"$and": M{"a": 5}})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
+	m, err = s.mtchr.Match(M{"a": 5}, M{"$unknown": A{M{"a": 5}}})
+	s.ErrorAs(err, &ErrUnknownOperator{})
+	s.False(m)
 }
 
 // Function should match and not match correctly.
@@ -943,17 +1014,21 @@ func (s *MatcherTestSuite) TestWhere() {
 
 // Should throw an error if the $where function is not, in fact, a function.
 func (s *MatcherTestSuite) TestWhereNotAFunction() {
-	s.ErrorMatch(s.mtchr.Match(M{"a": 4}, M{"$where": "not a function"}))
+	m, err := s.mtchr.Match(M{"a": 4}, M{"$where": "not a function"})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 }
 
 // Should throw an error if the $where function returns a non-boolean.
 func (s *MatcherTestSuite) TestWhereNonBoolean() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": 4},
 		M{"$where": func(domain.Document) string {
 			return "not a boolean"
 		}},
-	))
+	)
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 }
 
 // Should be able to do the complex matching it must be used for.
@@ -1200,10 +1275,12 @@ func (s *MatcherTestSuite) TestMatchArrayOnIndex() {
 
 // A single array-specific operator and the query is treated as array specific.
 func (s *MatcherTestSuite) TestArraySpecificQuery() {
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"children": A{"Huguinho", "Zezinho", "Luisinho"}},
 		M{"children": M{"Dewey": true, "$size": 3}},
-	))
+	)
+	s.ErrorIs(err, ErrMixedOperators)
+	s.False(m)
 }
 
 // Can mix queries on array fields and non array filds with array specific
@@ -1275,16 +1352,18 @@ func (s *MatcherTestSuite) TestNonDocMatch() {
 	s.Matches(s.mtchr.Match(12, M{"$in": A{11, 12, 13}}))
 	s.NotMatches(s.mtchr.Match(12, M{"$in": A{11, 13, 15}}))
 
-	// "$exists":    m.exists,
+	// $exists
 	s.Matches(s.mtchr.Match(12, M{"$exists": true}))
 	s.NotMatches(s.mtchr.Match(12, M{"$exists": false}))
 
-	// "$size":      m.size,
+	// $size
 	s.Matches(s.mtchr.Match(A{1, 2}, M{"$size": 2}))
 	s.NotMatches(s.mtchr.Match(A{1, 2, 3}, M{"$size": 2}))
-	s.ErrorMatch(s.mtchr.Match(A{1, 2, 3}, M{"$size": false}))
+	m, err := s.mtchr.Match(A{1, 2, 3}, M{"$size": false})
+	s.ErrorAs(err, &ErrCompArgType{})
+	s.False(m)
 
-	// "$elemMatch": m.elemMatch,
+	// $elemMatch
 	s.Matches(s.mtchr.Match(A{1, 2}, M{"$elemMatch": 2}))
 	s.NotMatches(s.mtchr.Match(A{1, 2, 3}, M{"$elemMatch": 4}))
 }
@@ -1301,27 +1380,33 @@ func (s *MatcherTestSuite) TestNonDocFailNewDoc() {
 	// should work by default
 	s.Matches(s.mtchr.Match("a", "a"))
 
+	errDocFac := fmt.Errorf("document factory error")
 	df := func(any) (domain.Document, error) {
-		return nil, fmt.Errorf("error")
+		return nil, errDocFac
 	}
 	s.mtchr = NewMatcher(WithDocumentFactory(df)).(*Matcher)
 
 	// should error if document factory fails for the object
-	s.ErrorMatch(s.mtchr.Match("a", "a"))
+	m, err := s.mtchr.Match("a", "a")
+	s.ErrorIs(err, errDocFac)
+	s.False(m)
 
 	shouldErr := false
+	errDocFac2 := fmt.Errorf("second document factory error")
 	df = func(v any) (domain.Document, error) {
 		if !shouldErr {
 			shouldErr = true
 			return data.NewDocument(v)
 		}
-		return nil, fmt.Errorf("error")
+		return nil, errDocFac2
 	}
 
 	s.mtchr = NewMatcher(WithDocumentFactory(df)).(*Matcher)
 
 	// should error if document factory fails for the query as well
-	s.ErrorMatch(s.mtchr.Match("a", "a"))
+	m, err = s.mtchr.Match("a", "a")
+	s.ErrorIs(err, errDocFac2)
+	s.False(m)
 }
 
 // cannot mix normal fields and operators in queries.
@@ -1339,10 +1424,12 @@ func (s *MatcherTestSuite) TestMixOperators() {
 	))
 
 	// cannot combine them
-	s.ErrorMatch(s.mtchr.Match(
+	m, err := s.mtchr.Match(
 		M{"a": 1},
 		M{"a": 1, "$and": A{M{"a": 1}, M{"a": M{"$gt": 0}}}},
-	))
+	)
+	s.ErrorIs(err, ErrMixedOperators)
+	s.False(m)
 }
 
 func (s *MatcherTestSuite) TestNilQuery() {
@@ -1360,6 +1447,34 @@ func (s *MatcherTestSuite) TestNilQuery() {
 	))
 }
 
+func (s *MatcherTestSuite) TestErrorMessages() {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{
+			err:  ErrUnknownOperator{Operator: "$new"},
+			want: "unknown operator \"$new\"",
+		},
+		{
+			err:  ErrUnknownComparison{Comparison: "a"},
+			want: "unknown comparison \"a\"",
+		},
+		{
+			err: ErrCompArgType{
+				Comp:   "$a",
+				Want:   "b",
+				Actual: time.Now(),
+			},
+			want: "$a value should be of type b, got time.Time",
+		},
+	}
+
+	for _, tt := range tests {
+		s.Equal(tt.want, tt.err.Error())
+	}
+}
+
 func (s *MatcherTestSuite) Matches(matches bool, err error) {
 	s.NoError(err)
 	s.True(matches)
@@ -1368,10 +1483,6 @@ func (s *MatcherTestSuite) Matches(matches bool, err error) {
 func (s *MatcherTestSuite) NotMatches(matches bool, err error) {
 	s.NoError(err)
 	s.False(matches)
-}
-
-func (s *MatcherTestSuite) ErrorMatch(_ bool, err error) {
-	s.Error(err)
 }
 
 func (s *MatcherTestSuite) SetupTest() {

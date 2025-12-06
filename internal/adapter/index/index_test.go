@@ -100,9 +100,10 @@ func (s *IndexesTestSuite) SetupSuite() {
 
 func (s *IndexesTestSuite) TestNewIndexFailSplitFields() {
 	fn := new(fieldNavigatorMock)
-	fn.On("SplitFields", "").Return([]string{}, fmt.Errorf("error")).Once()
+	errSplitFields := fmt.Errorf("split fields error")
+	fn.On("SplitFields", "").Return([]string{}, errSplitFields).Once()
 	idx, err := NewIndex(domain.WithIndexFieldNavigator(fn))
-	s.Error(err)
+	s.ErrorIs(err, errSplitFields)
 	s.Nil(idx)
 }
 
@@ -178,7 +179,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.Equal(1, idx.GetNumberOfKeys())
-		s.Error(idx.Insert(ctx, doc1))
+		err = idx.Insert(ctx, doc1)
+		s.ErrorIs(err, domain.ErrConstraintViolated)
 	})
 
 	// Inserting twice for a fieldName the docs don't have with a unique
@@ -199,7 +201,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.Equal(1, idx.GetNumberOfKeys())
-		s.Error(idx.Insert(ctx, doc2))
+		err = idx.Insert(ctx, doc2)
+		s.ErrorIs(err, domain.ErrConstraintViolated)
 	})
 
 	// Inserting twice for a fieldName the docs don't have with a unique and
@@ -241,7 +244,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1))
 		s.Equal(1, idx.GetNumberOfKeys())
-		s.Error(idx.Insert(ctx, doc1))
+		err = idx.Insert(ctx, doc1)
+		s.ErrorIs(err, domain.ErrConstraintViolated)
 	})
 
 	// Inserting twice for a compound fieldName the docs dont have with a unique and sparse index will not throw, since the docs will be non indexed
@@ -417,8 +421,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.NoError(idx.Insert(ctx, obj))
 			s.Len(idx.GetAll(), 1)
 			s.Equal(obj, idx.GetAll()[0])
-
-			s.Error(idx.Insert(ctx, obj2))
+			err = idx.Insert(ctx, obj2)
+			s.ErrorIs(err, domain.ErrConstraintViolated)
 		})
 
 		// When removing a document, remove it from the index at all unique array elements
@@ -487,7 +491,8 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.NoError(err)
 			s.Len(eeMatches, 0)
 
-			s.Error(idx.Insert(ctx, obj2))
+			err = idx.Insert(ctx, obj2)
+			s.ErrorIs(err, domain.ErrConstraintViolated)
 			s.Len(idx.GetAll(), 2)
 			aaMatches, err = idx.GetMatching("aa")
 			s.NoError(err)
@@ -1344,7 +1349,7 @@ func (s *IndexesTestSuite) TestGetMatchingInvalidParameter() {
 	s.NoError(idx.Insert(ctx, data.M{"_id": []string{}}))
 
 	data, err := idx.GetMatching([]string{}, []string{})
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(data)
 }
 
@@ -1359,14 +1364,16 @@ func (s *IndexesTestSuite) TestGetMatchingInvalidSort() {
 
 	s.NoError(idx.Insert(ctx, data.M{"_id": 3}))
 
+	errCompare := fmt.Errorf("compare error")
+
 	c := new(comparerMock)
 	idx.(*Index).comparer = c
 	c.On("Compare", mock.Anything, mock.Anything).
-		Return(0, fmt.Errorf("error")).
+		Return(0, errCompare).
 		Once()
 
 	data, err := idx.GetMatching(1, 2, 3)
-	s.Error(err)
+	s.ErrorIs(err, errCompare)
 	s.Nil(data)
 	c.AssertExpectations(s.T())
 }
@@ -1380,12 +1387,14 @@ func (s *IndexesTestSuite) TestGetMatchingInvalidMapGetKey() {
 
 	c := new(comparerMock)
 	idx.(*Index).comparer = c
+
+	errCompare := fmt.Errorf("compare error")
 	c.On("Compare", mock.Anything, mock.Anything).
-		Return(0, fmt.Errorf("error")).
+		Return(0, errCompare).
 		Once()
 
 	data, err := idx.GetMatching(1)
-	s.Error(err)
+	s.ErrorIs(err, errCompare)
 	s.Nil(data)
 }
 

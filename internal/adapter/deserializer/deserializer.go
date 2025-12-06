@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
@@ -60,7 +59,7 @@ func (d *Deserializer) Deserialize(ctx context.Context, b []byte, target any) er
 	default:
 	}
 	if target == nil {
-		return errors.New("nil target")
+		return domain.ErrTargetNil
 	}
 	// this should be the only use of Document outside of the context. Here
 	// we could use a map[string]any, but Document is slightly faster when

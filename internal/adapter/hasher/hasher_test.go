@@ -1,6 +1,7 @@
 package hasher
 
 import (
+	"encoding/json"
 	"fmt"
 	"iter"
 	"math"
@@ -260,8 +261,10 @@ func (s *HasherTestSuite) TestPointer() {
 func (s *HasherTestSuite) TestMarshalError() {
 	// Infinity is not supported by JSON standard
 	_, err := s.hasher.Hash(math.Inf(1))
-	s.Error(err)
-	s.Contains(err.Error(), "json")
+	var jsonErr *json.UnsupportedValueError
+	s.ErrorAs(err, &jsonErr)
+	s.Equal("+Inf", jsonErr.Str)
+	s.True(jsonErr.Value.Equal(reflect.ValueOf(math.Inf(1))))
 }
 
 // Marshal errors in nested structures should be returned.
@@ -270,15 +273,17 @@ func (s *HasherTestSuite) TestMarshalErrorInDocument() {
 		M: M{"value": math.Inf(1)}, // Infinity in document
 	}
 	_, err := s.hasher.Hash(doc)
-	s.Error(err)
-	s.Contains(err.Error(), "json")
+	var jsonErr *json.UnsupportedValueError
+	s.ErrorAs(err, &jsonErr)
+	s.Equal("+Inf", jsonErr.Str)
 }
 
 // Marshal errors in arrays should be returned.
 func (s *HasherTestSuite) TestMarshalErrorInArray() {
 	_, err := s.hasher.Hash(math.Inf(1))
-	s.Error(err)
-	s.Contains(err.Error(), "json")
+	var jsonErr *json.UnsupportedValueError
+	s.ErrorAs(err, &jsonErr)
+	s.Equal("+Inf", jsonErr.Str)
 }
 
 func TestHasherTestSuite(t *testing.T) {

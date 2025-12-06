@@ -125,7 +125,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		}
 		opts.Persistence, err = persistence.NewPersistence(persistenceOptions...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("creating persistence: %w", err)
 		}
 	}
 	IDIdx, err := opts.IndexFactory(
@@ -133,7 +133,7 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		domain.WithIndexUnique(true),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating _id index: %w", err)
 	}
 	return &Datastore{
 		filename:              opts.Filename,
@@ -175,12 +175,13 @@ func (d *Datastore) addToIndexes(ctx context.Context, doc domain.Document) error
 	}
 
 	if err != nil {
+		cleanupErrs := []error{err}
 		for i := range failingIndex {
 			if removeErr := d.indexes[keys[i]].Remove(ctx, doc); removeErr != nil {
-				return errors.Join(err, removeErr)
+				cleanupErrs = append(cleanupErrs, removeErr)
 			}
 		}
-		return err
+		return errors.Join(cleanupErrs...)
 	}
 	return nil
 }
@@ -194,20 +195,18 @@ func (d *Datastore) checkDocuments(docs ...domain.Document) error {
 					if d.isInt(v) {
 						continue
 					}
-					return fmt.Errorf("field names cannot begin with the $ character")
 				case "$$deleted":
 					if deleted, _ := v.(bool); deleted {
 						continue
 					}
-					return fmt.Errorf("field names cannot begin with the $ character")
 				case "$$indexCreated", "$$indexRemoved":
 					continue
 				default:
-					return fmt.Errorf("field names cannot begin with the $ character")
 				}
+				return domain.ErrFieldName{Field: k, Reason: "cannot start with '$'"}
 			}
 			if strings.ContainsRune(k, '.') {
-				return fmt.Errorf("field names cannot contain a '.'")
+				return domain.ErrFieldName{Field: k, Reason: "cannot contain '.'"}
 			}
 			if subDoc, ok := v.(domain.Document); ok {
 				if err := d.checkDocuments(subDoc); err != nil {
@@ -284,7 +283,7 @@ func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 
 	cur, err := d.find(ctx, query, false)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("finding data: %w", err)
 	}
 	var count int64
 	for cur.Next() {
@@ -300,12 +299,12 @@ func (d *Datastore) createNewID() (string, error) {
 	for {
 		enc, err := d.idGenerator.GenerateID(16)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("generating _id: %w", err)
 		}
 
 		m, err := d.indexes["_id"].GetMatching(enc)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("checking if _id exists: %w", err)
 		}
 		if len(m) == 0 {
 			return enc, nil
@@ -323,7 +322,7 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	// d.StopAutocompaction not added for now.
 	IDIdx, err := d.indexFactory(domain.WithIndexFieldName("_id"))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating index for field \"_id\": %w", err)
 	}
 	d.indexes = map[string]domain.Index{"_id": IDIdx}
 	d.ttlIndexes = make(map[string]time.Duration)
@@ -343,7 +342,7 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 	}
 
 	if len(opts.FieldNames) == 0 || slices.Contains(opts.FieldNames, "") {
-		return fmt.Errorf("cannot create an index without a fieldName")
+		return domain.ErrNoFieldName
 	}
 
 	_fields := slices.Clone(opts.FieldNames)
@@ -352,8 +351,8 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 	containsComma := func(s string) bool {
 		return strings.ContainsRune(s, ',')
 	}
-	if slices.ContainsFunc(_fields, containsComma) {
-		return errors.New("cannot use comma in index fieldName")
+	if i := slices.IndexFunc(_fields, containsComma); i >= 0 {
+		return domain.ErrFieldName{Field: _fields[i], Reason: "cannot contain ','"}
 	}
 
 	fields := strings.Join(_fields, ",")
@@ -387,7 +386,7 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 	if len(data) > 0 {
 		if err := d.indexes[fields].Insert(ctx, data...); err != nil {
 			delete(d.indexes, fields)
-			return err
+			return fmt.Errorf("adding existing data to index: %w", err)
 		}
 	}
 
@@ -442,7 +441,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 
 	proj := make(map[string]uint8)
 	if err := d.decoder.Decode(opt.Projection, &proj); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decoding projection: %w", err)
 	}
 
 	allData, err := d.getCandidates(ctx, queryDoc, dontExpireStaleDocs)
@@ -460,7 +459,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 
 	res, err := d.querier.Query(allData, cursorOptions...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying: %w", err)
 	}
 
 	res, err = d.cloneDocs(res...)
@@ -486,7 +485,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	}
 	defer cur.Close()
 	if !cur.Next() {
-		return fmt.Errorf("expected exactly one record, got 0")
+		return domain.ErrNotFound
 	}
 	return cur.Scan(ctx, target)
 }
@@ -513,7 +512,7 @@ func (d *Datastore) getAllData() []domain.Document {
 func (d *Datastore) getCandidates(ctx context.Context, query domain.Document, dontExpireStaleDocs bool) ([]domain.Document, error) {
 	docs, err := d.getRawCandidates(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("indexing data: %w", err)
 	}
 
 	if dontExpireStaleDocs {
@@ -607,7 +606,11 @@ func (d *Datastore) getSimpleCandidates(query domain.Document) ([]domain.Documen
 		if !d.filterIndexNames(indexNames, k, v) {
 			continue
 		}
-		return d.matchingResult(d.indexes[k].GetMatching(v))
+		matches, err := d.indexes[k].GetMatching(v)
+		if err != nil {
+			return nil, false, fmt.Errorf("at index %q: %w", k, err)
+		}
+		return matches, true, nil
 	}
 	return nil, false, nil
 }
@@ -736,12 +739,13 @@ func (d *Datastore) insertInCache(ctx context.Context, preparedDocs []domain.Doc
 	}
 
 	if err != nil {
+		cleanupErrs := []error{err}
 		for i := range failingIndex {
 			if removeErr := d.removeFromIndexes(ctx, preparedDocs[i]); removeErr != nil {
-				return errors.Join(err, removeErr)
+				cleanupErrs = append(cleanupErrs, removeErr)
 			}
 		}
-		return err
+		return errors.Join(cleanupErrs...)
 	}
 	return nil
 }
@@ -774,7 +778,7 @@ func (d *Datastore) LoadDatabase(ctx context.Context) error {
 		}
 		d.indexes[key], err = d.indexFactory(options...)
 		if err != nil {
-			return err
+			return fmt.Errorf("creating index for field %q: %w", key, err)
 		}
 	}
 	if err := d.resetIndexes(ctx, docs...); err != nil {
@@ -903,8 +907,8 @@ func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error
 	containsComma := func(s string) bool {
 		return strings.ContainsRune(s, ',')
 	}
-	if slices.ContainsFunc(_fields, containsComma) {
-		return errors.New("cannot use comma in index fieldName")
+	if i := slices.IndexFunc(_fields, containsComma); i >= 0 {
+		return domain.ErrFieldName{Field: _fields[i], Reason: "cannot contain ','"}
 	}
 	fieldName := strings.Join(_fields, ",")
 	delete(d.indexes, fieldName)
@@ -988,7 +992,7 @@ func (d *Datastore) update(ctx context.Context, query any, updateQuery any, opti
 func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, limit int64) ([]domain.Document, bool, error) {
 	cur, err := d.find(ctx, query, false, domain.WithFindLimit(limit))
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("finding existing documents: %w", err)
 	}
 	var count int64
 	for cur.Next() {
@@ -1004,14 +1008,14 @@ func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, 
 		}
 		if err := d.checkDocuments(mod); err != nil {
 			if mod, err = d.modifier.Modify(qry, mod); err != nil {
-				return nil, false, err
+				return nil, false, fmt.Errorf("modifying empty: %w", err)
 			}
 		}
 		insertedDoc, err := d.insert(ctx, mod)
 		if err != nil {
-			return nil, false, err
+			return nil, false, fmt.Errorf("inserting: %w", err)
 		}
-		return insertedDoc, true, err
+		return insertedDoc, true, nil
 	}
 	return nil, false, nil
 }
@@ -1033,7 +1037,7 @@ func (d *Datastore) findAndModify(ctx context.Context, qry any, modQry domain.Do
 		}
 		newDoc, err := d.modifier.Modify(oldDoc, modQry)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("modifying: %w", err)
 		}
 
 		if d.timestampData {
@@ -1063,14 +1067,15 @@ func (d *Datastore) updateIndexes(ctx context.Context, mods []domain.Update) err
 		}
 	}
 	if err != nil {
+		cleanupErrs := []error{err}
 		for i := range failingIndex {
 			if revertErr := d.indexes[keys[i]].RevertMultipleUpdates(ctx, mods...); revertErr != nil {
-				err = errors.Join(err, revertErr)
-				break
+				cleanupErrs = append(cleanupErrs, revertErr)
 			}
 		}
+		return errors.Join(cleanupErrs...)
 	}
-	return err
+	return nil
 }
 
 func (d *Datastore) isInt(v any) bool {

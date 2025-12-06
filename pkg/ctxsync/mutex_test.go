@@ -186,8 +186,8 @@ func TestCanceling(t *testing.T) {
 	added.Wait()
 	assert.Len(t, errs, workers)
 	assert.Equal(t, 0, n)
-	for _, e := range errs {
-		assert.Error(t, e)
+	for _, err := range errs {
+		assert.ErrorIs(t, err, context.Canceled)
 	}
 
 }
@@ -273,8 +273,8 @@ func TestCanceledContext(t *testing.T) {
 	// No need to unlock, they should not even try locking
 	wg.Wait()
 
-	for _, e := range errs {
-		assert.Error(t, e)
+	for _, err := range errs {
+		assert.ErrorIs(t, err, context.Canceled)
 	}
 
 }

@@ -418,12 +418,13 @@ func (s *FieldNavigatorTestSuite) TestEnsureSimpleFieldDocumentFactoryError() {
 
 // Document factory error makes nested EnsureField fail.
 func (s *FieldNavigatorTestSuite) TestEnsureNestedFieldDocumentFactoryError() {
+	errDocFac := fmt.Errorf("document factory error")
 	s.fn.docFac = func(any) (domain.Document, error) {
-		return nil, fmt.Errorf("error")
+		return nil, errDocFac
 	}
 	obj := data.M{}
 	fields, err := s.fn.EnsureField(obj, "yes", "indeed")
-	s.Error(err)
+	s.ErrorIs(err, errDocFac)
 	s.Nil(fields)
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
 )
@@ -271,7 +272,7 @@ func (s *ComparerTestSuite) TestErrorOnUnknownPair() {
 
 	for _, tc := range testCases {
 		_, err := s.c.Compare(tc.arg1, tc.arg2)
-		s.Error(err)
+		s.ErrorAs(err, &domain.ErrCannotCompare{})
 	}
 }
 

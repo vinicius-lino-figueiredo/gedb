@@ -3,7 +3,6 @@ package cursor
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/decoder"
@@ -49,7 +48,7 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 
 // Err implements domain.Cursor.
 func (c *Cursor) Err() error {
-	return c.ctx.Err()
+	return context.Cause(c.ctx)
 }
 
 // Scan implements domain.Cursor.
@@ -62,17 +61,19 @@ func (c *Cursor) Scan(ctx context.Context, target any) error {
 	default:
 	}
 	if c.index < 0 {
-		return fmt.Errorf("called Scan before calling Next")
+		return domain.ErrScanBeforeNext
 	}
 	return c.dec.Decode(c.data[c.index], target)
 }
 
 // Close implements domain.Cursor.
 func (c *Cursor) Close() error {
-	if err := c.ctx.Err(); err != nil {
-		return err
+	select {
+	case <-c.ctx.Done():
+		return context.Cause(c.ctx)
+	default:
 	}
-	c.cancel(fmt.Errorf("cursor is closed"))
+	c.cancel(domain.ErrCursorClosed)
 	c.data = nil
 	return nil
 }

@@ -430,12 +430,13 @@ func (s *PersistenceTestSuite) TestPersistNewStateFailWriting() {
 func (s *PersistenceTestSuite) TestTreatRawStreamFailScan() {
 	r := new(readerMock)
 
+	errRead := fmt.Errorf("read error")
 	r.On("Read", mock.Anything).
-		Return(0, fmt.Errorf("error")).
+		Return(0, errRead).
 		Once()
 
 	doc, index, err := p.TreatRawStream(context.Background(), r)
-	s.Error(err)
+	s.ErrorIs(err, errRead)
 	s.Nil(doc)
 	s.Nil(index)
 }
@@ -532,7 +533,12 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 	ctx := context.Background()
 
 	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrCorruptFiles{
+		CorruptionRate:        0.5,
+		CorruptItems:          1,
+		DataLength:            2,
+		CorruptAlertThreshold: 0,
+	})
 	s.Nil(docs)
 	s.Nil(indexes)
 
@@ -579,7 +585,12 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 
 	ctx := context.Background()
 	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrCorruptFiles{
+		CorruptionRate:        1,
+		CorruptItems:          1,
+		DataLength:            1,
+		CorruptAlertThreshold: 0,
+	})
 	s.Nil(docs)
 	s.Nil(indexes)
 
@@ -625,7 +636,12 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 
 	ctx := context.Background()
 	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrCorruptFiles{
+		CorruptionRate:        1,
+		CorruptItems:          1,
+		DataLength:            1,
+		CorruptAlertThreshold: 0,
+	})
 	s.Nil(docs)
 	s.Nil(indexes)
 
@@ -696,12 +712,13 @@ func (s *PersistenceTestSuite) TestFailEnsureParentDirectory() {
 	s.NoError(err)
 	p = per.(*Persistence)
 
+	errEnsure := fmt.Errorf("ensure error")
 	st.On("EnsureParentDirectoryExists", s.testDb, p.dirMode).
-		Return(fmt.Errorf("error")).
+		Return(errEnsure).
 		Once()
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(docs)
 	s.Nil(indexes)
 }
@@ -723,12 +740,13 @@ func (s *PersistenceTestSuite) TestFailEnsureDatafileIntegrity() {
 	st.On("EnsureParentDirectoryExists", s.testDb, p.dirMode).
 		Return(nil).
 		Once()
+	errEnsure := fmt.Errorf("ensure error")
 	st.On("EnsureDatafileIntegrity", s.testDb, p.fileMode).
-		Return(fmt.Errorf("error")).
+		Return(errEnsure).
 		Once()
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errEnsure)
 	s.Nil(docs)
 	s.Nil(indexes)
 }
@@ -753,13 +771,13 @@ func (s *PersistenceTestSuite) TestFailReadFile() {
 	st.On("EnsureDatafileIntegrity", s.testDb, p.fileMode).
 		Return(nil).
 		Once()
-
+	errReadFileStream := fmt.Errorf("read file stream error")
 	st.On("ReadFileStream", s.testDb, p.fileMode).
-		Return(io.NopCloser(nil), fmt.Errorf("error")).
+		Return(io.NopCloser(nil), errReadFileStream).
 		Once()
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errReadFileStream)
 	s.Nil(docs)
 	s.Nil(indexes)
 }
@@ -917,8 +935,12 @@ func (s *PersistenceTestSuite) TestInMemoryBadFilenameNoError() {
 
 // Creating a persistent datastore with a bad filename will cause an error
 func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
-	_, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "bad.db~")))
-	s.Error(err)
+	datafileName := filepath.Join(s.testDbDir, "bad.db~")
+	_, err := NewPersistence(WithFilename(datafileName))
+	s.ErrorIs(err, domain.ErrDatafileName{
+		Name:   datafileName,
+		Reason: "cannot end with '~', reserved for backup files",
+	})
 }
 
 // If no file stat, ensureDatafileIntegrity creates an empty datafile
@@ -1544,16 +1566,19 @@ func (s *PersistenceTestSuite) TestDropDatabaseFailCheckFileExists() {
 	s.NoError(err)
 	p = per.(*Persistence)
 
+	errExists := fmt.Errorf("exists error")
 	st.On("Exists", s.testDb).
-		Return(false, fmt.Errorf("error")).
+		Return(false, errExists).
 		Once()
 
 	err = p.DropDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errExists)
 }
 
 // Should not be able to persist data if serialization fails.
 func (s *PersistenceTestSuite) TestPersistSerializeError() {
+
+	errSerialize := fmt.Errorf("serialize error")
 
 	original := p.serializer
 	ser := serializeFunc(func(ctx context.Context, a any) ([]byte, error) {
@@ -1565,7 +1590,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 			shouldFail = t.IndexCreated.FieldName == "shouldFail"
 		}
 		if shouldFail {
-			return nil, fmt.Errorf("error")
+			return nil, errSerialize
 		}
 		return original.Serialize(ctx, a)
 	})
@@ -1588,7 +1613,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 	s.NoError(os.WriteFile(s.testDb, []byte(docsFile), p.fileMode))
 
 	docs, indexes, err := p.LoadDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errSerialize)
 	s.Nil(docs)
 	s.Nil(indexes)
 
@@ -1602,7 +1627,7 @@ func (s *PersistenceTestSuite) TestPersistSerializeError() {
 	s.NoError(os.WriteFile(s.testDb, []byte(indexesFile), p.fileMode))
 
 	docs, indexes, err = p.LoadDatabase(context.Background())
-	s.Error(err)
+	s.ErrorIs(err, errSerialize)
 	s.Nil(docs)
 	s.Nil(indexes)
 
@@ -1620,13 +1645,13 @@ func (s *PersistenceTestSuite) TestPersistCachedDatabaseFailWriting() {
 	)
 	s.NoError(err)
 	p = per.(*Persistence)
-
+	errCrashSafeWrite := fmt.Errorf("crash safe write error")
 	st.On("CrashSafeWriteFileLines", s.testDb, [][]byte(nil), p.dirMode, p.fileMode).
-		Return(fmt.Errorf("error")).
+		Return(errCrashSafeWrite).
 		Once()
 
 	err = p.PersistCachedDatabase(context.Background(), nil, nil)
-	s.Error(err)
+	s.ErrorIs(err, errCrashSafeWrite)
 
 }
 

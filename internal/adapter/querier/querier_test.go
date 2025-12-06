@@ -151,14 +151,16 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 			WithFieldNavigator(fnm),
 			WithMatcher(matcher.NewMatcher()),
 		).(*Querier)
+
+		errGetAddr := fmt.Errorf("get address error")
 		fnm.On("GetAddress", "a").
-			Return(([]string)(nil), fmt.Errorf("error")).
+			Return(([]string)(nil), errGetAddr).
 			Once()
 		docs, err := s.q.Query(
 			data,
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
-		s.Error(err)
+		s.ErrorIs(err, errGetAddr)
 		s.Nil(docs)
 		fnm.AssertExpectations(s.T())
 	})
@@ -168,26 +170,29 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
+		errGetField := fmt.Errorf("get field error")
 		fnm.On("GetField", data[1], []string{"a"}).
-			Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+			Return(([]domain.GetSetter)(nil), false, errGetField).
 			Once()
 		s.q.fn = fnm
 		docs, err := s.q.Query(
 			data,
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
-		s.Error(err)
+		s.ErrorIs(err, errGetField)
 		s.Nil(docs)
 		fnm.AssertExpectations(s.T())
 	})
 
 	s.Run("GetFieldB", func() {
 		fnm := new(fieldNavigatorMock)
+
+		errGetField := fmt.Errorf("get field error")
 		fnm.On("GetAddress", "a").
 			Return([]string{"a"}, nil).
 			Once()
 		fnm.On("GetField", data[0], []string{"a"}).
-			Return(([]domain.GetSetter)(nil), false, fmt.Errorf("error")).
+			Return(([]domain.GetSetter)(nil), false, errGetField).
 			Once()
 		fnm.On("GetField", data[1], []string{"a"}).
 			Return(([]domain.GetSetter)(nil), false, nil).
@@ -197,7 +202,7 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 			data,
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
-		s.Error(err)
+		s.ErrorIs(err, errGetField)
 		s.Nil(docs)
 		fnm.AssertExpectations(s.T())
 	})
@@ -309,7 +314,7 @@ func (s *QuerierTestSuite) TestFailMatching() {
 		M{"error": []string{}},
 	}
 	docs, err := s.q.Query(data, domain.WithQuery(M{"error": []int{}}))
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(docs)
 }
 
@@ -670,7 +675,7 @@ func (s *QuerierTestSuite) TestFailSorting() {
 		M{"error": nil},
 	}
 	docs, err := s.q.Query(data, domain.WithQuerySort(S{{Key: "error", Order: 1}}))
-	s.Error(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(docs)
 }
 

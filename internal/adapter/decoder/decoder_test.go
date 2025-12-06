@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 )
 
@@ -140,16 +141,17 @@ func (s *DecoderTestSuite) TestWeaklyTyped() {
 
 	var tgt IncompatibleStruct
 
-	s.Error(s.d.Decode(M{"number": -1}, &tgt))
-	s.Error(s.d.Decode(M{"boolean": 1}, &tgt))
-	s.Error(s.d.Decode(M{"text": 123}, &tgt))
+	s.ErrorAs(s.d.Decode(M{"number": -1}, &tgt), &domain.ErrDecode{})
+	s.ErrorAs(s.d.Decode(M{"boolean": 1}, &tgt), &domain.ErrDecode{})
+	s.ErrorAs(s.d.Decode(M{"text": 123}, &tgt), &domain.ErrDecode{})
 }
 
 func (s *DecoderTestSuite) TestInvalidPointer() {
 	type InvalidPointerStruct struct{}
 
 	var tgt InvalidPointerStruct
-	s.Error(s.d.Decode(M{}, tgt))
+	err := s.d.Decode(M{}, tgt)
+	s.ErrorIs(err, domain.ErrNonPointer)
 }
 
 func TestDecoderTestSuite(t *testing.T) {

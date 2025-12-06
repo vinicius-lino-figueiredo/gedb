@@ -2,6 +2,7 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"maps"
@@ -14,6 +15,15 @@ import (
 	goreflect "github.com/goccy/go-reflect"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
+)
+
+var (
+	// ErrMapKeyType is returned when the user atempts to use a map with a
+	// key type that's not string.
+	ErrMapKeyType = errors.New("invalid key type for map, should be string")
+	// ErrNonObject is returned when user provides a non-structured type to
+	// [NewDocument], which only accepts maps and structs.
+	ErrNonObject = errors.New("received data is not an object")
 )
 
 const TagName = "gedb"
@@ -47,7 +57,10 @@ func NewDocument(in any) (domain.Document, error) {
 		k = r.Kind()
 	}
 	if k != goreflect.Struct && k != goreflect.Map {
-		return nil, fmt.Errorf("expected map or struct, got %s", r.Type().String())
+		return nil, domain.ErrDocumentType{Reason: fmt.Sprintf(
+			"expected map or struct, got %s", r.Type().String(),
+		)}
+
 	}
 	doc, err := parseReflect(r)
 	if err != nil {
@@ -175,7 +188,7 @@ func parseStruct(r goreflect.Value) (domain.Document, error) {
 
 func parseMapReflect(v goreflect.Value) (domain.Document, error) {
 	if v.Type().Key() != stringTyp {
-		return nil, fmt.Errorf("parseMap: invalid map key type %s, only string keys are supported", v.Type().Key().String())
+		return nil, ErrMapKeyType
 	}
 	res := make(M, v.Len())
 	for _, k := range v.MapKeys() {
@@ -318,7 +331,7 @@ func (d *M) UnmarshalJSON(input []byte) error {
 	}
 	obj, ok := v.(M)
 	if !ok {
-		return fmt.Errorf("expected Document, received %T", v)
+		return ErrNonObject
 	}
 	*d = obj
 	return nil

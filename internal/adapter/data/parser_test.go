@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -377,12 +378,15 @@ var pallValueCompact = stripWhitespace(pallValueIndent)
 
 var allValueCompact = stripWhitespace(allValueIndent)
 
-var unmarshalTests = []struct {
+type testCase struct {
 	CaseName string
 	in       string
 	out      any
-	err      bool
-}{
+	errIs    error
+	errAs    error
+}
+
+var validCases = []testCase{
 	// Basic primitive values
 	{CaseName: "bool_true", in: `true`, out: true},
 	{CaseName: "int_1", in: `1`, out: 1.0},
@@ -395,7 +399,6 @@ var unmarshalTests = []struct {
 	{CaseName: "escaped_url", in: `"http:\/\/"`, out: "http://"},
 	{CaseName: "unicode_clef", in: `"g-clef: \uD834\uDD1E"`, out: "g-clef: \U0001D11E"},
 	{CaseName: "invalid_unicode", in: `"invalid: \uD834x\uDD1E"`, out: "invalid: �x�"},
-	{CaseName: "invalid_unicode_hex", in: `"invalid \uzzzzzz"`, err: true},
 	{CaseName: "colon_string", in: `"x:y"`, out: "x:y"},
 	{CaseName: "base64_string", in: `"AQID"`, out: "AQID"},
 	{CaseName: "numeric_string", in: `"5"`, out: "5"},
@@ -508,46 +511,78 @@ var unmarshalTests = []struct {
 	{CaseName: "all_pointer_values_indented", in: pallValueIndent, out: pallValueIndentMap},
 	{CaseName: "all_values_compact", in: allValueCompact, out: allValueIndentMap},
 	{CaseName: "all_pointer_values_compact", in: pallValueCompact, out: pallValueIndentMap},
+}
+
+var invalidCases = []testCase{
+	// String value (invalid unicode)
+	{CaseName: "invalid_unicode_hex", in: `"invalid \uzzzzzz"`, errIs: ErrInvalidUTF8Char},
 
 	// Syntax error cases
-	{CaseName: "incomplete_object_missing_value", in: `{"X": "foo", "Y"}`, err: true},
-	{CaseName: "array_invalid_operator", in: `[1, 2, 3+]`, err: true},
-	{CaseName: "object_invalid_number", in: `{"X":12x}`, err: true},
-	{CaseName: "array_missing_closing_bracket", in: `[2, 3`, err: true},
-	{CaseName: "object_incomplete_negative", in: `{"F3": -}`, err: true},
-	{CaseName: "array_wrong_closing_brace", in: `[1,2,true,4,5}`, err: true},
-	{CaseName: "invalid_json_text", in: `invalid`, err: true},
-	{CaseName: "number_as_key", in: `{1:2}`, err: true},
-	{CaseName: "unclosed_object", in: `{"key":"value"`, err: true},
-	{CaseName: "unterminated_bool", in: `{"key":fals`, err: true},
-	{CaseName: "control_char_in_string", in: "\"control\x00\"", err: true},
+	{CaseName: "incomplete_object_missing_value", in: `{"X": "foo", "Y"}`, errIs: ErrNoColon},
+	{CaseName: "array_invalid_operator", in: `[1, 2, 3+]`, errIs: ErrInvalidNumber},
+	{CaseName: "object_invalid_number", in: `{"X":12x}`, errIs: ErrNoComma},
+	{CaseName: "array_missing_closing_bracket", in: `[2, 3`, errIs: io.ErrUnexpectedEOF},
+	{CaseName: "object_incomplete_negative", in: `{"F3": -}`, errIs: ErrInvalidNumber},
+	{CaseName: "array_wrong_closing_brace", in: `[1,2,true,4,5}`, errIs: ErrNoComma},
+	{CaseName: "invalid_json_text", in: `invalid`, errIs: ErrInvalidNumber},
+	{CaseName: "number_as_key", in: `{1:2}`, errIs: ErrExpectedString},
+	{CaseName: "unclosed_object", in: `{"key":"value"`, errIs: io.ErrUnexpectedEOF},
+	{CaseName: "unterminated_bool", in: `{"key":fals`, errIs: ErrInvalidLiteral{Value: "fals"}},
+	{CaseName: "control_char_in_string", in: "\"control\x00\"", errIs: ErrInvalidControlChar{Char: '\x00'}},
 
 	// Raw value errors (control characters)
-	{CaseName: "control_char_before_number", in: "\x01 42", err: true},
-	{CaseName: "control_char_after_number", in: " 42 \x01", err: true},
-	{CaseName: "control_char_before_bool", in: "\x01 true", err: true},
-	{CaseName: "control_char_after_bool", in: " false \x01", err: true},
-	{CaseName: "control_char_before_float", in: "\x01 1.2", err: true},
-	{CaseName: "control_char_after_float", in: " 3.4 \x01", err: true},
-	{CaseName: "control_char_before_string", in: "\x01 \"string\"", err: true},
-	{CaseName: "control_char_after_string", in: " \"string\" \x01", err: true},
-	{CaseName: "unknown_escape", in: `"\j"`, err: true},
-	{CaseName: "incomplete_escape", in: `"a\"`, err: true},
-	{CaseName: "empty_content", in: ``, err: true},
+	{CaseName: "control_char_before_number", in: "\x01 42", errIs: ErrInvalidNumber},
+	{CaseName: "control_char_after_number", in: " 42 \x01", errIs: ErrTrailingData},
+	{CaseName: "control_char_before_bool", in: "\x01 true", errIs: ErrInvalidNumber},
+	{CaseName: "control_char_after_bool", in: " false \x01", errIs: ErrTrailingData},
+	{CaseName: "control_char_before_float", in: "\x01 1.2", errIs: ErrInvalidNumber},
+	{CaseName: "control_char_after_float", in: " 3.4 \x01", errIs: ErrTrailingData},
+	{CaseName: "control_char_before_string", in: "\x01 \"string\"", errIs: ErrInvalidNumber},
+	{CaseName: "control_char_after_string", in: " \"string\" \x01", errIs: ErrTrailingData},
+	{CaseName: "unknown_escape", in: `"\j"`, errIs: ErrUnknwownEscapeChar{Char: 'j'}},
+	{CaseName: "incomplete_escape", in: `"a\"`, errIs: ErrUnterminatedString},
+	{CaseName: "empty_content", in: ``, errIs: io.ErrUnexpectedEOF},
 }
 
 func TestParser(t *testing.T) {
-	for _, tc := range unmarshalTests {
+	for _, tc := range validCases {
 		t.Run(tc.CaseName, func(t *testing.T) {
 			p := parser{data: []byte(tc.in), n: len(tc.in)}
+
 			res, err := p.parse()
-			if jsonerr := json.Unmarshal([]byte(tc.in), new(any)); jsonerr != nil {
-				assert.Error(t, err, tc.in)
-			} else {
-				assert.NoError(t, err, tc.in)
-				assert.Equal(t, tc.out, res)
-			}
+			assert.NoError(t, err, tc.in)
+			assert.Equal(t, tc.out, res)
+
+			jsonerr := json.Unmarshal([]byte(tc.in), new(any))
+			assert.NoError(t, jsonerr, tc.in)
+
 		})
 	}
+	for _, tc := range invalidCases {
+		t.Run(tc.CaseName, func(t *testing.T) {
+			p := parser{data: []byte(tc.in), n: len(tc.in)}
 
+			res, err := p.parse()
+			assert.ErrorIs(t, err, tc.errIs)
+			assert.Nil(t, res)
+
+			jsonerr := json.Unmarshal([]byte(tc.in), new(any))
+			assert.Error(t, jsonerr, tc.in)
+		})
+	}
+}
+
+func TestErrorMessages(t *testing.T) {
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{ErrInvalidLiteral{Value: "xyz"}, `invalid literal "xyz"`},
+		{ErrUnknwownEscapeChar{Char: 'x'}, `unknown escape char, 'x'`},
+		{ErrInvalidControlChar{Char: '\x01'}, `invalid control char, '\x01'`},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, tt.err.Error())
+	}
 }

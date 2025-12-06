@@ -3,6 +3,8 @@ package index
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -221,6 +223,9 @@ DocInsertion:
 			}
 
 			if err = i.Tree.Insert(k, d); err != nil {
+				if e := new(bst.ErrViolated); errors.As(err, &e) {
+					err = fmt.Errorf("%w: %w", domain.ErrConstraintViolated, err)
+				}
 				break DocInsertion
 			}
 

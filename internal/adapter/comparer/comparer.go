@@ -5,7 +5,6 @@ package comparer
 
 import (
 	"cmp"
-	"fmt"
 	"math/big"
 	"slices"
 	"time"
@@ -90,7 +89,7 @@ func (c *Comparer) Compare(a any, b any) (int, error) {
 		return c, err
 	}
 
-	return 0, fmt.Errorf("cannot compare unexpected types %T and %T", a, b)
+	return 0, domain.ErrCannotCompare{A: a, B: b}
 }
 
 func (c *Comparer) checkUndefined(a, b any) (int, bool, error) {

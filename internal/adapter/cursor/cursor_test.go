@@ -82,7 +82,7 @@ func (s *CursorTestSuite) TestReadClosed() {
 
 	s.False(cur.Next())
 
-	s.Error(cur.Err())
+	s.ErrorIs(cur.Err(), domain.ErrCursorClosed)
 }
 
 func (s *CursorTestSuite) TestCreateClosedContext() {
@@ -90,7 +90,7 @@ func (s *CursorTestSuite) TestCreateClosedContext() {
 	cancel()
 
 	cur, err := NewCursor(ctx, s.data)
-	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
 	s.Nil(cur)
 }
 
@@ -127,7 +127,7 @@ func (s *CursorTestSuite) TestCloseBeforeScan() {
 		<-ctx.Done()
 
 		err := cur.Scan(context.Background(), &obj)
-		s.Error(err)
+		s.ErrorIs(err, context.Canceled)
 		count++
 	}
 	s.Equal(1, count)
@@ -148,7 +148,7 @@ func (s *CursorTestSuite) TestScanClosedContext() {
 	for cur.Next() {
 		var obj Obj
 		err := cur.Scan(ctx, &obj)
-		s.Error(err)
+		s.ErrorIs(err, context.Canceled)
 		count++
 	}
 	s.Equal(1000, count)
@@ -161,7 +161,8 @@ func (s *CursorTestSuite) TestScanWithoutNext() {
 	s.NoError(err)
 	s.NotNil(cur)
 
-	s.Error(cur.Scan(context.Background(), new(struct{})))
+	err = cur.Scan(context.Background(), new(struct{}))
+	s.ErrorIs(err, domain.ErrScanBeforeNext)
 }
 
 func (s *CursorTestSuite) TestCloseClosed() {
@@ -172,7 +173,7 @@ func (s *CursorTestSuite) TestCloseClosed() {
 	s.NotNil(cur)
 
 	s.NoError(cur.Close())
-	s.Error(cur.Close())
+	s.ErrorIs(cur.Close(), domain.ErrCursorClosed)
 }
 
 func (s *CursorTestSuite) TestCustomDecoder() {

@@ -4,8 +4,6 @@ package serializer
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -87,7 +85,7 @@ func (s *Serializer) Serialize(ctx context.Context, value any) ([]byte, error) {
 
 func (s *Serializer) checkKey(k string, v any) error {
 	if strings.ContainsRune(k, '.') {
-		return errors.New("field names cannot contain a '.'")
+		return domain.ErrFieldName{Field: k, Reason: "cannot contain '.'"}
 	}
 	if !strings.HasPrefix(k, "$") {
 		return nil
@@ -104,7 +102,7 @@ func (s *Serializer) checkKey(k string, v any) error {
 	default:
 	}
 	if foundErr {
-		return fmt.Errorf("field names cannot start with the $ character")
+		return domain.ErrFieldName{Field: k, Reason: "cannot start with '$'"}
 	}
 	return nil
 }

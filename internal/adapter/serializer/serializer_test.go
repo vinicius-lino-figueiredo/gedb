@@ -128,7 +128,7 @@ func (s *SerializerTestSuite) TestRejectBadDollarFields() {
 
 	for _, v := range a {
 		_, err := s.s.Serialize(ctx, v)
-		s.Error(err)
+		s.ErrorAs(err, &domain.ErrFieldName{})
 	}
 
 	for _, v := range e {
@@ -175,17 +175,20 @@ func (s *SerializerTestSuite) TestContext() {
 // Serialization should not succeed if document factory fails at least once.
 func (s *SerializerTestSuite) TestInvalidDocFactory() {
 	count := 0
+
+	errDocFac := errors.New("errDocFac error")
+
 	// failing on second call so it can fail at nested doc in copyAny
 	s.s.documentFactory = func(any) (domain.Document, error) {
 		if count == 0 {
 			count++
 			return data.M{}, nil
 		}
-		return nil, errors.New("some error")
+		return nil, errDocFac
 	}
 	a := data.M{"test": []any{data.M{}}}
 	b, err := s.s.Serialize(ctx, a)
-	s.Error(err)
+	s.ErrorIs(err, errDocFac)
 	s.Nil(b)
 }
 

@@ -2,6 +2,9 @@
 package decoder
 
 import (
+	"fmt"
+
+	"github.com/goccy/go-reflect"
 	"github.com/mitchellh/mapstructure"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
@@ -16,6 +19,12 @@ func NewDecoder() domain.Decoder {
 
 // Decode implements domain.Decoder.
 func (d *Decoder) Decode(source any, target any) error {
+	if target == nil {
+		return domain.ErrTargetNil
+	}
+	if reflect.ValueNoEscapeOf(target).Kind() != reflect.Ptr {
+		return domain.ErrNonPointer
+	}
 	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName: "gedb",
 		Result:  target,
@@ -23,5 +32,9 @@ func (d *Decoder) Decode(source any, target any) error {
 	if err != nil {
 		return err
 	}
-	return dec.Decode(source)
+	if err := dec.Decode(source); err != nil {
+		errDec := domain.ErrDecode{Source: source, Target: target}
+		return fmt.Errorf("%w: %w", errDec, err)
+	}
+	return nil
 }

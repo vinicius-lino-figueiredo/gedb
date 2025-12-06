@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
 type MTestSuite struct {
@@ -239,7 +240,7 @@ func (s *MTestSuite) TestNonStringKeyMap() {
 		},
 	}
 	_, err := NewDocument(obj)
-	s.Error(err)
+	s.ErrorIs(err, ErrMapKeyType)
 }
 
 func (s *MTestSuite) TestNilArg() {
@@ -250,7 +251,9 @@ func (s *MTestSuite) TestNilArg() {
 
 func (s *MTestSuite) TestNonStructArg() {
 	_, err := NewDocument(1)
-	s.Error(err)
+	s.ErrorIs(err, domain.ErrDocumentType{
+		Reason: "expected map or struct, got int",
+	})
 }
 
 func (s *MTestSuite) TestFastPath() {
@@ -313,7 +316,7 @@ func (s *MTestSuite) TestKeepChannelRef() {
 func (s *MTestSuite) TestInvalidStructField() {
 	obj := struct{ A map[int]int }{A: map[int]int{}}
 	_, err := NewDocument(obj)
-	s.Error(err)
+	s.ErrorIs(err, ErrMapKeyType)
 }
 
 func (s *MTestSuite) TestID() {
@@ -413,7 +416,7 @@ func (s *MTestSuite) TestUnmarshalInvalidJSON() {
 	// will not even reach parse() if using json.Unmarshal. Calling it
 	// directly allows me to pass an invalid json.
 	err := m.UnmarshalJSON([]byte(j))
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidNumber)
 }
 
 func (s *MTestSuite) TestUnmarshalNonObjectJSON() {
@@ -421,7 +424,7 @@ func (s *MTestSuite) TestUnmarshalNonObjectJSON() {
 
 	m := make(M)
 	err := json.Unmarshal([]byte(j), &m)
-	s.Error(err)
+	s.ErrorIs(err, ErrNonObject)
 }
 
 func TestMTestSuite(t *testing.T) {

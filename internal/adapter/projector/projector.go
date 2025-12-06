@@ -2,11 +2,17 @@
 package projector
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/fieldnavigator"
+)
+
+var (
+	// ErrMixOmitType is returned when user provides a projection object
+	// with mixed "omit" and "show" operators.
+	ErrMixOmitType = errors.New("can't both keep and omit fields except for _id")
 )
 
 // Projector implements [domain.Projector].
@@ -48,7 +54,7 @@ func (q *Projector) Project(docs []domain.Document, proj map[string]uint8) ([]do
 			oneFields++
 		}
 		if oneFields > 0 && oneFields != fields {
-			return nil, fmt.Errorf("can't both keep and omit fields except for _id")
+			return nil, ErrMixOmitType
 		}
 		addr, err := q.fn.GetAddress(field)
 		if err != nil {

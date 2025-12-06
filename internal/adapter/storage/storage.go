@@ -3,11 +3,19 @@
 package storage
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
+)
+
+var (
+	// ErrFlush is returned by [Storage] when data could not be ensured in
+	// disk.
+	ErrFlush = errors.New("failed data flush")
 )
 
 var osSpecificEnsureDir = func(o osOps, dir string, mode os.FileMode) error {
@@ -134,13 +142,13 @@ func (d *Storage) flushToStorage(fileName string, isDir bool, mode os.FileMode) 
 
 	fileHandle, err := d.osOpts.OpenFile(fileName, flags, mode)
 	if err != nil {
-		return domain.ErrFlushToStorage{ErrorOnFsync: err}
+		return fmt.Errorf("%w: %w", ErrFlush, err)
 	}
 
 	defer fileHandle.Close()
 
 	if err := osSpecificSync(fileHandle, isDir); err != nil {
-		return domain.ErrFlushToStorage{ErrorOnFsync: err}
+		return fmt.Errorf("%w: %w", ErrFlush, err)
 	}
 
 	return nil
