@@ -126,7 +126,7 @@ func parseReflect(r goreflect.Value) (any, error) {
 		}
 		fallthrough
 	case goreflect.Array:
-		return parseList(r), nil
+		return parseList(r)
 	case goreflect.Struct:
 		if r.Type() == timeTyp {
 			return r.Interface(), nil
@@ -227,13 +227,17 @@ func parseField(r goreflect.Value, typ goreflect.StructField) (*field, error) {
 	return &field{name: name, value: value}, nil
 }
 
-func parseList(r goreflect.Value) any {
+func parseList(r goreflect.Value) (any, error) {
 	length := r.Len()
 	res := make([]any, length)
 	for i := range length {
-		res[i] = r.Index(i).Interface()
+		v, err := parseReflect(r.Index(i))
+		if err != nil {
+			return nil, err
+		}
+		res[i] = v
 	}
-	return res
+	return res, nil
 }
 
 func isNullable(t goreflect.Type) bool {
