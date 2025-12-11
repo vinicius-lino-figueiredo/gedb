@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/storage"
 )
 
 func main() {

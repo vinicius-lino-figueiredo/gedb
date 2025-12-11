@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/persistence"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/storage"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/persistence"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/storage"
 )
 
 func main() {

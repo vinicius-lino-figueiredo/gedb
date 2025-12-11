@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/comparer"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/hasher"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/hasher"
 )
 
 type hasherMock struct{ mock.Mock }

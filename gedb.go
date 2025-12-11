@@ -6,8 +6,8 @@
 package gedb
 
 import (
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/datastore"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
-	"github.com/vinicius-lino-figueiredo/gedb/internal/adapter/datastore"
 )
 
 // GEDB is the main interface for interacting with the embedded database.
