@@ -188,7 +188,7 @@ func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (
 	return docs, indexes, nil
 }
 
-// if doc is a valid Index record, add or remove from the map; if not, ignore
+// if doc is a valid Index record, add or remove from the map; if not, ignore.
 func (p *Persistence) addOrDeleteIndex(doc domain.Document, m map[string]domain.IndexDTO) error {
 	if d := doc.D("$$indexCreated"); d != nil && d.Get("fieldName") != nil {
 		var ni domain.IndexDTO
@@ -208,7 +208,7 @@ func (p *Persistence) addOrDeleteIndex(doc domain.Document, m map[string]domain.
 	return nil
 }
 
-// if doc is a valid document declaration, add to the map; if not, ignore
+// if doc is a valid document declaration, add to the map; if not, ignore.
 func (p *Persistence) addOrDeleteDoc(doc domain.Document, m docMap) error {
 	comp, err := p.comparer.Compare(doc.Get("$$deleted"), true)
 	if err != nil {

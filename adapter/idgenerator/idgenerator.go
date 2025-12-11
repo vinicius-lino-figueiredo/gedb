@@ -9,12 +9,12 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// IDGenerator implements [domain.IDGenerator]
+// IDGenerator implements [domain.IDGenerator].
 type IDGenerator struct {
 	reader io.Reader
 }
 
-// NewIDGenerator implements [domain.IDGenerator]
+// NewIDGenerator implements [domain.IDGenerator].
 func NewIDGenerator(opts ...Option) domain.IDGenerator {
 	i := IDGenerator{reader: rand.Reader}
 	for _, opt := range opts {

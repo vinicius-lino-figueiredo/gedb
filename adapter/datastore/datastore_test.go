@@ -945,12 +945,15 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": data.M{"$in": 1}}, false)
 		s.NoError(err)
+		s.Len(dt, 0)
 
 		dt, err = s.d.getCandidates(ctx, data.M{"tg": nil}, false)
 		s.NoError(err)
+		s.Len(dt, 4)
 
 		dt, err = s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false)
 		s.NoError(err)
+		s.Len(dt, 2)
 
 		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
@@ -1151,20 +1154,19 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("FailedDocumentFactory", func() {
 		tmGetMock := new(timeGetterMock)
 		s.d.timeGetter = tmGetMock
-		err := s.d.EnsureIndex(
+		s.NoError(s.d.EnsureIndex(
 			ctx,
 			domain.WithEnsureIndexFieldNames("a"),
 			domain.WithEnsureIndexExpiry(time.Nanosecond),
-		)
+		))
 		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
 		s.NotNil(cur)
-		var expected []data.M
+		insertCount := 0
 		for cur.Next() {
-			var m data.M
-			s.NoError(cur.Scan(ctx, &m))
-			expected = append(expected, m)
+			insertCount++
 		}
+		s.Equal(1, insertCount)
 
 		tmGetMock.On("GetTime").Return(time.UnixMilli(10001)).Once()
 
@@ -1187,11 +1189,11 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		tmGetMock := new(timeGetterMock)
 		s.d.timeGetter = tmGetMock
 
-		err := s.d.EnsureIndex(
+		s.NoError(s.d.EnsureIndex(
 			ctx,
 			domain.WithEnsureIndexFieldNames("a"),
 			domain.WithEnsureIndexExpiry(time.Nanosecond),
-		)
+		))
 		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
 		s.NotNil(cur)
@@ -1200,12 +1202,11 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 			Return(time.UnixMilli(10001)).
 			Once()
 
-		var expected []data.M
+		count := 0
 		for cur.Next() {
-			var m data.M
-			s.NoError(cur.Scan(ctx, &m))
-			expected = append(expected, m)
+			count++
 		}
+		s.Equal(1, count)
 
 		errDocFac := fmt.Errorf("doc fac error")
 		var c int

@@ -10,12 +10,11 @@ import (
 
 // Cursor implements domain.Cursor.
 type Cursor struct {
-	data           []domain.Document
-	ctx            context.Context
-	cancel         context.CancelCauseFunc
-	dec            domain.Decoder
-	index          int64
-	fieldNavigator domain.FieldNavigator
+	data   []domain.Document
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	dec    domain.Decoder
+	index  int64
 }
 
 // NewCursor returns a new implementation of Cursor.

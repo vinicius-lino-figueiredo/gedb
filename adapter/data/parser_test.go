@@ -383,7 +383,6 @@ type testCase struct {
 	in       string
 	out      any
 	errIs    error
-	errAs    error
 }
 
 var validCases = []testCase{

@@ -927,13 +927,13 @@ func (s *PersistenceTestSuite) TestSerializers() {
 } // ==== End of 'Serialization hooks' ==== //
 
 // Creating a datastore with in memory as true and a bad filename won't
-// cause an error
+// cause an error.
 func (s *PersistenceTestSuite) TestInMemoryBadFilenameNoError() {
 	_, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "bad.db~")), WithInMemoryOnly(true))
 	s.NoError(err)
 }
 
-// Creating a persistent datastore with a bad filename will cause an error
+// Creating a persistent datastore with a bad filename will cause an error.
 func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
 	datafileName := filepath.Join(s.testDbDir, "bad.db~")
 	_, err := NewPersistence(WithFilename(datafileName))
@@ -943,7 +943,7 @@ func (s *PersistenceTestSuite) TestPersistentBadFilenameError() {
 	})
 }
 
-// If no file stat, ensureDatafileIntegrity creates an empty datafile
+// If no file stat, ensureDatafileIntegrity creates an empty datafile.
 func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
 	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
@@ -974,7 +974,7 @@ func (s *PersistenceTestSuite) TestCreateEmptyFileIfNoFileStat() {
 
 }
 
-// If only datafile stat, ensureDatafileIntegrity will use it
+// If only datafile stat, ensureDatafileIntegrity will use it.
 func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
 	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
@@ -1007,7 +1007,7 @@ func (s *PersistenceTestSuite) TestUseDatafileIfExists() {
 }
 
 // If temp datafile stat and datafile doesn't, ensureDatafileIntegrity
-// will use it (cannot happen except upon first use)
+// will use it (cannot happen except upon first use).
 func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
 	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
@@ -1045,7 +1045,7 @@ func (s *PersistenceTestSuite) TestUseTempDatafileIfExistsUponFirstUse() {
 //
 // Technically it could also mean the write was successful but the
 // rename wasn't, but there is in any case no guarantee that the data in
-// the temp file is whole so we have to discard the whole file
+// the temp file is whole so we have to discard the whole file.
 func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
 	per, err := NewPersistence(WithFilename(filepath.Join(s.testDbDir, "it.db")))
 	s.NoError(err)
@@ -1092,7 +1092,8 @@ func (s *PersistenceTestSuite) TestUseDatafileIfBothExist() {
 	s.NoFileExists(filepath.Join(s.testDbDir, "it.db~"))
 }
 
-// persistCachedDatabase should update the contents of the datafile and leave a clean state
+// persistCachedDatabase should update the contents of the datafile and leave a
+// clean state.
 func (s *PersistenceTestSuite) TestCleanDatafile() {
 	ctx := context.Background()
 	_id := uuid.New().String()
@@ -1138,7 +1139,7 @@ func (s *PersistenceTestSuite) TestCleanDatafile() {
 	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
 }
 
-// After a persistCachedDatabase, there should be no temp or old filename
+// After a persistCachedDatabase, there should be no temp or old filename.
 func (s *PersistenceTestSuite) TestNoTempFileAfterPersistCachedDatabase() {
 	ctx := context.Background()
 	_id := uuid.New().String()
@@ -1172,7 +1173,8 @@ func (s *PersistenceTestSuite) TestNoTempFileAfterPersistCachedDatabase() {
 	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
 }
 
-// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
+// persistCachedDatabase should update the contents of the datafile and leave a
+// clean state even if there is a temp datafile.
 func (s *PersistenceTestSuite) TestCleanDatafileIfTempFileExists() {
 	ctx := context.Background()
 	_id := uuid.New().String()
@@ -1199,7 +1201,8 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfTempFileExists() {
 	s.Regexp(`^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`, d["_id"])
 }
 
-// persistCachedDatabase should update the contents of the datafile and leave a clean state even if there is a temp datafile
+// persistCachedDatabase should update the contents of the datafile and leave a
+// clean state even if there is a temp datafile.
 func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
 	dbFile := filepath.Join(s.testDbDir, "test2.db")
 
@@ -1227,7 +1230,7 @@ func (s *PersistenceTestSuite) TestCleanDatafileIfEmptyTempFileExists() {
 	s.Len(contents, 0)
 }
 
-// Persistence works as expected when everything goes fine
+// Persistence works as expected when everything goes fine.
 func (s *PersistenceTestSuite) TestWorkAsExpected() {
 	dbFile := filepath.Join(s.testDbDir, "test2.db")
 

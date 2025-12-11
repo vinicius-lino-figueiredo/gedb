@@ -1083,9 +1083,9 @@ func (s *IndexesTestSuite) TestUpdate() {
 
 		ctx.On("Done").Return(open).Once()
 		ctx.On("Done").Return((<-chan struct{})(closed)).Once()
-		ctx.On("Err").Return(fmt.Errorf("error")).Once()
+		ctx.On("Err").Return(context.Canceled).Once()
 
-		i.Update(ctx, nil, nil)
+		s.ErrorIs(i.Update(ctx, nil, nil), context.Canceled)
 	})
 
 } // ==== End of 'Update' ==== //
