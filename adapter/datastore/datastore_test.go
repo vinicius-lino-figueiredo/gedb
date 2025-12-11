@@ -35,6 +35,8 @@ import (
 
 var ctx = context.Background()
 
+type M = map[string]any
+
 type timeGetterMock struct{ mock.Mock }
 
 type S = domain.Sort
@@ -249,11 +251,11 @@ func TestDatastoreTestSuite(t *testing.T) {
 	suite.Run(t, new(DatastoreTestSuite))
 }
 
-func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]data.M, error) {
-	var res []data.M
+func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]M, error) {
+	var res []M
 	ctx := context.Background()
 	for cur.Next() {
-		n := make(data.M)
+		n := make(M)
 		if err := cur.Scan(ctx, &n); err != nil {
 			return nil, err
 		}
@@ -309,7 +311,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 0)
 
-		_ = s.insert(s.d.Insert(ctx, map[string]any{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
 
 		cur, err = s.d.Find(ctx, nil)
 		s.NoError(err)
@@ -317,7 +319,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal("ok", docs[0].Get("somedata"))
+		s.Equal("ok", docs[0]["somedata"])
 		s.Contains(docs[0], "_id")
 
 		s.NoError(s.d.LoadDatabase(ctx))
@@ -327,7 +329,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal("ok", docs[0].Get("somedata"))
+		s.Equal("ok", docs[0]["somedata"])
 		s.Contains(docs[0], "_id")
 	})
 
@@ -339,9 +341,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 0)
 
-		_ = s.insert(s.d.Insert(ctx, map[string]any{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, map[string]any{"somedata": "another"}))
-		_ = s.insert(s.d.Insert(ctx, map[string]any{"somedata": "again"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "another"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 		cur, err = s.d.Find(ctx, nil)
 		s.NoError(err)
 		docs, err = s.readCursor(cur)
@@ -364,7 +366,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 		_ = s.insert(s.d.Insert(ctx, obj))
 
-		var res data.M
+		var res M
 		s.NoError(s.d.FindOne(ctx, nil, &res))
 
 		s.Len(res["a"], 3)
@@ -372,38 +374,38 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Equal("ff", res["a"].([]any)[1])
 		s.Equal(42, res["a"].([]any)[2])
 		s.Equal(da, res["date"])
-		s.Equal("b", res["subobj"].(data.M)["a"])
-		s.Equal("c", res["subobj"].(data.M)["b"])
+		s.Equal("b", res["subobj"].(M)["a"])
+		s.Equal("c", res["subobj"].(M)["b"])
 
 	})
 
 	// If an object returned from the DB is modified and refetched, the original value should be found
 	s.Run("CannotModifyFetched", func() {
-		_, err := s.d.insert(ctx, data.M{"a": "something"})
+		_, err := s.d.insert(ctx, M{"a": "something"})
 		s.NoError(err)
 
-		doc := make(data.M)
+		doc := make(M)
 		s.NoError(s.d.FindOne(ctx, nil, &doc))
-		s.Equal("something", doc.Get("a"))
-		doc.Set("a", "another thing")
-		s.Equal("another thing", doc.Get("a"))
+		s.Equal("something", doc["a"])
+		doc["a"] = "another thing"
+		s.Equal("another thing", doc["a"])
 
-		doc2 := make(data.M)
+		doc2 := make(M)
 		s.NoError(s.d.FindOne(ctx, nil, &doc2))
-		s.Equal("something", doc2.Get("a"))
-		doc2.Set("a", "another thing")
-		s.Equal("another thing", doc2.Get("a"))
+		s.Equal("something", doc2["a"])
+		doc2["a"] = "another thing"
+		s.Equal("another thing", doc2["a"])
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		s.Equal("something", docs[0].Get("a"))
+		s.Equal("something", docs[0]["a"])
 	})
 
 	// Cannot insert a doc that has a field beginning with a $ sign
 	s.Run("CannotInsertFieldWithDollarPrefix", func() {
-		_, err := s.d.Insert(ctx, data.M{"$something": "atest"})
+		_, err := s.d.Insert(ctx, M{"$something": "atest"})
 		s.ErrorIs(err, domain.ErrFieldName{
 			Field:  "$something",
 			Reason: "cannot start with '$'",
@@ -412,29 +414,29 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// If an _id is already given when we insert a document, use that instead of generating a random one
 	s.Run("UseCustomIDIfProvided", func() {
-		newDoc := s.insert(s.d.Insert(ctx, data.M{"_id": "test", "stuff": true}))
-		s.Equal(true, newDoc[0].Get("stuff"))
+		newDoc := s.insert(s.d.Insert(ctx, M{"_id": "test", "stuff": true}))
+		s.Equal(true, newDoc[0]["stuff"])
 
-		s.Equal("test", newDoc[0].ID())
+		s.Equal("test", newDoc[0]["_id"])
 
-		_, err := s.d.Insert(ctx, data.M{"_id": "test", "otherstuff": 42})
+		_, err := s.d.Insert(ctx, M{"_id": "test", "otherstuff": 42})
 		e := &bst.ErrViolated{}
 		s.ErrorAs(err, &e)
 	})
 
 	// Modifying the insertedDoc after an insert doesn1t change the copy saved in the database
 	s.Run("InsertReturnsUnmodifiableDocs", func() {
-		newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
-		newDoc[0].Set("hello", "changed")
+		newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
+		newDoc[0]["hello"] = "changed"
 
-		doc := make(data.M)
-		s.NoError(s.d.FindOne(ctx, data.M{"a": 2}, &doc))
+		doc := make(M)
+		s.NoError(s.d.FindOne(ctx, M{"a": 2}, &doc))
 		s.Equal("world", doc["hello"])
 	})
 
 	// Can insert an array of documents at once
 	s.Run("InsertMultipleDocsAtOnce", func() {
-		_docs := []any{data.M{"a": 5, "b": "hello"}, data.M{"a": 42, "b": "world"}}
+		_docs := []any{M{"a": 5, "b": "hello"}, M{"a": 42, "b": "world"}}
 
 		_ = s.insert(s.d.Insert(ctx, _docs...))
 
@@ -444,7 +446,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 
 		s.Len(docs, 2)
-		docMaps := make(map[int]data.M)
+		docMaps := make(map[int]M)
 		for _, value := range docs {
 			docMaps[value["a"].(int)] = value
 		}
@@ -473,10 +475,10 @@ func (s *DatastoreTestSuite) TestInsert() {
 	// If a bulk insert violates a constraint, all changes are rolled back
 	s.Run("RollbackAllIfAnyViolatesConstraint", func() {
 		_docs := []any{
-			data.M{"a": 5, "b": "hello"},
-			data.M{"a": 42, "b": "world"},
-			data.M{"a": 5, "b": "bloup"},
-			data.M{"a": 7},
+			M{"a": 5, "b": "hello"},
+			M{"a": 42, "b": "world"},
+			M{"a": 5, "b": "bloup"},
+			M{"a": 7},
 		}
 
 		s.NoError(s.d.EnsureIndex(ctx,
@@ -512,7 +514,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// If timestampData option is set, a createdAt field is added and persisted
 	s.Run("TimestampDataAddsCreatedAtField", func() {
-		newDoc := data.M{"hello": "world"}
+		newDoc := M{"hello": "world"}
 
 		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
@@ -538,16 +540,16 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Len(insertedDocs, 1)
 		insertedDoc := insertedDocs[0]
 
-		s.Equal(data.M{"hello": "world"}, newDoc)
-		s.Equal("world", insertedDoc.Get("hello"))
+		s.Equal(M{"hello": "world"}, newDoc)
+		s.Equal("world", insertedDoc["hello"])
 		s.Contains(insertedDoc, "createdAt")
 		s.Contains(insertedDoc, "updatedAt")
-		s.Equal(insertedDoc.Get("createdAt"), insertedDoc.Get("updatedAt"))
+		s.Equal(insertedDoc["createdAt"], insertedDoc["updatedAt"])
 		s.Contains(insertedDoc, "_id")
 		s.Len(insertedDoc, 4)
-		s.Equal(beginning, insertedDoc.Get("createdAt"))
+		s.Equal(beginning, insertedDoc["createdAt"])
 
-		insertedDoc.Set("bloup", "another")
+		insertedDoc["bloup"] = "another"
 		s.Len(insertedDoc, 5)
 
 		cur, err = d.Find(ctx, nil)
@@ -556,11 +558,11 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 1)
 
-		s.Equal(data.M{
+		s.Equal(M{
 			"hello":     "world",
-			"_id":       insertedDoc.Get("_id"),
-			"createdAt": insertedDoc.Get("createdAt"),
-			"updatedAt": insertedDoc.Get("updatedAt"),
+			"_id":       insertedDoc["_id"],
+			"createdAt": insertedDoc["createdAt"],
+			"updatedAt": insertedDoc["updatedAt"],
 		}, docs[0])
 
 		s.NoError(d.LoadDatabase(ctx))
@@ -571,17 +573,17 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.NoError(err)
 		s.Len(docs, 1)
 
-		s.Equal(data.M{
+		s.Equal(M{
 			"hello":     "world",
-			"_id":       insertedDoc.Get("_id"),
-			"createdAt": insertedDoc.Get("createdAt"),
-			"updatedAt": insertedDoc.Get("updatedAt"),
+			"_id":       insertedDoc["_id"],
+			"createdAt": insertedDoc["createdAt"],
+			"updatedAt": insertedDoc["updatedAt"],
 		}, docs[0])
 	})
 
 	// If timestampData option not set, don't create a createdAt and a updatedAt field
 	s.Run("IfNotTimestampDataCreatedAtNotAdded", func() {
-		insertedDocs := s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
+		insertedDocs := s.insert(s.d.Insert(ctx, M{"hello": "world"}))
 		s.Len(insertedDocs, 1)
 		insertedDoc := insertedDocs[0]
 
@@ -601,7 +603,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// If timestampData is set but createdAt is specified by user, don't change it
 	s.Run("ShouldNotChangeProvidedCreatedAtField", func() {
-		newDoc := data.M{"hello": "world", "createdAt": time.UnixMilli(234)}
+		newDoc := M{"hello": "world", "createdAt": time.UnixMilli(234)}
 
 		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
@@ -621,8 +623,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Len(insertedDocs, 1)
 		insertedDoc := insertedDocs[0]
 		s.Len(insertedDoc, 4)
-		s.Equal(time.UnixMilli(234), insertedDoc.Get("createdAt"))
-		s.Equal(beginning, insertedDoc.Get("updatedAt"))
+		s.Equal(time.UnixMilli(234), insertedDoc["createdAt"])
+		s.Equal(beginning, insertedDoc["updatedAt"])
 
 		cur, err := d.Find(ctx, nil)
 		s.NoError(err)
@@ -640,7 +642,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// If timestampData is set but updatedAt is specified by user, don't change it
 	s.Run("ShouldNotChangeProvidedCreatedAtField", func() {
-		newDoc := data.M{"hello": "world", "updatedAt": time.UnixMilli(234)}
+		newDoc := M{"hello": "world", "updatedAt": time.UnixMilli(234)}
 
 		// precision below milliseconds and comparison would fail
 		beginning := time.Now().Truncate(time.Millisecond)
@@ -660,8 +662,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Len(insertedDocs, 1)
 		insertedDoc := insertedDocs[0]
 		s.Len(insertedDoc, 4)
-		s.Equal(time.UnixMilli(234), insertedDoc.Get("updatedAt"))
-		s.Equal(beginning, insertedDoc.Get("createdAt"))
+		s.Equal(time.UnixMilli(234), insertedDoc["updatedAt"])
+		s.Equal(beginning, insertedDoc["createdAt"])
 
 		cur, err := d.Find(ctx, nil)
 		s.NoError(err)
@@ -679,9 +681,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 	// Can insert a doc with id 0
 	s.Run("InsertNumberZeroAsID", func() {
-		doc := s.insert(s.d.Insert(ctx, data.M{"_id": 0, "hello": "world"}))
-		s.Equal(0, doc[0].Get("_id"))
-		s.Equal("world", doc[0].Get("hello"))
+		doc := s.insert(s.d.Insert(ctx, M{"_id": 0, "hello": "world"}))
+		s.Equal(0, doc[0]["_id"])
+		s.Equal("world", doc[0]["hello"])
 	})
 
 	s.Run("FailedRemoveFromIndexes", func() {
@@ -725,7 +727,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			Return(errIdxRemove2).
 			Once()
 
-		cur, err := s.d.Insert(ctx, data.M{"a": 1}, data.M{"a": 2})
+		cur, err := s.d.Insert(ctx, M{"a": 1}, M{"a": 2})
 		s.ErrorIs(err, errIdxInsert)
 		s.ErrorIs(err, errIdxRemove)
 		s.ErrorIs(err, errIdxRemove2)
@@ -737,7 +739,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		idGenMock.On("GenerateID", 16).Return("123", nil).Once()
 		s.d.idGenerator = idGenMock
 
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -752,7 +754,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 		idGenMock.On("GenerateID", 16).Return("1234", nil).Once()
 
-		cur, err = s.d.Insert(ctx, data.M{"b": 2})
+		cur, err = s.d.Insert(ctx, M{"b": 2})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -765,7 +767,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.d.idGenerator = idgenerator.NewIDGenerator(
 			idgenerator.WithReader(bytes.NewReader(nil)),
 		)
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.ErrorIs(err, io.EOF)
 		s.Nil(cur)
 	})
@@ -783,7 +785,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			Return([]domain.Document{}, errGetMtch).
 			Once()
 
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.ErrorIs(err, errGetMtch)
 		s.Nil(cur)
 	})
@@ -802,7 +804,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 			Return("", errSerialize).
 			Once()
 
-		cur, err := d.Insert(ctx, data.M{"a": 1})
+		cur, err := d.Insert(ctx, M{"a": 1})
 		s.ErrorIs(err, errSerialize)
 		s.Nil(cur)
 	})
@@ -812,7 +814,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.d.documentFactory = func(any) (domain.Document, error) {
 			return nil, errDocFac
 		}
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.ErrorIs(err, errDocFac)
 		s.Nil(cur)
 	})
@@ -820,24 +822,24 @@ func (s *DatastoreTestSuite) TestInsert() {
 } // ==== End of 'Insert' ==== //
 
 func (s *DatastoreTestSuite) TestCheckDocument() {
-	dollarDate := data.M{
-		"integer":  data.M{"$$date": int(123)},
-		"unsigned": data.M{"$$date": uint(123)},
-		"float32":  data.M{"$$date": float32(123)},
-		"float64":  data.M{"$$date": float64(123)},
+	dollarDate := M{
+		"integer":  M{"$$date": int(123)},
+		"unsigned": M{"$$date": uint(123)},
+		"float32":  M{"$$date": float32(123)},
+		"float64":  M{"$$date": float64(123)},
 	}
 
-	invalidDollarDate := data.M{"string": data.M{"$$date": "invalid"}}
+	invalidDollarDate := M{"string": M{"$$date": "invalid"}}
 
-	deleted := data.M{"$$deleted": true}
+	deleted := M{"$$deleted": true}
 
-	notDeleted := data.M{"$$deleted": false}
+	notDeleted := M{"$$deleted": false}
 
-	indexCreated := data.M{"$$indexCreated": 123}
+	indexCreated := M{"$$indexCreated": 123}
 
-	indexRemoved := data.M{"$$indexRemoved": "abc"}
+	indexRemoved := M{"$$indexRemoved": "abc"}
 
-	containsDot := data.M{"contains.dot": "yes"}
+	containsDot := M{"contains.dot": "yes"}
 
 	cur, err := s.d.Insert(ctx, dollarDate)
 	s.NoError(err)
@@ -881,18 +883,18 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	// Can use an index to get docs with a basic match
 	s.Run("BasicMatch", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"tf": 4}))
+		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4}))
 		s.Len(_doc1, 1)
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6}))
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"tf": 4, "an": "other"}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6}))
+		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
 		s.Len(_doc2, 1)
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 9}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 9}))
 		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "tf": 4}, false)
 		s.NoError(err)
 		s.Len(dt, 2)
-		doc1ID := slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })
+		doc1ID := slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })
 		s.GreaterOrEqual(doc1ID, 0)
-		doc2ID := slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })
+		doc2ID := slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })
 		s.GreaterOrEqual(doc2ID, 0)
 
 		doc1 := dt[doc1ID]
@@ -906,10 +908,10 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("MatchSlice", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
 
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{4}}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{6}}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{"another"}}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": []any{9}}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{4}}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{6}}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{"another"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{9}}))
 
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": []any{}}, false)
 		s.NoError(err)
@@ -921,14 +923,14 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("BasicMatchCompoundIndex", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
 
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 0, "foo": 1}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 0, "foo": 2}))
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 1, "foo": 3}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 1, "foo": 4}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "foo": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
+		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 1, "foo": 3}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 1, "foo": 4}))
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "tg": 1}, false)
 		s.NoError(err)
 		s.Len(dt, 1)
-		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
+		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 		s.Equal(data.M{"_id": doc1.ID(), "tf": 4, "tg": 1, "foo": 3}, doc1)
 	})
 
@@ -936,10 +938,10 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("Match$inOperator", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
 
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4}))
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"tf": 6}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "an": "other"}))
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"tf": 9}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4}))
+		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
+		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": data.M{"$in": 1}}, false)
 		s.NoError(err)
@@ -950,8 +952,8 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		dt, err = s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false)
 		s.NoError(err)
 
-		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
+		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 
 		s.Len(dt, 2)
 
@@ -963,18 +965,18 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("ReturnDatabaseIfNoUsabeIndex", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
 
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"tf": 4}))
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"tf": 6}))
-		_doc3 := s.insert(s.d.Insert(ctx, data.M{"tf": 4, "an": "other"}))
-		_doc4 := s.insert(s.d.Insert(ctx, data.M{"tf": 9}))
+		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4}))
+		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
+		_doc3 := s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
+		_doc4 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
 		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "notf": data.M{"$in": []any{6, 9, 5}}}, false)
 		s.NoError(err)
 
-		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
-		doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0].ID() })]
-		doc4 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc4[0].ID() })]
+		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
+		doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
+		doc4 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc4[0]["_id"] })]
 
 		s.Equal(data.M{"_id": doc1.ID(), "tf": 4}, doc1)
 		s.Equal(data.M{"_id": doc2.ID(), "tf": 6}, doc2)
@@ -986,16 +988,16 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	s.Run("ComparisonMatch", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
 
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4}))
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"tf": 6}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "an": "other"}))
-		_doc4 := s.insert(s.d.Insert(ctx, data.M{"tf": 9}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4}))
+		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
+		_doc4 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
 		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$lte": 9, "$gte": 6}}, false)
 		s.NoError(err)
 
-		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
-		doc4 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc4[0].ID() })]
+		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
+		doc4 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc4[0]["_id"] })]
 
 		s.Len(dt, 2)
 
@@ -1024,7 +1026,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		// will be called on insert and on find
 		timeGetter.On("GetTime").Return(now.Add(300 * time.Millisecond))
 
-		_, err = d.Insert(ctx, data.M{"hello": "world", "exp": now})
+		_, err = d.Insert(ctx, M{"hello": "world", "exp": now})
 		s.NoError(err)
 
 		cur, err := d.Find(ctx, nil)
@@ -1067,11 +1069,11 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		// will be called on insert and on find
 		firstTimestamp := timeGetter.On("GetTime").Return(now).Times(4)
 
-		_, err = d.Insert(ctx, data.M{"hello": "world1", "exp": now})
+		_, err = d.Insert(ctx, M{"hello": "world1", "exp": now})
 		s.NoError(err)
-		_, err = d.Insert(ctx, data.M{"hello": "world2", "exp": now.Add(50 * time.Millisecond)})
+		_, err = d.Insert(ctx, M{"hello": "world2", "exp": now.Add(50 * time.Millisecond)})
 		s.NoError(err)
-		_, err = d.Insert(ctx, data.M{"hello": "world3", "exp": now.Add(100 * time.Millisecond)})
+		_, err = d.Insert(ctx, M{"hello": "world3", "exp": now.Add(100 * time.Millisecond)})
 		s.NoError(err)
 
 		cur, err := d.Find(ctx, nil)
@@ -1121,11 +1123,11 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		// will be called on insert and on find
 		firstTimestamp := timeGetter.On("GetTime").Return(now).Times(4)
 
-		_, err = d.Insert(ctx, data.M{"hello": "world1", "exp": now})
+		_, err = d.Insert(ctx, M{"hello": "world1", "exp": now})
 		s.NoError(err)
-		_, err = d.Insert(ctx, data.M{"hello": "world2", "exp": "not a date"})
+		_, err = d.Insert(ctx, M{"hello": "world2", "exp": "not a date"})
 		s.NoError(err)
-		_, err = d.Insert(ctx, data.M{"hello": "world3"})
+		_, err = d.Insert(ctx, M{"hello": "world3"})
 		s.NoError(err)
 
 		cur, err := d.Find(ctx, nil)
@@ -1154,7 +1156,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 			domain.WithEnsureIndexFieldNames("a"),
 			domain.WithEnsureIndexExpiry(time.Nanosecond),
 		)
-		cur, err := s.d.Insert(ctx, data.M{"a": time.UnixMilli(10000)})
+		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
 		s.NotNil(cur)
 		var expected []data.M
@@ -1190,7 +1192,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 			domain.WithEnsureIndexFieldNames("a"),
 			domain.WithEnsureIndexExpiry(time.Nanosecond),
 		)
-		cur, err := s.d.Insert(ctx, data.M{"a": time.UnixMilli(10000)})
+		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -1222,10 +1224,10 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	s.Run("NotAllIndexedFields", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 0, "foo": 1}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 0, "foo": 2}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "th": 1, "foo": 3}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "th": 1, "foo": 4}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "foo": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "foo": 3}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "th": 1, "foo": 4}))
 		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "th": 1}, false)
 		s.NoError(err)
 		s.Len(dt, 4) // using no index
@@ -1233,10 +1235,10 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	s.Run("CompCandidateIgnoreFieldOfValueDoc", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "tg": 0, "j": 1}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "tg": 0, "j": 2}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 4, "th": 1, "j": 3}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"tf": 6, "th": 1, "j": 4}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "j": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "j": 2}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "j": 3}))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "th": 1, "j": 4}))
 		dt, err := s.d.getCandidates(
 			ctx, data.M{"tf": 4, "tg": data.M{}}, false,
 		)
@@ -1250,9 +1252,9 @@ func (s *DatastoreTestSuite) TestFind() {
 
 	// Can find all documents if an empty query is used
 	s.Run("FindAllDocumentsWithEmptyQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "another", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "another", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
@@ -1262,29 +1264,29 @@ func (s *DatastoreTestSuite) TestFind() {
 		s.Len(docs, 3)
 		somedataValues := make([]any, len(docs))
 		for i, doc := range docs {
-			somedataValues[i] = doc.Get("somedata")
+			somedataValues[i] = doc["somedata"]
 		}
 		s.Contains(somedataValues, "ok")
 		s.Contains(somedataValues, "another")
 		s.Contains(somedataValues, "again")
 
-		var docWithPlus data.M
+		var docWithPlus M
 		for _, doc := range docs {
-			if doc.Get("somedata") == "another" {
+			if doc["somedata"] == "another" {
 				docWithPlus = doc
 				break
 			}
 		}
-		s.Equal("additional data", docWithPlus.Get("plus"))
+		s.Equal("additional data", docWithPlus["plus"])
 	})
 
 	// Can find all documents matching a basic query
 	s.Run("FindDocumentsMatchingBasicQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 
-		cur, err := s.d.Find(ctx, data.M{"somedata": "again"})
+		cur, err := s.d.Find(ctx, M{"somedata": "again"})
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
@@ -1292,12 +1294,12 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		somedataValues := make([]any, len(docs))
 		for i, doc := range docs {
-			somedataValues[i] = doc.Get("somedata")
+			somedataValues[i] = doc["somedata"]
 		}
 		s.NotContains(somedataValues, "ok")
 
 		// Test with query that doesn't match anything
-		cur, err = s.d.Find(ctx, data.M{"somedata": "nope"})
+		cur, err = s.d.Find(ctx, M{"somedata": "nope"})
 		s.NoError(err)
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
@@ -1306,19 +1308,19 @@ func (s *DatastoreTestSuite) TestFind() {
 
 	// Can find one document matching a basic query and return null if none is found
 	s.Run("FindOneDocumentOrReturnNil", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 
-		doc := make(data.M)
-		err := s.d.FindOne(ctx, data.M{"somedata": "ok"}, &doc)
+		doc := make(M)
+		err := s.d.FindOne(ctx, M{"somedata": "ok"}, &doc)
 		s.NoError(err)
 		s.Len(doc, 2)
-		s.Equal("ok", doc.Get("somedata"))
+		s.Equal("ok", doc["somedata"])
 		s.Contains(doc, "_id")
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"somedata": "nope"}, &doc2)
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"somedata": "nope"}, &doc2)
 		// Go implementation returns error instead of nil
 		s.ErrorIs(err, domain.ErrNotFound)
 	})
@@ -1328,52 +1330,52 @@ func (s *DatastoreTestSuite) TestFind() {
 		date1 := time.UnixMilli(1234543)
 		date2 := time.UnixMilli(9999)
 
-		_ = s.insert(s.d.Insert(ctx, data.M{"now": date1, "sth": data.M{"name": "gedb"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"now": date1, "sth": M{"name": "gedb"}}))
 
-		doc := make(data.M)
-		err := s.d.FindOne(ctx, data.M{"now": date1}, &doc)
+		doc := make(M)
+		err := s.d.FindOne(ctx, M{"now": date1}, &doc)
 		s.NoError(err)
-		s.Equal("gedb", doc.Get("sth").(data.M).Get("name"))
+		s.Equal("gedb", doc["sth"].(M)["name"])
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"now": date2}, &doc2)
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"now": date2}, &doc2)
 		s.ErrorIs(err, domain.ErrNotFound)
 
-		doc3 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"sth": data.M{"name": "gedb"}}, &doc3)
+		doc3 := make(M)
+		err = s.d.FindOne(ctx, M{"sth": M{"name": "gedb"}}, &doc3)
 		s.NoError(err)
-		s.Equal("gedb", doc3.Get("sth").(data.M).Get("name"))
+		s.Equal("gedb", doc3["sth"].(M)["name"])
 
-		doc4 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"sth": data.M{"name": "other"}}, &doc4)
+		doc4 := make(M)
+		err = s.d.FindOne(ctx, M{"sth": M{"name": "other"}}, &doc4)
 		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Can use dot-notation to query subfields
 	s.Run("DotNotationSubfields", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"greeting": data.M{"english": "hello"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"greeting": M{"english": "hello"}}))
 
-		doc := make(data.M)
-		err := s.d.FindOne(ctx, data.M{"greeting.english": "hello"}, &doc)
+		doc := make(M)
+		err := s.d.FindOne(ctx, M{"greeting.english": "hello"}, &doc)
 		s.NoError(err)
-		s.Equal("hello", doc.Get("greeting").(data.M).Get("english"))
+		s.Equal("hello", doc["greeting"].(M)["english"])
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"greeting.english": "hellooo"}, &doc2)
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"greeting.english": "hellooo"}, &doc2)
 		s.ErrorIs(err, domain.ErrNotFound)
 
-		doc3 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"greeting.englis": "hello"}, &doc3)
+		doc3 := make(M)
+		err = s.d.FindOne(ctx, M{"greeting.englis": "hello"}, &doc3)
 		s.ErrorIs(err, domain.ErrNotFound)
 	})
 
 	// Array fields match if any element matches
 	s.Run("ArrayFieldsMatchAnyElement", func() {
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"pear", "apple", "banana"}}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"coconut", "orange", "pear"}}))
-		doc3 := s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"banana"}}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"fruits": []any{"pear", "apple", "banana"}}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"fruits": []any{"coconut", "orange", "pear"}}))
+		doc3 := s.insert(s.d.Insert(ctx, M{"fruits": []any{"banana"}}))
 
-		cur, err := s.d.Find(ctx, data.M{"fruits": "pear"})
+		cur, err := s.d.Find(ctx, M{"fruits": "pear"})
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
@@ -1381,12 +1383,12 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		ids := make([]any, len(docs))
 		for i, doc := range docs {
-			ids[i] = doc.ID()
+			ids[i] = doc["_id"]
 		}
-		s.Contains(ids, doc1[0].ID())
-		s.Contains(ids, doc2[0].ID())
+		s.Contains(ids, doc1[0]["_id"])
+		s.Contains(ids, doc2[0]["_id"])
 
-		cur, err = s.d.Find(ctx, data.M{"fruits": "banana"})
+		cur, err = s.d.Find(ctx, M{"fruits": "banana"})
 		s.NoError(err)
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
@@ -1394,12 +1396,12 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		ids = make([]any, len(docs))
 		for i, doc := range docs {
-			ids[i] = doc.ID()
+			ids[i] = doc["_id"]
 		}
-		s.Contains(ids, doc1[0].ID())
-		s.Contains(ids, doc3[0].ID())
+		s.Contains(ids, doc1[0]["_id"])
+		s.Contains(ids, doc3[0]["_id"])
 
-		cur, err = s.d.Find(ctx, data.M{"fruits": "doesntexist"})
+		cur, err = s.d.Find(ctx, M{"fruits": "doesntexist"})
 		s.NoError(err)
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
@@ -1408,49 +1410,49 @@ func (s *DatastoreTestSuite) TestFind() {
 
 	// Returns an error if the query is not well formed
 	s.Run("ErrorOnMalformedQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"hello": "world"}))
 
-		cur, err := s.d.Find(ctx, data.M{"$or": data.M{"hello": "world"}})
+		cur, err := s.d.Find(ctx, M{"$or": M{"hello": "world"}})
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 		s.Nil(cur)
 
-		doc := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"$or": data.M{"hello": "world"}}, &doc)
+		doc := make(M)
+		err = s.d.FindOne(ctx, M{"$or": M{"hello": "world"}}, &doc)
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	// Changing the documents returned by find or findOne do not change the database state
 	s.Run("ReturnedDocsDoNotChangeDatabase", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
 
-		doc := make(data.M)
-		err := s.d.FindOne(ctx, data.M{"a": 2}, &doc)
+		doc := make(M)
+		err := s.d.FindOne(ctx, M{"a": 2}, &doc)
 		s.NoError(err)
-		doc.Set("hello", "changed")
+		doc["hello"] = "changed"
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": 2}, &doc2)
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"a": 2}, &doc2)
 		s.NoError(err)
-		s.Equal("world", doc2.Get("hello"))
+		s.Equal("world", doc2["hello"])
 
-		cur, err := s.d.Find(ctx, data.M{"a": 2})
+		cur, err := s.d.Find(ctx, M{"a": 2})
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		docs[0].Set("hello", "changed")
+		docs[0]["hello"] = "changed"
 
-		doc3 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": 2}, &doc3)
+		doc3 := make(M)
+		err = s.d.FindOne(ctx, M{"a": 2}, &doc3)
 		s.NoError(err)
-		s.Equal("world", doc3.Get("hello"))
+		s.Equal("world", doc3["hello"])
 	})
 
 	// Can use sort, skip and limit with FindOptions
 	s.Run("SortSkipLimitWithFindOptions", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 24, "hello": "earth"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 13, "hello": "blueplanet"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 15, "hello": "home"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 24, "hello": "earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 13, "hello": "blueplanet"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 15, "hello": "home"}))
 
 		cur, err := s.d.Find(ctx, nil,
 			domain.WithFindSort(S{{Key: "a", Order: 1}}),
@@ -1460,37 +1462,37 @@ func (s *DatastoreTestSuite) TestFind() {
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 		s.Len(docs, 2)
-		s.Equal("world", docs[0].Get("hello"))
-		s.Equal("blueplanet", docs[1].Get("hello"))
+		s.Equal("world", docs[0]["hello"])
+		s.Equal("blueplanet", docs[1]["hello"])
 	})
 
 	// Can use sort and skip with FindOne
 	s.Run("SortSkipWithFindOne", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 24, "hello": "earth"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 13, "hello": "blueplanet"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 15, "hello": "home"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 24, "hello": "earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 13, "hello": "blueplanet"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 15, "hello": "home"}))
 
-		doc := make(data.M)
+		doc := make(M)
 		err := s.d.FindOne(ctx, nil, &doc, domain.WithFindSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
-		s.Equal("world", doc.Get("hello"))
+		s.Equal("world", doc["hello"])
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc2, domain.WithFindSort(S{{Key: "a", Order: 1}}))
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc2, domain.WithFindSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
-		s.Equal("home", doc2.Get("hello"))
+		s.Equal("home", doc2["hello"])
 
-		doc3 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc3,
+		doc3 := make(M)
+		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc3,
 			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindSkip(1),
 		)
 		s.NoError(err)
-		s.Equal("earth", doc3.Get("hello"))
+		s.Equal("earth", doc3["hello"])
 
-		doc4 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": data.M{"$gt": 14}}, &doc4,
+		doc4 := make(M)
+		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc4,
 			domain.WithFindSort(S{{Key: "a", Order: 1}}),
 			domain.WithFindSkip(2),
 		)
@@ -1499,20 +1501,20 @@ func (s *DatastoreTestSuite) TestFind() {
 
 	// Can use projections in find
 	s.Run("ProjectionsInFind", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 24, "hello": "earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 24, "hello": "earth"}))
 
-		cur, err := s.d.Find(ctx, data.M{"a": 2},
-			domain.WithFindProjection(data.M{"a": 0, "_id": 0}),
+		cur, err := s.d.Find(ctx, M{"a": 2},
+			domain.WithFindProjection(M{"a": 0, "_id": 0}),
 		)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 		s.Len(docs, 1)
-		s.Equal(data.M{"hello": "world"}, docs[0])
+		s.Equal(M{"hello": "world"}, docs[0])
 
-		cur, err = s.d.Find(ctx, data.M{"a": 2},
-			domain.WithFindProjection(data.M{"a": 0, "hello": 1}),
+		cur, err = s.d.Find(ctx, M{"a": 2},
+			domain.WithFindProjection(M{"a": 0, "hello": 1}),
 		)
 		s.ErrorIs(err, projector.ErrMixOmitType)
 		s.Nil(cur)
@@ -1520,19 +1522,19 @@ func (s *DatastoreTestSuite) TestFind() {
 
 	// Can use projections in findOne
 	s.Run("ProjectionsInFindOne", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "world"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 24, "hello": "earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 24, "hello": "earth"}))
 
-		doc := make(data.M)
-		err := s.d.FindOne(ctx, data.M{"a": 2}, &doc,
-			domain.WithFindProjection(data.M{"a": 0, "_id": 0}),
+		doc := make(M)
+		err := s.d.FindOne(ctx, M{"a": 2}, &doc,
+			domain.WithFindProjection(M{"a": 0, "_id": 0}),
 		)
 		s.NoError(err)
-		s.Equal(data.M{"hello": "world"}, doc)
+		s.Equal(M{"hello": "world"}, doc)
 
-		doc2 := make(data.M)
-		err = s.d.FindOne(ctx, data.M{"a": 2}, &doc2,
-			domain.WithFindProjection(data.M{"a": 0, "hello": 1}),
+		doc2 := make(M)
+		err = s.d.FindOne(ctx, M{"a": 2}, &doc2,
+			domain.WithFindProjection(M{"a": 0, "hello": 1}),
 		)
 		s.ErrorIs(err, projector.ErrMixOmitType)
 	})
@@ -1562,14 +1564,14 @@ func (s *DatastoreTestSuite) TestFind() {
 			Return([]string{}, errFieldNav).
 			Once()
 
-		cur, err := s.d.Find(ctx, data.M{"c": 1})
+		cur, err := s.d.Find(ctx, M{"c": 1})
 
 		s.ErrorIs(err, errFieldNav)
 		s.Nil(cur)
 	})
 
 	s.Run("FailedCloneDocs", func() {
-		cur, err := s.d.Insert(ctx, data.M{"a": []any{data.M{"b": 1}}})
+		cur, err := s.d.Insert(ctx, M{"a": []any{M{"b": 1}}})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -1585,7 +1587,7 @@ func (s *DatastoreTestSuite) TestFind() {
 			return data.NewDocument(v)
 		}
 
-		cur, err = s.d.Find(ctx, data.M{})
+		cur, err = s.d.Find(ctx, M{})
 		s.ErrorIs(err, errDocFac)
 		s.Nil(cur)
 	})
@@ -1602,11 +1604,11 @@ func (s *DatastoreTestSuite) TestFind() {
 		err := s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a"))
 		s.NoError(err)
 
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.NoError(err)
 		s.NotNil(cur)
 
-		cur, err = s.d.Find(ctx, data.M{"a": 1})
+		cur, err = s.d.Find(ctx, M{"a": 1})
 		s.ErrorIs(err, errComp)
 		s.Nil(cur)
 
@@ -1616,9 +1618,9 @@ func (s *DatastoreTestSuite) TestFind() {
 
 func (s *DatastoreTestSuite) TestGetAllData() {
 	docs := []any{
-		data.M{"ch": "oice"},
-		data.M{"ch": "annel"},
-		data.M{"ch": "ase"},
+		M{"ch": "oice"},
+		M{"ch": "annel"},
+		M{"ch": "ase"},
 	}
 
 	type Doc struct {
@@ -1651,7 +1653,7 @@ func (s *DatastoreTestSuite) TestGetAllData() {
 		docsFindNil[i] = doc
 	}
 
-	curFindEmpty, err := s.d.Find(ctx, data.M{})
+	curFindEmpty, err := s.d.Find(ctx, M{})
 	s.NoError(err)
 	s.NotNil(curFindEmpty)
 	docsFindEmpty := make([]Doc, 3)
@@ -1677,7 +1679,7 @@ func (s *DatastoreTestSuite) TestGetAllData() {
 }
 
 func (s *DatastoreTestSuite) TestGetAllDataFailedClone() {
-	cur, err := s.d.Insert(ctx, data.M{"a": 1})
+	cur, err := s.d.Insert(ctx, M{"a": 1})
 	s.NoError(err)
 	s.NotNil(cur)
 
@@ -1698,9 +1700,9 @@ func (s *DatastoreTestSuite) TestGetAllDataFailedClone() {
 func (s *DatastoreTestSuite) TestCount() {
 	// Count all documents if an empty query is used
 	s.Run("NoQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "another", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "another", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 		docs, err := s.d.Count(ctx, nil)
 		s.NoError(err)
 		s.Equal(int64(3), docs)
@@ -1708,45 +1710,45 @@ func (s *DatastoreTestSuite) TestCount() {
 
 	// Count all documents matching a basic query
 	s.Run("BasicQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
-		docs, err := s.d.Count(ctx, data.M{"somedata": "again"})
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
+		docs, err := s.d.Count(ctx, M{"somedata": "again"})
 		s.NoError(err)
 		s.Equal(int64(2), docs)
-		docs, err = s.d.Count(ctx, data.M{"somedata": "nope"})
+		docs, err = s.d.Count(ctx, M{"somedata": "nope"})
 		s.NoError(err)
 		s.Equal(int64(0), docs)
 	})
 
 	// Array fields match if any element matches
 	s.Run("ArrayFields", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"pear", "apple", "banana"}}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"coconut", "orange", "pear"}}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"fruits": []any{"banana"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"fruits": []any{"pear", "apple", "banana"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"fruits": []any{"coconut", "orange", "pear"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"fruits": []any{"banana"}}))
 
-		docs, err := s.d.Count(ctx, data.M{"fruits": "pear"})
+		docs, err := s.d.Count(ctx, M{"fruits": "pear"})
 		s.NoError(err)
 		s.Equal(int64(2), docs)
 
-		docs, err = s.d.Count(ctx, data.M{"fruits": "banana"})
+		docs, err = s.d.Count(ctx, M{"fruits": "banana"})
 		s.NoError(err)
 		s.Equal(int64(2), docs)
 
-		docs, err = s.d.Count(ctx, data.M{"fruits": "doesntexist"})
+		docs, err = s.d.Count(ctx, M{"fruits": "doesntexist"})
 		s.NoError(err)
 		s.Equal(int64(0), docs)
 	})
 
 	// Returns an error if the query is not well formed
 	s.Run("BadQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
-		_, err := s.d.Count(ctx, data.M{"$or": data.M{"hello": "world"}})
+		_ = s.insert(s.d.Insert(ctx, M{"hello": "world"}))
+		_, err := s.d.Count(ctx, M{"$or": M{"hello": "world"}})
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	s.Run("FailedCursor", func() {
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.NoError(err)
 		s.NotNil(cur)
 		s.d.cursorFactory = func(ctx context.Context, d []domain.Document, co ...domain.CursorOption) (domain.Cursor, error) {
@@ -1770,29 +1772,29 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 	// If the query doesn't match anything, database is not modified
 	s.Run("NoChangeIfNoMatch", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "another"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "another"}))
 
-		n := s.update(s.d.Update(ctx, data.M{"somedata": "nope"}, data.M{"newDoc": "yes"}, domain.WithUpdateMulti(true)))
+		n := s.update(s.d.Update(ctx, M{"somedata": "nope"}, M{"newDoc": "yes"}, domain.WithUpdateMulti(true)))
 		s.Len(n, 0)
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		doc1 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d["somedata"] == "ok" })]
-		doc2 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d["somedata"] == "again" })]
-		doc3 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d["somedata"] == "another" })]
+		doc1 := docs[slices.IndexFunc(docs, func(d M) bool { return d["somedata"] == "ok" })]
+		doc2 := docs[slices.IndexFunc(docs, func(d M) bool { return d["somedata"] == "again" })]
+		doc3 := docs[slices.IndexFunc(docs, func(d M) bool { return d["somedata"] == "another" })]
 
 		s.Len(docs, 3)
 		for _, doc := range docs {
 			s.NotContains(doc, "newDoc")
 		}
 
-		s.Equal(data.M{"_id": doc1["_id"], "somedata": "ok"}, doc1)
-		s.Equal(data.M{"_id": doc2["_id"], "somedata": "again", "plus": "additional data"}, doc2)
-		s.Equal(data.M{"_id": doc3["_id"], "somedata": "another"}, doc3)
+		s.Equal(M{"_id": doc1["_id"], "somedata": "ok"}, doc1)
+		s.Equal(M{"_id": doc2["_id"], "somedata": "again", "plus": "additional data"}, doc2)
+		s.Equal(M{"_id": doc3["_id"], "somedata": "another"}, doc3)
 	})
 
 	// If timestampData option is set, update the updatedAt field
@@ -1809,45 +1811,45 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			domain.WithDatastoreTimeGetter(timeGetter),
 		)
 		s.NoError(err)
-		insertedDocs := s.insert(d.Insert(ctx, data.M{"hello": "world"}))
+		insertedDocs := s.insert(d.Insert(ctx, M{"hello": "world"}))
 
 		call.Unset()
 
-		s.Equal(beginning, insertedDocs[0].Get("updatedAt"))
-		s.Equal(beginning, insertedDocs[0].Get("createdAt"))
+		s.Equal(beginning, insertedDocs[0]["updatedAt"])
+		s.Equal(beginning, insertedDocs[0]["createdAt"])
 		s.Len(insertedDocs[0], 4)
 
 		timeGetter.On("GetTime").Return(beginning.Add(time.Millisecond))
-		n := s.update(d.Update(ctx, data.M{"_id": insertedDocs[0].ID()}, data.M{"$set": data.M{"hello": "mars"}}))
+		n := s.update(d.Update(ctx, M{"_id": insertedDocs[0]["_id"]}, M{"$set": M{"hello": "mars"}}))
 		s.Len(n, 1)
 
-		cur, err := d.Find(ctx, data.M{"_id": insertedDocs[0].ID()})
+		cur, err := d.Find(ctx, M{"_id": insertedDocs[0]["_id"]})
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 
 		s.Len(docs, 1)
 		s.Len(docs[0], 4)
-		s.Equal(insertedDocs[0].ID(), docs[0].ID())
-		s.Equal(insertedDocs[0].Get("createdAt"), docs[0].Get("createdAt"))
-		s.Equal(beginning.Add(time.Millisecond), docs[0].Get("updatedAt"))
-		s.Equal("mars", docs[0].Get("hello"))
+		s.Equal(insertedDocs[0]["_id"], docs[0]["_id"])
+		s.Equal(insertedDocs[0]["createdAt"], docs[0]["createdAt"])
+		s.Equal(beginning.Add(time.Millisecond), docs[0]["updatedAt"])
+		s.Equal("mars", docs[0]["hello"])
 
 	})
 
 	// Can update multiple documents matching the query
 	s.Run("MultipleMatches", func() {
 
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		id1 := _doc1[0].ID()
+		_doc1 := s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		id1 := _doc1[0]["_id"]
 
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		id2 := _doc2[0].ID()
+		_doc2 := s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		id2 := _doc2[0]["_id"]
 
-		_doc3 := s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
-		id3 := _doc3[0].ID()
+		_doc3 := s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
+		id3 := _doc3[0]["_id"]
 
-		n := s.update(s.d.Update(ctx, data.M{"somedata": "again"}, data.M{"newDoc": "yes"}, domain.WithUpdateMulti(true)))
+		n := s.update(s.d.Update(ctx, M{"somedata": "again"}, M{"newDoc": "yes"}, domain.WithUpdateMulti(true)))
 		s.Len(n, 2)
 
 		cur, err := s.d.Find(ctx, nil)
@@ -1855,36 +1857,36 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 
-		doc1 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id1 })]
-		doc2 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id2 })]
-		doc3 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id3 })]
+		doc1 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id1 })]
+		doc2 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id2 })]
+		doc3 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id3 })]
 
 		s.Len(docs, 3)
 
 		s.Len(doc1, 2)
-		s.Equal("ok", doc1.Get("somedata"))
+		s.Equal("ok", doc1["somedata"])
 		// removed redundant _id assertion
 
 		s.Len(doc2, 2)
-		s.Equal("yes", doc2.Get("newDoc"))
+		s.Equal("yes", doc2["newDoc"])
 		// removed redundant _id assertion
 
 		s.Len(doc3, 2)
-		s.Equal("yes", doc3.Get("newDoc"))
+		s.Equal("yes", doc3["newDoc"])
 		// removed redundant _id assertion
 
 	})
 
 	// Can update only one document matching the query
 	s.Run("MultiDisabled", func() {
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		id1 := _doc1[0].ID()
-		_doc2 := s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		id2 := _doc2[0].ID()
-		_doc3 := s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
-		id3 := _doc3[0].ID()
+		_doc1 := s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		id1 := _doc1[0]["_id"]
+		_doc2 := s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		id2 := _doc2[0]["_id"]
+		_doc3 := s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
+		id3 := _doc3[0]["_id"]
 
-		n := s.update(s.d.Update(ctx, data.M{"somedata": "again"}, data.M{"newDoc": "yes"}, domain.WithUpdateMulti(false)))
+		n := s.update(s.d.Update(ctx, M{"somedata": "again"}, M{"newDoc": "yes"}, domain.WithUpdateMulti(false)))
 		s.Len(n, 1)
 
 		cur, err := s.d.Find(ctx, nil)
@@ -1892,17 +1894,17 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 
-		doc1 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id1 })]
-		doc2 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id2 })]
-		doc3 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id3 })]
+		doc1 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id1 })]
+		doc2 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id2 })]
+		doc3 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id3 })]
 
-		s.Equal(data.M{"_id": doc1.ID(), "somedata": "ok"}, doc1)
+		s.Equal(M{"_id": doc1["_id"], "somedata": "ok"}, doc1)
 		if len(doc2) == 2 {
-			s.Equal(data.M{"_id": doc2.ID(), "newDoc": "yes"}, doc2)
-			s.Equal(data.M{"_id": doc3.ID(), "somedata": "again"}, doc3)
+			s.Equal(M{"_id": doc2["_id"], "newDoc": "yes"}, doc2)
+			s.Equal(M{"_id": doc3["_id"], "somedata": "again"}, doc3)
 		} else {
-			s.Equal(data.M{"_id": doc2.ID(), "somedata": "again", "plus": "additional data"}, doc2)
-			s.Equal(data.M{"_id": doc3.ID(), "newDoc": "yes"}, doc3)
+			s.Equal(M{"_id": doc2["_id"], "somedata": "again", "plus": "additional data"}, doc2)
+			s.Equal(M{"_id": doc3["_id"], "newDoc": "yes"}, doc3)
 		}
 
 		s.NoError(s.d.LoadDatabase(ctx))
@@ -1912,17 +1914,17 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
 
-		doc1 = docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id1 })]
-		doc2 = docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id2 })]
-		doc3 = docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == id3 })]
+		doc1 = docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id1 })]
+		doc2 = docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id2 })]
+		doc3 = docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == id3 })]
 
-		s.Equal(data.M{"_id": doc1.ID(), "somedata": "ok"}, doc1)
+		s.Equal(M{"_id": doc1["_id"], "somedata": "ok"}, doc1)
 		if len(doc2) == 2 {
-			s.Equal(data.M{"_id": doc2.ID(), "newDoc": "yes"}, doc2)
-			s.Equal(data.M{"_id": doc3.ID(), "somedata": "again"}, doc3)
+			s.Equal(M{"_id": doc2["_id"], "newDoc": "yes"}, doc2)
+			s.Equal(M{"_id": doc3["_id"], "somedata": "again"}, doc3)
 		} else {
-			s.Equal(data.M{"_id": doc2.ID(), "somedata": "again", "plus": "additional data"}, doc2)
-			s.Equal(data.M{"_id": doc3.ID(), "newDoc": "yes"}, doc3)
+			s.Equal(M{"_id": doc2["_id"], "somedata": "again", "plus": "additional data"}, doc2)
+			s.Equal(M{"_id": doc3["_id"], "newDoc": "yes"}, doc3)
 		}
 	})
 
@@ -1930,7 +1932,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		// Can perform upserts if needed
 		s.Run("Simple", func() {
-			n := s.update(s.d.Update(ctx, data.M{"impossible": "db is empty anyway"}, data.M{"newDoc": true}))
+			n := s.update(s.d.Update(ctx, M{"impossible": "db is empty anyway"}, M{"newDoc": true}))
 			s.Len(n, 0)
 
 			cur, err := s.d.Find(ctx, nil)
@@ -1939,7 +1941,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			s.NoError(err)
 			s.Len(docs, 0)
 
-			n = s.update(s.d.Update(ctx, data.M{"impossible": "db is empty anyway"}, data.M{"something": "created ok"}, domain.WithUpsert(true)))
+			n = s.update(s.d.Update(ctx, M{"impossible": "db is empty anyway"}, M{"something": "created ok"}, domain.WithUpsert(true)))
 			s.Len(n, 1)
 
 			cur, err = s.d.Find(ctx, nil)
@@ -1947,7 +1949,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			docs, err = s.readCursor(cur)
 			s.NoError(err)
 			s.Len(docs, 1)
-			s.Equal("created ok", docs[0].Get("something"))
+			s.Equal("created ok", docs[0]["something"])
 
 			// original test would check if returned updated
 			// documents could modify the actual values in index,
@@ -1956,8 +1958,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		// If the update query is a normal object with no modifiers, it is the doc that will be upserted
 		s.Run("UseQueryIfNoDollarFields", func() {
-			qry := data.M{"$or": []any{data.M{"a": 4}, data.M{"a": 5}}}
-			update := data.M{"hello": "world", "bloup": "blap"}
+			qry := M{"$or": []any{M{"a": 4}, M{"a": 5}}}
+			update := M{"hello": "world", "bloup": "blap"}
 			n := s.update(s.d.Update(ctx, qry, update, domain.WithUpsert(true)))
 			s.Len(n, 1)
 			cur, err := s.d.Find(ctx, nil)
@@ -1967,21 +1969,21 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			s.Len(docs, 1)
 			doc := docs[0]
 			s.Len(doc, 3)
-			s.Equal("world", doc.Get("hello"))
-			s.Equal("blap", doc.Get("bloup"))
+			s.Equal("world", doc["hello"])
+			s.Equal("blap", doc["bloup"])
 		})
 
 		// If the update query contains modifiers, it is applied to the object resulting from removing all operators from the find query 1
 		s.Run("UseNonOperatorsFromFindQuery", func() {
-			qry := data.M{"$or": []any{data.M{"a": 4}, data.M{"a": 5}}}
-			update := data.M{
-				"$set": data.M{"hello": "world"},
-				"$inc": data.M{"bloup": 3},
+			qry := M{"$or": []any{M{"a": 4}, M{"a": 5}}}
+			update := M{
+				"$set": M{"hello": "world"},
+				"$inc": M{"bloup": 3},
 			}
 			n := s.update(s.d.Update(ctx, qry, update, domain.WithUpsert(true)))
 			s.Len(n, 1)
 
-			cur, err := s.d.Find(ctx, data.M{"hello": "world"})
+			cur, err := s.d.Find(ctx, M{"hello": "world"})
 			s.NoError(err)
 			docs, err := s.readCursor(cur)
 			s.NoError(err)
@@ -1989,24 +1991,24 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			s.Len(docs, 1)
 			doc := docs[0]
 			s.Len(doc, 3)
-			s.Equal("world", doc.Get("hello"))
-			s.Equal(float64(3), doc.Get("bloup"))
+			s.Equal("world", doc["hello"])
+			s.Equal(float64(3), doc["bloup"])
 		})
 
 		// If the update query contains modifiers, it is applied to the object resulting from removing all operators from the find query 2
 		s.Run("UseNonOperatorsFromFindQuery", func() {
-			qry := data.M{
-				"$or": []any{data.M{"a": 4}, data.M{"a": 5}},
+			qry := M{
+				"$or": []any{M{"a": 4}, M{"a": 5}},
 				"cac": "rrr",
 			}
-			update := data.M{
-				"$set": data.M{"hello": "world"},
-				"$inc": data.M{"bloup": 3},
+			update := M{
+				"$set": M{"hello": "world"},
+				"$inc": M{"bloup": 3},
 			}
 			n := s.update(s.d.Update(ctx, qry, update, domain.WithUpsert(true)))
 			s.Len(n, 1)
 
-			cur, err := s.d.Find(ctx, data.M{"hello": "world"})
+			cur, err := s.d.Find(ctx, M{"hello": "world"})
 			s.NoError(err)
 			docs, err := s.readCursor(cur)
 			s.NoError(err)
@@ -2014,14 +2016,14 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			s.Len(docs, 1)
 			doc := docs[0]
 			s.Len(doc, 4)
-			s.Equal("rrr", doc.Get("cac"))
-			s.Equal("world", doc.Get("hello"))
-			s.Equal(float64(3), doc.Get("bloup"))
+			s.Equal("rrr", doc["cac"])
+			s.Equal("world", doc["hello"])
+			s.Equal(float64(3), doc["bloup"])
 		})
 
 		// Performing upsert with badly formatted fields yields a standard error not an exception
 		s.Run("BadField", func() {
-			_, err := s.d.Update(ctx, data.M{"_id": "1234"}, data.M{"$set": data.M{"$$badfield": 5}}, domain.WithUpsert(true))
+			_, err := s.d.Update(ctx, M{"_id": "1234"}, M{"$set": M{"$$badfield": 5}}, domain.WithUpsert(true))
 			s.ErrorIs(err, domain.ErrFieldName{
 				Field:  "$$badfield",
 				Reason: "cannot start with '$'",
@@ -2039,16 +2041,16 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		s.Run("MultiResult", func() {
 			cur, err := s.d.Insert(ctx,
-				data.M{"a": 1},
-				data.M{"a": 2},
+				M{"a": 1},
+				M{"a": 2},
 			)
 			s.NoError(err)
 			s.NotNil(cur)
 
 			cur, err = s.d.Update(
 				ctx,
-				data.M{"a": data.M{"$gt": 0}},
-				data.M{"b": true},
+				M{"a": M{"$gt": 0}},
+				M{"b": true},
 				domain.WithUpsert(true),
 				domain.WithUpdateMulti(true),
 			)
@@ -2057,25 +2059,19 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 			cur, err = s.d.Find(
 				ctx, nil,
-				domain.WithFindProjection(data.M{"_id": 0}),
+				domain.WithFindProjection(M{"_id": 0}),
 				domain.WithFindSort(
 					domain.Sort{{Key: "a", Order: 1}},
 				),
 			)
 			s.NoError(err)
-			res := []domain.Document{}
+			res := []M{}
 			for cur.Next() {
-				m := data.M{}
+				m := M{}
 				s.NoError(cur.Scan(ctx, &m))
 				res = append(res, m)
 			}
-			s.Equal(
-				[]domain.Document{
-					data.M{"b": true},
-					data.M{"b": true},
-				},
-				res,
-			)
+			s.Equal([]M{{"b": true}, {"b": true}}, res)
 		})
 
 		s.Run("FailedCursor", func() {
@@ -2111,7 +2107,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		})
 
 		s.Run("FailedModification", func() {
-			cur, err := s.d.Update(ctx, nil, data.M{"a": 2, "$test": 3}, domain.WithUpsert(true))
+			cur, err := s.d.Update(ctx, nil, M{"a": 2, "$test": 3}, domain.WithUpsert(true))
 			s.ErrorIs(err, modifier.ErrMixedOperators)
 			s.Nil(cur)
 		})
@@ -2120,25 +2116,25 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 	// Cannot perform update if the update query is not either registered-modifiers-only or copy-only, or contain badly formatted fields
 	s.Run("ErrorBadField", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"somethnig": "yup"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somethnig": "yup"}))
 
-		_, err := s.d.Update(ctx, nil, data.M{"$badField": 5})
+		_, err := s.d.Update(ctx, nil, M{"$badField": 5})
 		s.ErrorIs(err, modifier.ErrUnknownModifier{Name: "$badField"})
 
-		_, err = s.d.Update(ctx, nil, data.M{"bad.field": 5})
+		_, err = s.d.Update(ctx, nil, M{"bad.field": 5})
 		s.ErrorIs(err, domain.ErrFieldName{
 			Field:  "bad.field",
 			Reason: "cannot contain '.'",
 		})
 
-		_, err = s.d.Update(ctx, nil, data.M{
-			"$inc":  data.M{"test": 5},
+		_, err = s.d.Update(ctx, nil, M{
+			"$inc":  M{"test": 5},
 			"mixed": "rrr",
 		})
 		s.ErrorIs(err, modifier.ErrMixedOperators)
 
-		_, err = s.d.Update(ctx, nil, data.M{
-			"$inexistent": data.M{"test": 5},
+		_, err = s.d.Update(ctx, nil, M{
+			"$inexistent": M{"test": 5},
 		})
 
 		s.ErrorIs(err, modifier.ErrUnknownModifier{Name: "$inexistent"})
@@ -2146,23 +2142,23 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 	// Can update documents using multiple modifiers
 	s.Run("MultipleModifiers", func() {
-		newDoc := s.insert(s.d.Insert(ctx, data.M{"something": "yup", "other": 40}))
-		id := newDoc[0].ID()
+		newDoc := s.insert(s.d.Insert(ctx, M{"something": "yup", "other": 40}))
+		id := newDoc[0]["_id"]
 
-		n := s.update(s.d.Update(ctx, nil, data.M{"$set": data.M{"something": "changed"}, "$inc": data.M{"other": 10}}))
+		n := s.update(s.d.Update(ctx, nil, M{"$set": M{"something": "changed"}, "$inc": M{"other": 10}}))
 		s.Len(n, 1)
 
-		var doc data.M
-		s.NoError(s.d.FindOne(ctx, data.M{"_id": id}, &doc))
+		var doc M
+		s.NoError(s.d.FindOne(ctx, M{"_id": id}, &doc))
 		s.Len(doc, 3)
-		s.Equal(id, doc.ID())
-		s.Equal("changed", doc.Get("something"))
-		s.Equal(float64(50), doc.Get("other"))
+		s.Equal(id, doc["_id"])
+		s.Equal("changed", doc["something"])
+		s.Equal(float64(50), doc["other"])
 	})
 
 	// Can upsert a document even with modifiers
 	s.Run("UpsertWithModifiers", func() {
-		n := s.update(s.d.Update(ctx, data.M{"bloup": "blap"}, data.M{"$set": data.M{"hello": "world"}}, domain.WithUpsert(true)))
+		n := s.update(s.d.Update(ctx, M{"bloup": "blap"}, M{"$set": M{"hello": "world"}}, domain.WithUpsert(true)))
 		s.Len(n, 1)
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
@@ -2170,56 +2166,56 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.NoError(err)
 		s.Len(docs, 1)
 		s.Len(docs[0], 3)
-		s.Equal("world", docs[0].Get("hello"))
-		s.Equal("blap", docs[0].Get("bloup"))
+		s.Equal("world", docs[0]["hello"])
+		s.Equal("blap", docs[0]["bloup"])
 		s.Contains(docs[0], "_id")
 	})
 
 	// When using modifiers, the only way to update subdocs is with the dot-notation
 	s.Run("UpdateSubdocWithModifier", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"bloup": data.M{"blip": "blap", "other": true}}))
-		n := s.update(s.d.Update(ctx, nil, data.M{"$set": data.M{"bloup.blip": "hello"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"bloup": M{"blip": "blap", "other": true}}))
+		n := s.update(s.d.Update(ctx, nil, M{"$set": M{"bloup.blip": "hello"}}))
 		s.Len(n, 1)
 
-		var doc data.M
+		var doc M
 		s.NoError(s.d.FindOne(ctx, nil, &doc))
-		s.Equal("hello", doc.D("bloup").Get("blip"))
-		s.Equal(true, doc.D("bloup").Get("other"))
+		s.Equal("hello", doc["bloup"].(M)["blip"])
+		s.Equal(true, doc["bloup"].(M)["other"])
 
 		// Wrong
-		n = s.update(s.d.Update(ctx, nil, data.M{"$set": data.M{"bloup": data.M{"blip": "ola"}}}))
+		n = s.update(s.d.Update(ctx, nil, M{"$set": M{"bloup": M{"blip": "ola"}}}))
 		s.Len(n, 1)
 
 		s.NoError(s.d.FindOne(ctx, nil, &doc))
-		s.Equal("ola", doc.D("bloup").Get("blip"))
-		s.False(doc.D("bloup").Has("other"))
+		s.Equal("ola", doc["bloup"].(M)["blip"])
+		s.NotContains(doc["bloup"], "other")
 
 	})
 
 	// Returns an error if the query is not well formed
 	s.Run("BadQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
-		_, err := s.d.Update(ctx, data.M{"$or": data.M{"hello": "world"}}, data.M{"a": 1})
+		_ = s.insert(s.d.Insert(ctx, M{"hello": "world"}))
+		_, err := s.d.Update(ctx, M{"$or": M{"hello": "world"}}, M{"a": 1})
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
 	// If an error is thrown by a modifier, the database state is not changed
 	s.Run("NoChangeIfModificationError", func() {
-		newDocs := s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
-		n, err := s.d.Update(ctx, nil, data.M{"$inc": data.M{"hello": 4}})
+		newDocs := s.insert(s.d.Insert(ctx, M{"hello": "world"}))
+		n, err := s.d.Update(ctx, nil, M{"$inc": M{"hello": 4}})
 		s.ErrorAs(err, &modifier.ErrModFieldType{})
 		s.Nil(n, 0)
 
-		var doc data.M
+		var doc M
 		s.NoError(s.d.FindOne(ctx, nil, &doc))
 		s.Equal(newDocs[0], doc)
 	})
 
 	// Can't change the _id of a document
 	s.Run("CannotChangeID", func() {
-		newDocs := s.insert(s.d.Insert(ctx, data.M{"a": 2}))
+		newDocs := s.insert(s.d.Insert(ctx, M{"a": 2}))
 
-		_, err := s.d.Update(ctx, data.M{"a": 2}, data.M{"a": 2, "_id": "nope"})
+		_, err := s.d.Update(ctx, M{"a": 2}, M{"a": 2, "_id": "nope"})
 		s.ErrorIs(err, domain.ErrCannotModifyID)
 
 		cur, err := s.d.Find(ctx, nil)
@@ -2229,10 +2225,10 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal(2, docs[0].Get("a"))
-		s.Equal(newDocs[0].ID(), docs[0].ID())
+		s.Equal(2, docs[0]["a"])
+		s.Equal(newDocs[0]["_id"], docs[0]["_id"])
 
-		_, err = s.d.Update(ctx, data.M{"a": 2}, data.M{"$set": data.M{"_id": "nope"}})
+		_, err = s.d.Update(ctx, M{"a": 2}, M{"$set": M{"_id": "nope"}})
 		s.ErrorIs(err, domain.ErrCannotModifyID)
 
 		cur, err = s.d.Find(ctx, nil)
@@ -2242,47 +2238,47 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal(2, docs[0].Get("a"))
-		s.Equal(newDocs[0].ID(), docs[0].ID())
+		s.Equal(2, docs[0]["a"])
+		s.Equal(newDocs[0]["_id"], docs[0]["_id"])
 	})
 
 	// Non-multi updates are persistent
 	s.Run("PersistSingleUpdate", func() {
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "hello": "world"}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "earth"}))
-		n := s.update(s.d.Update(ctx, data.M{"a": 2}, data.M{"$set": data.M{"hello": "changed"}}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "hello": "world"}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "earth"}))
+		n := s.update(s.d.Update(ctx, M{"a": 2}, M{"$set": M{"hello": "changed"}}))
 		s.Len(n, 1)
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		slices.SortFunc(docs, func(a, b data.M) int { return a.Get("a").(int) - b.Get("a").(int) })
+		slices.SortFunc(docs, func(a, b M) int { return a["a"].(int) - b["a"].(int) })
 		s.Len(docs, 2)
-		s.Equal(data.M{"_id": doc1[0].ID(), "a": 1, "hello": "world"}, docs[0])
-		s.Equal(data.M{"_id": doc2[0].ID(), "a": 2, "hello": "changed"}, docs[1])
+		s.Equal(M{"_id": doc1[0]["_id"], "a": 1, "hello": "world"}, docs[0])
+		s.Equal(M{"_id": doc2[0]["_id"], "a": 2, "hello": "changed"}, docs[1])
 	})
 
 	// Multi updates are persistent
 	s.Run("PersistMultipleUpdates", func() {
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "hello": "world"}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "earth"}))
-		doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 5, "hello": "pluton"}))
-		n := s.update(s.d.Update(ctx, data.M{"a": 2}, data.M{"$set": data.M{"hello": "changed"}}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "hello": "world"}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "earth"}))
+		doc3 := s.insert(s.d.Insert(ctx, M{"a": 5, "hello": "pluton"}))
+		n := s.update(s.d.Update(ctx, M{"a": 2}, M{"$set": M{"hello": "changed"}}))
 		s.Len(n, 1)
 
-		n = s.update(s.d.Update(ctx, data.M{"a": data.M{"$in": []any{1, 2}}}, data.M{"$set": data.M{"hello": "changed"}}, domain.WithUpdateMulti(true)))
+		n = s.update(s.d.Update(ctx, M{"a": M{"$in": []any{1, 2}}}, M{"$set": M{"hello": "changed"}}, domain.WithUpdateMulti(true)))
 		s.Len(n, 2)
 
 		cur, err := s.d.Find(ctx, nil)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		slices.SortFunc(docs, func(a, b data.M) int { return a.Get("a").(int) - b.Get("a").(int) })
+		slices.SortFunc(docs, func(a, b M) int { return a["a"].(int) - b["a"].(int) })
 		s.Len(docs, 3)
-		s.Equal(data.M{"_id": doc1[0].ID(), "a": 1, "hello": "changed"}, docs[0])
-		s.Equal(data.M{"_id": doc2[0].ID(), "a": 2, "hello": "changed"}, docs[1])
-		s.Equal(data.M{"_id": doc3[0].ID(), "a": 5, "hello": "pluton"}, docs[2])
+		s.Equal(M{"_id": doc1[0]["_id"], "a": 1, "hello": "changed"}, docs[0])
+		s.Equal(M{"_id": doc2[0]["_id"], "a": 2, "hello": "changed"}, docs[1])
+		s.Equal(M{"_id": doc3[0]["_id"], "a": 5, "hello": "pluton"}, docs[2])
 
 		s.NoError(s.d.LoadDatabase(ctx))
 
@@ -2290,13 +2286,13 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.NoError(err)
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
-		slices.SortFunc(docs, func(a, b data.M) int { return int(a.Get("a").(float64)) - int(b.Get("a").(float64)) })
+		slices.SortFunc(docs, func(a, b M) int { return int(a["a"].(float64)) - int(b["a"].(float64)) })
 		s.Len(docs, 3)
 
 		// now numbers are float because they rave been serialized and then deserialized as json numbers
-		s.Equal(data.M{"_id": doc1[0].ID(), "a": float64(1), "hello": "changed"}, docs[0])
-		s.Equal(data.M{"_id": doc2[0].ID(), "a": float64(2), "hello": "changed"}, docs[1])
-		s.Equal(data.M{"_id": doc3[0].ID(), "a": float64(5), "hello": "pluton"}, docs[2])
+		s.Equal(M{"_id": doc1[0]["_id"], "a": float64(1), "hello": "changed"}, docs[0])
+		s.Equal(M{"_id": doc2[0]["_id"], "a": float64(2), "hello": "changed"}, docs[1])
+		s.Equal(M{"_id": doc3[0]["_id"], "a": float64(5), "hello": "pluton"}, docs[2])
 
 	})
 
@@ -2305,21 +2301,21 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	// If a multi update fails on one document, previous updates should be rolled back
 	s.Run("RollbackAllOnError", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 4}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 5}))
-		doc3 := s.insert(s.d.Insert(ctx, data.M{"a": "abc"}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 4}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 5}))
+		doc3 := s.insert(s.d.Insert(ctx, M{"a": "abc"}))
 
-		qry := data.M{"a": data.M{"$in": []any{4, 5, "abc"}}}
-		update := data.M{"$inc": data.M{"a": 10}}
+		qry := M{"a": M{"$in": []any{4, 5, "abc"}}}
+		update := M{"$inc": M{"a": 10}}
 		n, err := s.d.Update(ctx, qry, update, domain.WithUpdateMulti(true))
 		s.ErrorAs(err, &modifier.ErrModFieldType{})
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
 			docs := idx.GetAll()
-			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0].ID().(string) })]
-			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0].ID().(string) })]
-			d3 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc3[0].ID().(string) })]
+			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0]["_id"].(string) })]
+			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0]["_id"].(string) })]
+			d3 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc3[0]["_id"].(string) })]
 
 			s.Equal(4, d1.Get("a"))
 			s.Equal(5, d2.Get("a"))
@@ -2334,19 +2330,19 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			domain.WithEnsureIndexFieldNames("a"),
 			domain.WithEnsureIndexUnique(true),
 		))
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 4}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 5}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 4}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 5}))
 
-		qry := data.M{"a": data.M{"$in": []any{4, 5, "abc"}}}
-		update := data.M{"$set": data.M{"a": 10}}
+		qry := M{"a": M{"$in": []any{4, 5, "abc"}}}
+		update := M{"$set": M{"a": 10}}
 		n, err := s.d.Update(ctx, qry, update, domain.WithUpdateMulti(true))
 		s.ErrorIs(err, domain.ErrConstraintViolated)
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
 			docs := idx.GetAll()
-			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0].ID().(string) })]
-			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0].ID().(string) })]
+			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0]["_id"].(string) })]
+			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0]["_id"].(string) })]
 
 			s.Equal(4, d1.Get("a"))
 			s.Equal(5, d2.Get("a"))
@@ -2368,36 +2364,36 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 		call := timeGetter.On("GetTime").Return(beginning)
 
-		_, err = d2.Insert(ctx, data.M{"a": 1})
+		_, err = d2.Insert(ctx, M{"a": 1})
 		s.NoError(err)
 
-		var doc data.M
-		s.NoError(d2.FindOne(ctx, data.M{"a": 1}, &doc))
+		var doc M
+		s.NoError(d2.FindOne(ctx, M{"a": 1}, &doc))
 		s.NoError(err)
-		createdAt := doc.Get("createdAt")
+		createdAt := doc["createdAt"]
 
 		// unset after find because it gets time to remove expired docs
 		call.Unset()
 
 		timeGetter.On("GetTime").Return(beginning.Add(time.Second))
 
-		n := s.update(d2.Update(ctx, data.M{"a": 1}, data.M{"$set": data.M{"b": 2}}))
+		n := s.update(d2.Update(ctx, M{"a": 1}, M{"$set": M{"b": 2}}))
 		s.Len(n, 1)
 
 		doc = nil
-		s.NoError(d2.FindOne(ctx, data.M{"a": 1}, &doc))
+		s.NoError(d2.FindOne(ctx, M{"a": 1}, &doc))
 		s.NoError(err)
-		s.Equal(createdAt, doc.Get("createdAt"))
+		s.Equal(createdAt, doc["createdAt"])
 
 		timeGetter.On("GetTime").Return(beginning.Add(time.Minute))
 
-		n = s.update(d2.Update(ctx, data.M{"a": 1}, data.M{"c": 3}))
+		n = s.update(d2.Update(ctx, M{"a": 1}, M{"c": 3}))
 		s.Len(n, 1)
 
 		doc = nil
-		s.NoError(d2.FindOne(ctx, data.M{"c": 3}, &doc))
+		s.NoError(d2.FindOne(ctx, M{"c": 3}, &doc))
 		s.NoError(err)
-		s.Equal(createdAt, doc.Get("createdAt"))
+		s.Equal(createdAt, doc["createdAt"])
 	})
 
 	// NOTE: 'Callback signature' tests not added because we don't use
@@ -2408,13 +2404,13 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.d.documentFactory = func(any) (domain.Document, error) {
 			return nil, errDocFac
 		}
-		cur, err := s.d.Update(ctx, data.M{}, data.M{})
+		cur, err := s.d.Update(ctx, M{}, M{})
 		s.ErrorIs(err, errDocFac)
 		s.Nil(cur)
 	})
 
 	s.Run("FailedNewEmptyDocument", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
 
 		errDocFac := fmt.Errorf("document factory error")
 
@@ -2426,13 +2422,13 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			c++
 			return data.NewDocument(a)
 		}
-		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
 		s.ErrorIs(err, errDocFac)
 		s.Nil(cur)
 	})
 
 	s.Run("FailedCursor", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
 
 		curMock := new(cursorMock)
 		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
@@ -2444,7 +2440,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		curMock.On("Next").Return(false).Once()
 		curMock.On("Err").Return(errCursor).Once()
 
-		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
 		s.ErrorIs(err, errCursor)
 		s.Nil(cur)
 
@@ -2452,7 +2448,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	})
 
 	s.Run("FailedCursorScan", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
 
 		curMock := new(cursorMock)
 		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
@@ -2466,7 +2462,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			Return(errCursor).
 			Once()
 
-		cur, err := s.d.Update(ctx, data.M{"a": 1}, data.M{"a": 2})
+		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
 		s.ErrorIs(err, errCursor)
 		s.Nil(cur)
 
@@ -2478,12 +2474,12 @@ func (s *DatastoreTestSuite) TestRemove() {
 
 	// Can remove multiple documents
 	s.Run("MultipleDocs", func() {
-		_doc1 := s.insert(s.d.Insert(ctx, data.M{"somedata": "ok"}))
-		id1 := _doc1[0].ID()
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again", "plus": "additional data"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"somedata": "again"}))
+		_doc1 := s.insert(s.d.Insert(ctx, M{"somedata": "ok"}))
+		id1 := _doc1[0]["_id"]
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again", "plus": "additional data"}))
+		_ = s.insert(s.d.Insert(ctx, M{"somedata": "again"}))
 
-		n, err := s.d.Remove(ctx, data.M{"somedata": "again"}, domain.WithRemoveMulti(true))
+		n, err := s.d.Remove(ctx, M{"somedata": "again"}, domain.WithRemoveMulti(true))
 		s.NoError(err)
 		s.Equal(int64(2), n)
 
@@ -2493,7 +2489,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.NoError(err)
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal(id1, docs[0].ID())
+		s.Equal(id1, docs[0]["_id"])
 
 		s.NoError(s.d.LoadDatabase(ctx))
 
@@ -2503,15 +2499,15 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.NoError(err)
 		s.Len(docs, 1)
 		s.Len(docs[0], 2)
-		s.Equal(id1, docs[0].ID())
+		s.Equal(id1, docs[0]["_id"])
 	})
 
 	// Remove can be called multiple times in parallel and everything that needs to be removed will be
 	s.Run("ParallelCalls", func() {
 		// context mutex should protect everything
-		_ = s.insert(s.d.Insert(ctx, data.M{"planet": "Earth"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"planet": "Mars"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"planet": "Saturn"}))
+		_ = s.insert(s.d.Insert(ctx, M{"planet": "Earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"planet": "Mars"}))
+		_ = s.insert(s.d.Insert(ctx, M{"planet": "Saturn"}))
 
 		mu := &sync.Mutex{}
 		removeStartWG := &sync.WaitGroup{}
@@ -2528,7 +2524,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 				removeStartWG.Done()
 				c.Wait()
 				mu.Unlock()
-				_, err := s.d.Remove(ctx, data.M{"planet": planet})
+				_, err := s.d.Remove(ctx, M{"planet": planet})
 				s.NoError(err)
 			}()
 		}
@@ -2547,8 +2543,8 @@ func (s *DatastoreTestSuite) TestRemove() {
 
 	// Returns an error if the query is not well formed
 	s.Run("BadQuery", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"hello": "world"}))
-		badQuery := data.M{"$or": data.M{"hello": "world"}}
+		_ = s.insert(s.d.Insert(ctx, M{"hello": "world"}))
+		badQuery := M{"$or": M{"hello": "world"}}
 		n, err := s.d.Remove(ctx, badQuery)
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 		s.Zero(n)
@@ -2556,11 +2552,11 @@ func (s *DatastoreTestSuite) TestRemove() {
 
 	// Non-multi removes are persistent
 	s.Run("PersistSingleRemove", func() {
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "hello": "world"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "earth"}))
-		doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 3, "hello": "moto"}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "hello": "world"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "earth"}))
+		doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "hello": "moto"}))
 
-		n, err := s.d.Remove(ctx, data.M{"a": 2})
+		n, err := s.d.Remove(ctx, M{"a": 2})
 		s.NoError(err)
 		s.Equal(int64(1), n)
 
@@ -2568,11 +2564,11 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
-		slices.SortFunc(docs, func(a, b data.M) int { return a.Get("a").(int) - b.Get("a").(int) })
+		slices.SortFunc(docs, func(a, b M) int { return a["a"].(int) - b["a"].(int) })
 		s.Len(docs, 2)
 
-		s.Equal(data.M{"_id": doc1[0].ID(), "a": 1, "hello": "world"}, doc1[0])
-		s.Equal(data.M{"_id": doc3[0].ID(), "a": 3, "hello": "moto"}, doc3[0])
+		s.Equal(M{"_id": doc1[0]["_id"], "a": 1, "hello": "world"}, doc1[0])
+		s.Equal(M{"_id": doc3[0]["_id"], "a": 3, "hello": "moto"}, doc3[0])
 
 		s.NoError(s.d.LoadDatabase(ctx))
 
@@ -2581,20 +2577,20 @@ func (s *DatastoreTestSuite) TestRemove() {
 		docs, err = s.readCursor(cur)
 		s.NoError(err)
 		// default deserializer unmarshals any number as float64
-		slices.SortFunc(docs, func(a, b data.M) int { return int(a.Get("a").(float64)) - int(b.Get("a").(float64)) })
+		slices.SortFunc(docs, func(a, b M) int { return int(a["a"].(float64)) - int(b["a"].(float64)) })
 		s.Len(docs, 2)
 
-		s.Equal(data.M{"_id": doc1[0].ID(), "a": float64(1), "hello": "world"}, docs[0])
-		s.Equal(data.M{"_id": doc3[0].ID(), "a": float64(3), "hello": "moto"}, docs[1])
+		s.Equal(M{"_id": doc1[0]["_id"], "a": float64(1), "hello": "world"}, docs[0])
+		s.Equal(M{"_id": doc3[0]["_id"], "a": float64(3), "hello": "moto"}, docs[1])
 	})
 
 	// Multi removes are persistent
 	s.Run("PersistMultipleRemoves", func() {
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 1, "hello": "world"}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "earth"}))
-		_ = s.insert(s.d.Insert(ctx, data.M{"a": 3, "hello": "moto"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 1, "hello": "world"}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "earth"}))
+		_ = s.insert(s.d.Insert(ctx, M{"a": 3, "hello": "moto"}))
 
-		n, err := s.d.Remove(ctx, data.M{"a": data.M{"$in": []any{1, 3}}})
+		n, err := s.d.Remove(ctx, M{"a": M{"$in": []any{1, 3}}})
 		s.NoError(err)
 		s.Equal(int64(2), n)
 
@@ -2604,7 +2600,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.NoError(err)
 		s.Len(docs, 1)
 
-		s.Equal(data.M{"_id": doc2[0].ID(), "a": 2, "hello": "earth"}, docs[0])
+		s.Equal(M{"_id": doc2[0]["_id"], "a": 2, "hello": "earth"}, docs[0])
 
 		s.NoError(s.d.LoadDatabase(ctx))
 
@@ -2614,16 +2610,16 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.NoError(err)
 		s.Len(docs, 1)
 
-		s.Equal(data.M{"_id": doc2[0].ID(), "a": float64(2), "hello": "earth"}, docs[0])
+		s.Equal(M{"_id": doc2[0]["_id"], "a": float64(2), "hello": "earth"}, docs[0])
 	})
 
 	// Can remove without the options arg (will use defaults then)
 	s.Run("NoArgs", func() {
-		doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "hello": "world"}))
-		doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "hello": "earth"}))
-		doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 5, "hello": "moto"}))
+		doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "hello": "world"}))
+		doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "hello": "earth"}))
+		doc3 := s.insert(s.d.Insert(ctx, M{"a": 5, "hello": "moto"}))
 
-		n, err := s.d.Remove(ctx, data.M{"a": 2})
+		n, err := s.d.Remove(ctx, M{"a": 2})
 		s.NoError(err)
 		s.Equal(int64(1), n)
 
@@ -2632,19 +2628,19 @@ func (s *DatastoreTestSuite) TestRemove() {
 		docs, err := s.readCursor(cur)
 		s.NoError(err)
 
-		d1Index := slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == doc1[0].ID() })
-		d2Index := slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == doc2[0].ID() })
-		d3Index := slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == doc3[0].ID() })
+		d1Index := slices.IndexFunc(docs, func(d M) bool { return d["_id"] == doc1[0]["_id"] })
+		d2Index := slices.IndexFunc(docs, func(d M) bool { return d["_id"] == doc2[0]["_id"] })
+		d3Index := slices.IndexFunc(docs, func(d M) bool { return d["_id"] == doc3[0]["_id"] })
 
-		s.Equal(1, docs[d1Index].Get("a"))
+		s.Equal(1, docs[d1Index]["a"])
 		s.Negative(d2Index)
-		s.Equal(5, docs[d3Index].Get("a"))
+		s.Equal(5, docs[d3Index]["a"])
 	})
 
 	s.Run("FailedRemoveFromIndexes", func() {
 		errIdxRemove := fmt.Errorf("index remove error")
 
-		cur, err := s.d.Insert(ctx, data.M{"a": 1})
+		cur, err := s.d.Insert(ctx, M{"a": 1})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -2665,7 +2661,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 			Return(errIdxRemove).
 			Once()
 
-		removed, err := s.d.Remove(ctx, data.M{})
+		removed, err := s.d.Remove(ctx, M{})
 		s.ErrorIs(err, errIdxRemove)
 		s.Zero(removed)
 	})
@@ -2675,7 +2671,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.d.documentFactory = func(any) (domain.Document, error) {
 			return nil, errDocFac
 		}
-		count, err := s.d.Remove(ctx, data.M{"a": 1})
+		count, err := s.d.Remove(ctx, M{"a": 1})
 		s.ErrorIs(err, errDocFac)
 		s.Zero(count)
 	})
@@ -2707,7 +2703,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 	})
 
 	s.Run("FailedPersistence", func() {
-		cur, err := s.d.Insert(ctx, data.M{})
+		cur, err := s.d.Insert(ctx, M{})
 		s.NoError(err)
 		s.NotNil(cur)
 
@@ -2743,10 +2739,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(s.d.getAllData(), 0)
 
 			buf := make([]byte, 0, 1024)
-			docs := [...]data.M{
+			docs := [...]M{
 				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
 				{"_id": "bbb", "z": "2", "hello": "world"},
-				{"_id": "ccc", "z": "3", "nested": data.M{"today": now}},
+				{"_id": "ccc", "z": "3", "nested": M{"today": now}},
 			}
 			ser := serializer.NewSerializer(comparer.NewComparer(), data.NewDocument)
 			for _, doc := range docs {
@@ -2778,7 +2774,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			defer func() { s.d.indexFactory = f }()
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 
-			cur, err := s.d.Insert(ctx, data.M{"a": true})
+			cur, err := s.d.Insert(ctx, M{"a": true})
 			s.NoError(err)
 			s.NotNil(cur)
 
@@ -2795,8 +2791,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(s.d.indexes, 1)
 			s.Equal("_id", slices.Collect(maps.Keys(s.d.indexes))[0])
 
-			_ = s.insert(s.d.Insert(ctx, data.M{"planet": "Earth"}))
-			_ = s.insert(s.d.Insert(ctx, data.M{"planet": "Mars"}))
+			_ = s.insert(s.d.Insert(ctx, M{"planet": "Earth"}))
+			_ = s.insert(s.d.Insert(ctx, M{"planet": "Mars"}))
 
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
@@ -2830,8 +2826,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(s.d.indexes, 1)
 			s.Equal("_id", slices.Collect(maps.Keys(s.d.indexes))[0])
 
-			_ = s.insert(s.d.Insert(ctx, data.M{"star": "sun", "planet": "Earth"}))
-			_ = s.insert(s.d.Insert(ctx, data.M{"star": "sun", "planet": "Mars"}))
+			_ = s.insert(s.d.Insert(ctx, M{"star": "sun", "planet": "Earth"}))
+			_ = s.insert(s.d.Insert(ctx, M{"star": "sun", "planet": "Mars"}))
 
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
@@ -2877,7 +2873,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// ensureIndex can be called after the data set was modified and the index still be correct
 		s.Run("AfterModifyingData", func() {
 			buf := make([]byte, 0, 1024)
-			_docs := [...]data.M{
+			_docs := [...]M{
 				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
 				{"_id": "bbb", "z": "2", "hello": "world"},
 			}
@@ -2897,11 +2893,11 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
-			newDoc1 := s.insert(s.d.Insert(ctx, data.M{"z": "12", "yes": "yes"}))
-			newDoc2 := s.insert(s.d.Insert(ctx, data.M{"z": "14", "nope": "nope"}))
-			_, err := s.d.Remove(ctx, data.M{"z": "2"})
+			newDoc1 := s.insert(s.d.Insert(ctx, M{"z": "12", "yes": "yes"}))
+			newDoc2 := s.insert(s.d.Insert(ctx, M{"z": "14", "nope": "nope"}))
+			_, err := s.d.Remove(ctx, M{"z": "2"})
 			s.NoError(err)
-			_ = s.update(s.d.Update(ctx, data.M{"z": "1"}, data.M{"$set": data.M{"yes": "yep"}}))
+			_ = s.update(s.d.Update(ctx, M{"z": "1"}, M{"$set": M{"yes": "yep"}}))
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
@@ -2915,11 +2911,11 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			matching, err := s.d.indexes["_id"].GetMatching("aaa")
 			s.NoError(err)
 			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
-			matching, err = s.d.indexes["_id"].GetMatching(newDoc1[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(newDoc1[0]["_id"])
 			s.NoError(err)
 			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("12")[0])
 
-			matching, err = s.d.indexes["_id"].GetMatching(newDoc2[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(newDoc2[0]["_id"])
 			s.NoError(err)
 			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("14")[0])
 
@@ -2928,25 +2924,25 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			docs, err := s.readCursor(cur)
 			s.NoError(err)
 
-			doc0 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == "aaa" })]
-			doc1 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == newDoc1[0].ID() })]
-			doc2 := docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == newDoc2[0].ID() })]
+			doc0 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == "aaa" })]
+			doc1 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == newDoc1[0]["_id"] })]
+			doc2 := docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == newDoc2[0]["_id"] })]
 
 			s.Len(docs, 3)
 
-			s.Equal(data.M{"_id": "aaa", "z": "1", "a": float64(2), "ages": []any{float64(1), float64(5), float64(12)}, "yes": "yep"}, doc0)
-			s.Equal(data.M{"_id": newDoc1[0].ID(), "z": "12", "yes": "yes"}, doc1)
-			s.Equal(data.M{"_id": newDoc2[0].ID(), "z": "14", "nope": "nope"}, doc2)
+			s.Equal(M{"_id": "aaa", "z": "1", "a": float64(2), "ages": []any{float64(1), float64(5), float64(12)}, "yes": "yep"}, doc0)
+			s.Equal(M{"_id": newDoc1[0]["_id"], "z": "12", "yes": "yes"}, doc1)
+			s.Equal(M{"_id": newDoc2[0]["_id"], "z": "14", "nope": "nope"}, doc2)
 		})
 
 		// ensureIndex can be called before a loadDatabase and still be initialized and filled correctly
 		s.Run("BeforeLoadDatabase", func() {
 			now := time.Now()
 			buf := make([]byte, 0, 1024)
-			_docs := [...]data.M{
+			_docs := [...]M{
 				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
 				{"_id": "bbb", "z": "2", "hello": "world"},
-				{"_id": "ccc", "z": "3", "nested": data.M{"today": now}},
+				{"_id": "ccc", "z": "3", "nested": M{"today": now}},
 			}
 			ser := serializer.NewSerializer(comparer.NewComparer(), data.NewDocument)
 			for _, doc := range _docs {
@@ -3028,10 +3024,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Run("LoadPersistedConstraintViolation", func() {
 			now := time.Now()
 			buf := make([]byte, 0, 1024)
-			_docs := [...]data.M{
+			_docs := [...]M{
 				{"_id": "aaa", "z": "1", "a": 2, "ages": []any{1, 5, 12}},
 				{"_id": "bbb", "z": "2", "a": "world"},
-				{"_id": "ccc", "z": "1", "a": data.M{"today": now}},
+				{"_id": "ccc", "z": "1", "a": M{"today": now}},
 			}
 			ser := serializer.NewSerializer(comparer.NewComparer(), data.NewDocument)
 			for _, doc := range _docs {
@@ -3057,9 +3053,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// If a unique constraint is not respected, ensureIndex will return an error and not create an index
 		s.Run("NotCreateIndexWithViolatedConstraint", func() {
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": 4}))
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": 45}))
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": 3}))
+			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": 4}))
+			_ = s.insert(s.d.Insert(ctx, M{"a": 2, "b": 45}))
+			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": 3}))
 
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithEnsureIndexFieldNames("b"),
@@ -3129,17 +3125,17 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "z": "yes"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err := s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			newDoc = s.insert(s.d.Insert(ctx, data.M{"a": 5, "z": "nope"}))
+			newDoc = s.insert(s.d.Insert(ctx, M{"a": 5, "z": "nope"}))
 			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err = s.d.indexes["z"].GetMatching("nope")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 		})
 
 		// If multiple indexes are defined, the document is inserted in all of them
@@ -3149,25 +3145,25 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(0, s.d.indexes["ya"].GetNumberOfKeys())
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "z": "yes", "ya": "indeed"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes", "ya": "indeed"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["ya"].GetNumberOfKeys())
 			matching, err := s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 			matching, err = s.d.indexes["ya"].GetMatching("indeed")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			newDoc2 := s.insert(s.d.Insert(ctx, data.M{"a": 5, "z": "nope", "ya": "sure"}))
+			newDoc2 := s.insert(s.d.Insert(ctx, M{"a": 5, "z": "nope", "ya": "sure"}))
 			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(2, s.d.indexes["ya"].GetNumberOfKeys())
 			matching, err = s.d.indexes["z"].GetMatching("nope")
 			s.NoError(err)
-			s.Equal(newDoc2, matching)
+			s.EqualDocs(newDoc2, matching)
 			matching, err = s.d.indexes["ya"].GetMatching("sure")
 			s.NoError(err)
-			s.Equal(newDoc2, matching)
+			s.EqualDocs(newDoc2, matching)
 
 		})
 
@@ -3176,17 +3172,17 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "z": "yes"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err := s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			newDoc2 := s.insert(s.d.Insert(ctx, data.M{"a": 5, "z": "yes"}))
+			newDoc2 := s.insert(s.d.Insert(ctx, M{"a": 5, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err = s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(append(newDoc, newDoc2...), matching)
+			s.EqualDocs(append(newDoc, newDoc2...), matching)
 
 		})
 
@@ -3198,13 +3194,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "z": "yes"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err := s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			newDoc2, err := s.d.Insert(ctx, data.M{"a": 5, "z": "yes"})
+			newDoc2, err := s.d.Insert(ctx, M{"a": 5, "z": "yes"})
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(newDoc2)
@@ -3214,11 +3210,11 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err = s.d.indexes["z"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			s.Equal(newDoc, s.d.getAllData())
+			s.EqualDocs(newDoc, s.d.getAllData())
 			s.NoError(s.d.LoadDatabase(ctx))
-			s.Equal(data.M{"_id": newDoc[0].ID(), "a": 2.0, "z": "yes"}, s.d.getAllData()[0])
+			s.Equal(data.M{"_id": newDoc[0]["_id"], "a": 2.0, "z": "yes"}, s.d.getAllData()[0])
 		})
 
 		// If an index has a unique constraint, other indexes cannot be modified when it raises an error
@@ -3230,12 +3226,12 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			))
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("nonu2")))
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"nonu1": "yes", "nonu2": "yes2", "uni": "willfail"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"nonu1": "yes", "nonu2": "yes2", "uni": "willfail"}))
 			s.Equal(1, s.d.indexes["nonu1"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["uni"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["nonu2"].GetNumberOfKeys())
 
-			_, err := s.d.Insert(ctx, data.M{"nonu1": "no", "nonu2": "no2", "uni": "willfail"})
+			_, err := s.d.Insert(ctx, M{"nonu1": "no", "nonu2": "no2", "uni": "willfail"})
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 
@@ -3245,13 +3241,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			matching, err := s.d.indexes["nonu1"].GetMatching("yes")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 			matching, err = s.d.indexes["uni"].GetMatching("willfail")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 			matching, err = s.d.indexes["nonu2"].GetMatching("yes2")
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
 		})
 
@@ -3264,13 +3260,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			))
 			s.Equal(0, s.d.indexes["zzz"].GetNumberOfKeys())
 
-			newDoc := s.insert(s.d.Insert(ctx, data.M{"a": 2, "z": "yes"}))
+			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["zzz"].GetNumberOfKeys())
 			matching, err := s.d.indexes["zzz"].GetMatching(nil)
 			s.NoError(err)
-			s.Equal(newDoc, matching)
+			s.EqualDocs(newDoc, matching)
 
-			_, err = s.d.Insert(ctx, data.M{"a": 5, "z": "other"})
+			_, err = s.d.Insert(ctx, M{"a": 5, "z": "other"})
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 			// TODO: assert violated key
@@ -3281,7 +3277,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				domain.WithEnsureIndexSparse(true),
 			))
 
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 5, "z": "other", "zzz": "set"}))
+			_ = s.insert(s.d.Insert(ctx, M{"a": 5, "z": "other", "zzz": "set"}))
 			s.Len(s.d.indexes["yyy"].GetAll(), 0)
 			s.Len(s.d.indexes["zzz"].GetAll(), 2)
 		})
@@ -3291,23 +3287,23 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
 
-			doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
+			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
 			docs, err := s.readCursor(cur)
 			s.NoError(err)
 
-			s.Equal(doc1[0], docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == doc1[0].ID() })])
-			s.Equal(doc2[0], docs[slices.IndexFunc(docs, func(d data.M) bool { return d.ID() == doc2[0].ID() })])
+			s.Equal(doc1[0], docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == doc1[0]["_id"] })])
+			s.Equal(doc2[0], docs[slices.IndexFunc(docs, func(d M) bool { return d["_id"] == doc2[0]["_id"] })])
 		})
 
 		// All indexes point to the same data as the main index on _id
 		s.Run("AllIndexesHaveSameData", func() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 
-			doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
+			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
 			docs, err := s.readCursor(cur)
@@ -3315,25 +3311,25 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(docs, 2)
 			s.Len(s.d.getAllData(), 2)
 
-			matching, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			matching, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
 			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["a"].GetMatching(1)
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
 			s.NoError(err)
 			expected, err := s.d.indexes["a"].GetMatching(1)
 			s.NoError(err)
 			s.Equal(expected[0], matching[0])
 
-			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
 			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
 			s.NoError(err)
 			expected, err = s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
@@ -3347,9 +3343,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				domain.WithEnsureIndexUnique(true),
 			))
 
-			doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
+			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 
-			_, err := s.d.Insert(ctx, data.M{"a": 1, "b": "si"})
+			_, err := s.d.Insert(ctx, M{"a": 1, "b": "si"})
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 
@@ -3361,7 +3357,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(docs, 1)
 			s.Len(s.d.getAllData(), 1)
 
-			matching, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			matching, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
 			s.NoError(err)
 			s.Len(matching, 1)
 			matching, err = s.d.indexes["a"].GetMatching(1)
@@ -3369,7 +3365,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(matching, 1)
 			expected, err := s.d.indexes["a"].GetMatching(1)
 			s.NoError(err)
-			matching, err = s.d.indexes["_id"].GetMatching(docs[0].ID())
+			matching, err = s.d.indexes["_id"].GetMatching(docs[0]["_id"])
 			s.NoError(err)
 			s.Equal(expected[0], matching[0])
 
@@ -3385,30 +3381,30 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Run("UpdateWithIndexing", func() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 
-			_doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			_doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
+			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 
-			n := s.update(s.d.Update(ctx, data.M{"a": 1}, data.M{"$set": data.M{"a": 456, "b": "no"}}))
+			n := s.update(s.d.Update(ctx, M{"a": 1}, M{"$set": M{"a": 456, "b": "no"}}))
 			s.Len(n, 1)
 
 			dt := s.d.getAllData()
-			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
+			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 
 			s.Len(dt, 2)
-			s.Equal(data.M{"a": 456, "b": "no", "_id": _doc1[0].ID()}, doc1)
-			s.Equal(data.M{"a": 2, "b": "si", "_id": _doc2[0].ID()}, doc2)
+			s.Equal(data.M{"a": 456, "b": "no", "_id": _doc1[0]["_id"]}, doc1)
+			s.Equal(data.M{"a": 2, "b": "si", "_id": _doc2[0]["_id"]}, doc2)
 
-			n = s.update(s.d.Update(ctx, nil, data.M{"$inc": data.M{"a": 10}, "$set": data.M{"b": "same"}}, domain.WithUpdateMulti(true)))
+			n = s.update(s.d.Update(ctx, nil, M{"$inc": M{"a": 10}, "$set": M{"b": "same"}}, domain.WithUpdateMulti(true)))
 			s.Len(n, 2)
 
 			dt = s.d.getAllData()
-			doc1 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-			doc2 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
+			doc1 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+			doc2 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 
 			s.Len(dt, 2)
-			s.Equal(data.M{"a": 466.0, "b": "same", "_id": _doc1[0].ID()}, doc1)
-			s.Equal(data.M{"a": 12.0, "b": "same", "_id": _doc2[0].ID()}, doc2)
+			s.Equal(data.M{"a": 466.0, "b": "same", "_id": _doc1[0]["_id"]}, doc1)
+			s.Equal(data.M{"a": 12.0, "b": "same", "_id": _doc2[0]["_id"]}, doc2)
 		})
 
 		// Indexes get updated when a document (or multiple documents) is updated
@@ -3416,33 +3412,33 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
 
-			doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
+			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 
-			n := s.update(s.d.Update(ctx, data.M{"a": 1}, data.M{"$set": data.M{"a": 456, "b": "no"}}))
+			n := s.update(s.d.Update(ctx, M{"a": 1}, M{"$set": M{"a": 456, "b": "no"}}))
 			s.Len(n, 1)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			matching, err := s.d.indexes["a"].GetMatching(456)
 			s.NoError(err)
-			s.Equal(doc1[0].ID(), matching[0].ID())
+			s.Equal(doc1[0]["_id"], matching[0].ID())
 			matching, err = s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
-			s.Equal(doc2[0].ID(), matching[0].ID())
+			s.Equal(doc2[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
 			matching, err = s.d.indexes["b"].GetMatching("no")
 			s.NoError(err)
-			s.Equal(doc1[0].ID(), matching[0].ID())
+			s.Equal(doc1[0]["_id"], matching[0].ID())
 			matching, err = s.d.indexes["b"].GetMatching("si")
 			s.NoError(err)
-			s.Equal(doc2[0].ID(), matching[0].ID())
+			s.Equal(doc2[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err := s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			expected, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(456)
 			s.NoError(err)
@@ -3451,7 +3447,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			expected, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
@@ -3460,16 +3456,16 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
-			n = s.update(s.d.Update(ctx, nil, data.M{"$inc": data.M{"a": 10}, "$set": data.M{"b": "same"}}, domain.WithUpdateMulti(true)))
+			n = s.update(s.d.Update(ctx, nil, M{"$inc": M{"a": 10}, "$set": M{"b": "same"}}, domain.WithUpdateMulti(true)))
 			s.Len(n, 2)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			matching, err = s.d.indexes["a"].GetMatching(466)
 			s.NoError(err)
-			s.Equal(doc1[0].ID(), matching[0].ID())
+			s.Equal(doc1[0]["_id"], matching[0].ID())
 			matching, err = s.d.indexes["a"].GetMatching(12)
 			s.NoError(err)
-			s.Equal(doc2[0].ID(), matching[0].ID())
+			s.Equal(doc2[0]["_id"], matching[0].ID())
 
 			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
 			matching, err = s.d.indexes["b"].GetMatching("same")
@@ -3481,20 +3477,20 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			for n, m := range matching {
 				ids[n] = m.ID()
 			}
-			s.Contains(ids, doc1[0].ID())
-			s.Contains(ids, doc2[0].ID())
+			s.Contains(ids, doc1[0]["_id"])
+			s.Contains(ids, doc2[0]["_id"])
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
 			s.Len(s.d.indexes["b"].GetAll(), 2)
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc1[0].ID())
+			expected, err = s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(466)
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			expected, err = s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			expected, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(12)
 			s.NoError(err)
@@ -3517,19 +3513,19 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				domain.WithEnsureIndexUnique(true),
 			))
 
-			_doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": 10, "c": 100}))
-			_doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": 20, "c": 200}))
-			_doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 3, "b": 30, "c": 300}))
+			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": 10, "c": 100}))
+			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": 20, "c": 200}))
+			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": 30, "c": 300}))
 
-			n, err := s.d.Update(ctx, data.M{"a": 2}, data.M{"$inc": data.M{"a": 10, "c": 1000}, "$set": data.M{"b": 30}})
+			n, err := s.d.Update(ctx, M{"a": 2}, M{"$inc": M{"a": 10, "c": 1000}, "$set": M{"b": 30}})
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 
 			dt := s.d.getAllData()
-			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
-			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0].ID() })]
+			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
+			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
@@ -3584,19 +3580,19 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				domain.WithEnsureIndexUnique(true),
 			))
 
-			_doc1 := s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": 10, "c": 100}))
-			_doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": 20, "c": 200}))
-			_doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 3, "b": 30, "c": 300}))
+			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": 10, "c": 100}))
+			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": 20, "c": 200}))
+			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": 30, "c": 300}))
 
-			n, err := s.d.Update(ctx, data.M{"a": data.M{"$in": []any{1, 2}}}, data.M{"$inc": data.M{"a": 10, "c": 1000}, "$set": data.M{"b": 30}}, domain.WithUpdateMulti(true))
+			n, err := s.d.Update(ctx, M{"a": M{"$in": []any{1, 2}}}, M{"$inc": M{"a": 10, "c": 1000}, "$set": M{"b": 30}}, domain.WithUpdateMulti(true))
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 
 			dt := s.d.getAllData()
-			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0].ID() })]
-			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
-			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0].ID() })]
+			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
+			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
+			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
@@ -3643,22 +3639,22 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// Removing docs still works as before with indexing
 		s.Run("UpdateIndexOnRemoveDocs", func() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			_doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
-			_doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 3, "b": "coin"}))
-			n, err := s.d.Remove(ctx, data.M{"a": 1})
+			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
+			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": "coin"}))
+			n, err := s.d.Remove(ctx, M{"a": 1})
 			s.NoError(err)
 			s.Equal(int64(1), n)
 
 			dt := s.d.getAllData()
-			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0].ID() })]
-			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0].ID() })]
+			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
+			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
 			s.Len(dt, 2)
-			s.Equal(data.M{"a": 2, "b": "si", "_id": _doc2[0].ID()}, doc2)
-			s.Equal(data.M{"a": 3, "b": "coin", "_id": _doc3[0].ID()}, doc3)
+			s.Equal(data.M{"a": 2, "b": "si", "_id": _doc2[0]["_id"]}, doc2)
+			s.Equal(data.M{"a": 3, "b": "coin", "_id": _doc3[0]["_id"]}, doc3)
 
-			n, err = s.d.Remove(ctx, data.M{"a": data.M{"$in": []any{2, 3}}}, domain.WithRemoveMulti(true))
+			n, err = s.d.Remove(ctx, M{"a": M{"$in": []any{2, 3}}}, domain.WithRemoveMulti(true))
 			s.NoError(err)
 			s.Equal(int64(2), n)
 
@@ -3670,32 +3666,32 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Run("UpdateIndexesOnRemoveMulti", func() {
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
-			_ = s.insert(s.d.Insert(ctx, data.M{"a": 1, "b": "hello"}))
-			doc2 := s.insert(s.d.Insert(ctx, data.M{"a": 2, "b": "si"}))
-			doc3 := s.insert(s.d.Insert(ctx, data.M{"a": 3, "b": "coin"}))
-			n, err := s.d.Remove(ctx, data.M{"a": 1})
+			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
+			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
+			doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": "coin"}))
+			n, err := s.d.Remove(ctx, M{"a": 1})
 			s.NoError(err)
 			s.Equal(int64(1), n)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			matching, err := s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
-			s.Equal(doc2[0].ID(), matching[0].ID())
+			s.Equal(doc2[0]["_id"], matching[0].ID())
 			matching, err = s.d.indexes["a"].GetMatching(3)
 			s.NoError(err)
-			s.Equal(doc3[0].ID(), matching[0].ID())
+			s.Equal(doc3[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
 			matching, err = s.d.indexes["b"].GetMatching("si")
 			s.NoError(err)
-			s.Equal(doc2[0].ID(), matching[0].ID())
+			s.Equal(doc2[0]["_id"], matching[0].ID())
 			matching, err = s.d.indexes["b"].GetMatching("coin")
 			s.NoError(err)
-			s.Equal(doc3[0].ID(), matching[0].ID())
+			s.Equal(doc3[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err := s.d.indexes["_id"].GetMatching(doc2[0].ID())
+			expected, err := s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(2)
 			s.NoError(err)
@@ -3704,7 +3700,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc3[0].ID())
+			expected, err = s.d.indexes["_id"].GetMatching(doc3[0]["_id"])
 			s.NoError(err)
 			matching, err = s.d.indexes["a"].GetMatching(3)
 			s.NoError(err)
@@ -3729,7 +3725,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				ctx, domain.WithEnsureIndexFieldNames("b")),
 			)
 			_ = s.insert(s.d.Insert(
-				ctx, data.M{"a": 1}, data.M{"a": 2},
+				ctx, M{"a": 1}, M{"a": 2},
 			))
 
 			errUpdMultiDoc := fmt.Errorf("update multi doc error")
@@ -3744,7 +3740,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				Return(errRevMultiDoc).
 				Once()
 
-			cur, err := s.d.Update(ctx, data.M{}, data.M{})
+			cur, err := s.d.Update(ctx, M{}, M{})
 			s.ErrorIs(err, errUpdMultiDoc)
 			s.ErrorIs(err, errRevMultiDoc)
 			s.Nil(cur)
@@ -3771,9 +3767,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 1)
 			s.Contains(d.indexes, "_id")
 
-			_, err = d.Insert(ctx, data.M{"planet": "Earth"})
+			_, err = d.Insert(ctx, M{"planet": "Earth"})
 			s.NoError(err)
-			_, err = d.Insert(ctx, data.M{"planet": "Mars"})
+			_, err = d.Insert(ctx, M{"planet": "Mars"})
 			s.NoError(err)
 
 			s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
@@ -3826,9 +3822,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 1)
 			s.Contains(d.indexes, "_id")
 
-			_, err = d.Insert(ctx, data.M{"planet": "Earth"})
+			_, err = d.Insert(ctx, M{"planet": "Earth"})
 			s.NoError(err)
-			_, err = d.Insert(ctx, data.M{"planet": "Mars"})
+			_, err = d.Insert(ctx, M{"planet": "Mars"})
 			s.NoError(err)
 
 			s.NoError(d.EnsureIndex(ctx,
@@ -3845,7 +3841,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.True(d.indexes["planet"].Unique())
 			s.False(d.indexes["planet"].Sparse())
 
-			_, err = d.Insert(ctx, data.M{"planet": "Jupiter"})
+			_, err = d.Insert(ctx, M{"planet": "Jupiter"})
 			s.NoError(err)
 
 			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
@@ -3929,9 +3925,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 1)
 			s.Contains(d.indexes, "_id")
 
-			_, err = d.Insert(ctx, data.M{"planet": "Earth"})
+			_, err = d.Insert(ctx, M{"planet": "Earth"})
 			s.NoError(err)
-			_, err = d.Insert(ctx, data.M{"planet": "Mars"})
+			_, err = d.Insert(ctx, M{"planet": "Mars"})
 			s.NoError(err)
 
 			s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
@@ -3991,7 +3987,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 	// Results of getMatching should never contain duplicates
 	s.Run("NoDuplicatesInGetMatching", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("bad")))
-		_ = s.insert(s.d.Insert(ctx, data.M{"bad": []any{"a", "b"}}))
+		_ = s.insert(s.d.Insert(ctx, M{"bad": []any{"a", "b"}}))
 		candidates, err := s.d.getCandidates(ctx, data.M{"$in": []any{"a", "b"}}, false)
 		s.NoError(err)
 		s.Len(candidates, 1)
@@ -4038,7 +4034,7 @@ func (s *DatastoreTestSuite) TestDropDatabase() {
 	s.Run("ReloadAfterwards", func() {
 		s.FileExists(s.testDb)
 		ctx := context.Background()
-		cur, err := s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hello": "world"})
+		cur, err := s.d.Insert(ctx, M{"_id": uuid.New().String(), "hello": "world"})
 		s.NoError(err)
 		s.NotNil(cur)
 		s.FileExists(s.testDb)
@@ -4053,7 +4049,7 @@ func (s *DatastoreTestSuite) TestDropDatabase() {
 		s.Len(lines, 1)
 		s.NoError(s.d.DropDatabase(ctx))
 		s.NoFileExists(s.testDb)
-		cur, err = s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hello": "world"})
+		cur, err = s.d.Insert(ctx, M{"_id": uuid.New().String(), "hello": "world"})
 		s.NoError(err)
 		s.NotNil(cur)
 		s.NoError(err)
@@ -4083,15 +4079,15 @@ func (s *DatastoreTestSuite) TestDropDatabase() {
 		ctx := context.Background()
 		s.NoError(s.d.DropDatabase(ctx))
 		docs := []any{
-			data.M{"_id": uuid.New().String(), "hello": "world"},
-			data.M{"_id": uuid.New().String(), "hello": "world"},
-			data.M{"_id": uuid.New().String(), "hello": "world"},
+			M{"_id": uuid.New().String(), "hello": "world"},
+			M{"_id": uuid.New().String(), "hello": "world"},
+			M{"_id": uuid.New().String(), "hello": "world"},
 		}
 		cur, err := s.d.Insert(ctx, docs...)
 		s.NoError(err)
 		s.NotNil(cur)
 		s.NoError(s.d.DropDatabase(ctx))
-		cur, err = s.d.Insert(ctx, data.M{"_id": uuid.New().String(), "hi": "world"})
+		cur, err = s.d.Insert(ctx, M{"_id": uuid.New().String(), "hi": "world"})
 		s.NoError(err)
 		s.NotNil(cur)
 		err = s.d.LoadDatabase(ctx)
@@ -4202,16 +4198,32 @@ func (s *DatastoreTestSuite) TestCancelContext() {
 	s.Zero(cur)
 }
 
-func (s *DatastoreTestSuite) insert(in domain.Cursor, err error) []domain.Document {
+func (s *DatastoreTestSuite) EqualDocs(expected []M, actual []domain.Document) bool {
+	if !s.Len(actual, len(expected)) {
+		return false
+	}
+	success := true
+	for i, m := range actual {
+		if !s.EqualDoc(expected[i], m) {
+			success = false
+		}
+	}
+	return success
+}
+
+func (s *DatastoreTestSuite) EqualDoc(expected M, actual domain.Document) bool {
+	doc, _ := data.NewDocument(expected)
+	return s.Equal(doc, actual)
+}
+
+func (s *DatastoreTestSuite) insert(in domain.Cursor, err error) []M {
 	s.NoError(err)
-	var res []domain.Document
+	var res []M
 	for in.Next() {
-		var d any
-		if !s.NoError(in.Scan(ctx, &d)) {
+		var m M
+		if !s.NoError(in.Scan(ctx, &m)) {
 			return nil
 		}
-		m, err := data.NewDocument(d)
-		s.NoError(err)
 		res = append(res, m)
 	}
 	return res
