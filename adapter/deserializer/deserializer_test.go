@@ -131,7 +131,7 @@ func (s *DeserializerTestSuite) TestContext() {
 
 	err = s.d.Deserialize(ctx, b, &v1)
 	s.NoError(err)
-	s.Equal(data.M{"hello": "world"}, v1)
+	s.Equal(map[string]any{"hello": "world"}, v1)
 
 	cancel()
 
