@@ -227,7 +227,7 @@ type DatastoreTestSuite struct {
 func (s *DatastoreTestSuite) SetupTest() {
 	s.testDbDir = s.T().TempDir()
 	s.testDb = filepath.Join(s.testDbDir, "test.db")
-	d, err := NewDatastore(domain.WithFilename(s.testDb))
+	d, err := NewDatastore(WithFilename(s.testDb))
 	s.NoError(err)
 	s.d = d.(*Datastore)
 	s.NoError(s.d.persistence.(*persistence.Persistence).EnsureParentDirectoryExists(ctx, s.testDb, DefaultDirMode))
@@ -268,7 +268,7 @@ func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]M, error) {
 }
 
 func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
-	db, err := NewDatastore(domain.WithInMemoryOnly(true))
+	db, err := NewDatastore(WithInMemoryOnly(true))
 	s.NoError(err)
 	s.NotNil(db)
 
@@ -276,7 +276,7 @@ func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
 }
 
 func (s *DatastoreTestSuite) TestInvalidFilename() {
-	db, err := NewDatastore(domain.WithFilename("t~"))
+	db, err := NewDatastore(WithFilename("t~"))
 	s.ErrorIs(err, domain.ErrDatafileName{
 		Name:   "t~",
 		Reason: "cannot end with '~', reserved for backup files",
@@ -289,7 +289,7 @@ func (s *DatastoreTestSuite) TestFailToCreateIDIndex() {
 	fn := func(...domain.IndexOption) (domain.Index, error) {
 		return nil, errIdxFac
 	}
-	db, err := NewDatastore(domain.WithIndexFactory(fn))
+	db, err := NewDatastore(WithIndexFactory(fn))
 	s.ErrorIs(err, errIdxFac)
 	s.Nil(db)
 }
@@ -523,9 +523,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -612,9 +612,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -651,9 +651,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -793,8 +793,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 	s.Run("FailedPersistence", func() {
 		srMock := new(serializerMock)
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithSerializer(srMock),
+			WithFilename(s.testDb),
+			WithSerializer(srMock),
 		)
 		s.NoError(err)
 		s.NotNil(d)
@@ -1014,9 +1014,9 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -1057,9 +1057,9 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -1114,9 +1114,9 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -1807,9 +1807,9 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		call := timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithFilename(s.testDb),
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithFilename(s.testDb),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		insertedDocs := s.insert(d.Insert(ctx, M{"hello": "world"}))
@@ -2358,8 +2358,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		beginning := time.Now().Truncate(time.Millisecond)
 		timeGetter := new(timeGetterMock)
 		d2, err := NewDatastore(
-			domain.WithTimestamps(true),
-			domain.WithTimeGetter(timeGetter),
+			WithTimestamps(true),
+			WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 
@@ -3760,7 +3760,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithFilename(persDB))
+			db, err := NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3782,7 +3782,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3794,7 +3794,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3815,7 +3815,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithFilename(persDB))
+			db, err := NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3845,7 +3845,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_, err = d.Insert(ctx, M{"planet": "Jupiter"})
 			s.NoError(err)
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3857,7 +3857,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 3)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3890,7 +3890,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(d.indexes["bloup"].Unique())
 			s.True(d.indexes["bloup"].Sparse())
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3918,7 +3918,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithFilename(persDB))
+			db, err := NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3942,7 +3942,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3962,7 +3962,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "another")
 			s.Len(d.indexes["_id"].GetAll(), 2)
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3972,7 +3972,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "another")
 			s.Len(d.indexes["_id"].GetAll(), 2)
 
-			db, err = NewDatastore(domain.WithFilename(persDB))
+			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -4110,7 +4110,7 @@ func (s *DatastoreTestSuite) TestDropDatabase() {
 }
 
 func (s *DatastoreTestSuite) TestLoadDatabaseCancelledContext() {
-	db, err := NewDatastore(domain.WithFilename(s.testDb))
+	db, err := NewDatastore(WithFilename(s.testDb))
 	s.NoError(err)
 	s.NotNil(db)
 

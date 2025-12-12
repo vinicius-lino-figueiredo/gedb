@@ -63,11 +63,14 @@ type Datastore struct {
 	fieldNavigator        domain.FieldNavigator
 	querier               domain.Querier
 	idGenerator           domain.IDGenerator
+	serializer            domain.Serializer
+	deserializer          domain.Deserializer
+	storage               domain.Storage
 	randomReader          io.Reader
 }
 
 // NewDatastore returns a new implementation of Datastore.
-func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
+func NewDatastore(options ...Option) (domain.GEDB, error) {
 
 	comp := comparer.NewComparer()
 	docFac := data.NewDocument
@@ -78,88 +81,88 @@ func NewDatastore(options ...domain.DatastoreOption) (domain.GEDB, error) {
 		matcher.WithComparer(comp),
 		matcher.WithFieldNavigator(fn),
 	)
-	opts := domain.DatastoreOptions{
-		Filename:              "",
-		TimestampData:         false,
-		InMemoryOnly:          false,
-		Serializer:            serializer.NewSerializer(comp, docFac),
-		Deserializer:          deserializer.NewDeserializer(dec),
-		CorruptAlertThreshold: 0.1,
-		Comparer:              comp,
-		FileMode:              DefaultFileMode,
-		DirMode:               DefaultDirMode,
-		Storage:               storage.NewStorage(),
-		IndexFactory:          index.NewIndex,
-		DocumentFactory:       docFac,
-		Decoder:               dec,
-		Matcher:               matchr,
-		CursorFactory:         cursor.NewCursor,
-		Modifier:              modifier.NewModifier(docFac, comp, fn, matchr),
-		TimeGetter:            timegetter.NewTimeGetter(),
-		Hasher:                hasher.NewHasher(),
-		FieldNavigator:        fn,
-		Querier:               querier.NewQuerier(),
-		RandomReader:          rand.Reader,
+	d := Datastore{
+		filename:              "",
+		timestampData:         false,
+		inMemoryOnly:          false,
+		corruptAlertThreshold: 0.1,
+		comparer:              comp,
+		fileMode:              DefaultFileMode,
+		dirMode:               DefaultDirMode,
+		executor:              ctxsync.NewMutex(),
+		indexes:               make(map[string]domain.Index, 1),
+		ttlIndexes:            make(map[string]time.Duration),
+		indexFactory:          index.NewIndex,
+		documentFactory:       data.NewDocument,
+		cursorFactory:         cursor.NewCursor,
+		matcher:               matchr,
+		decoder:               dec,
+		timeGetter:            timegetter.NewTimeGetter(),
+		hasher:                hasher.NewHasher(),
+		fieldNavigator:        fn,
+		querier:               querier.NewQuerier(),
+		storage:               storage.NewStorage(),
+		randomReader:          rand.Reader,
+
+		modifier:     nil,
+		idGenerator:  nil,
+		serializer:   nil,
+		deserializer: nil,
+		persistence:  nil,
 	}
 	for _, option := range options {
-		option(&opts)
+		option(&d)
 	}
-	if opts.IDGenerator == nil {
-		opts.IDGenerator = idgenerator.NewIDGenerator(
-			idgenerator.WithReader(opts.RandomReader),
+
+	if d.deserializer == nil {
+		d.deserializer = deserializer.NewDeserializer(d.decoder)
+	}
+	if d.idGenerator == nil {
+		d.idGenerator = idgenerator.NewIDGenerator(
+			idgenerator.WithReader(d.randomReader),
 		)
 	}
-	if opts.Persistence == nil {
-		var err error
-		persistenceOptions := []persistence.Option{
-			persistence.WithFilename(opts.Filename),
-			persistence.WithInMemoryOnly(opts.InMemoryOnly || opts.Filename == ""),
-			persistence.WithCorruptAlertThreshold(opts.CorruptAlertThreshold),
-			persistence.WithFileMode(opts.FileMode),
-			persistence.WithDirMode(opts.DirMode),
-			persistence.WithSerializer(opts.Serializer),
-			persistence.WithDeserializer(opts.Deserializer),
-			persistence.WithStorage(opts.Storage),
-			persistence.WithDecoder(opts.Decoder),
-			persistence.WithHasher(opts.Hasher),
-		}
-		opts.Persistence, err = persistence.NewPersistence(persistenceOptions...)
+	if d.serializer == nil {
+		d.serializer = serializer.NewSerializer(
+			d.comparer,
+			d.documentFactory,
+		)
+	}
+	if d.modifier == nil {
+		d.modifier = modifier.NewModifier(
+			d.documentFactory,
+			d.comparer,
+			d.fieldNavigator,
+			d.matcher,
+		)
+	}
+	if d.persistence == nil {
+		per, err := persistence.NewPersistence(
+			persistence.WithFilename(d.filename),
+			persistence.WithInMemoryOnly(d.inMemoryOnly || d.filename == ""),
+			persistence.WithCorruptAlertThreshold(d.corruptAlertThreshold),
+			persistence.WithFileMode(d.fileMode),
+			persistence.WithDirMode(d.dirMode),
+			persistence.WithSerializer(d.serializer),
+			persistence.WithDeserializer(d.deserializer),
+			persistence.WithStorage(d.storage),
+			persistence.WithDecoder(d.decoder),
+			persistence.WithHasher(d.hasher),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("creating persistence: %w", err)
 		}
+		d.persistence = per
 	}
-	IDIdx, err := opts.IndexFactory(
+	IDIdx, err := d.indexFactory(
 		domain.WithIndexFieldName("_id"),
 		domain.WithIndexUnique(true),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating _id index: %w", err)
 	}
-	return &Datastore{
-		filename:              opts.Filename,
-		timestampData:         opts.TimestampData,
-		inMemoryOnly:          opts.InMemoryOnly || opts.Filename == "",
-		indexes:               map[string]domain.Index{"_id": IDIdx},
-		ttlIndexes:            make(map[string]time.Duration),
-		corruptAlertThreshold: opts.CorruptAlertThreshold,
-		fileMode:              opts.FileMode,
-		dirMode:               opts.DirMode,
-		executor:              ctxsync.NewMutex(),
-		persistence:           opts.Persistence,
-		indexFactory:          opts.IndexFactory,
-		documentFactory:       opts.DocumentFactory,
-		cursorFactory:         opts.CursorFactory,
-		decoder:               opts.Decoder,
-		comparer:              opts.Comparer,
-		modifier:              opts.Modifier,
-		timeGetter:            opts.TimeGetter,
-		hasher:                opts.Hasher,
-		fieldNavigator:        opts.FieldNavigator,
-		matcher:               opts.Matcher,
-		querier:               opts.Querier,
-		idGenerator:           opts.IDGenerator,
-		randomReader:          opts.RandomReader,
-	}, nil
+	d.indexes["_id"] = IDIdx
+	return &d, nil
 }
 
 func (d *Datastore) addToIndexes(ctx context.Context, doc domain.Document) error {

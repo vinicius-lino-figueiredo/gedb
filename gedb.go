@@ -39,7 +39,7 @@ import (
 // - [WithFieldNavigator]: sets the field getter for accessing document fields.
 // - [WithIDGenerator]: sets the idgenerator to create new document ids.
 // - [WithRandomReader]: sets the reader to be used by the IDGenerator.
-func NewDB(options ...DatastoreOption) (GEDB, error) {
+func NewDB(options ...datastore.Option) (GEDB, error) {
 	return datastore.NewDatastore(options...)
 }
 
@@ -356,118 +356,118 @@ func WithIndexFieldNavigator(f FieldNavigator) IndexOption {
 	return domain.WithIndexFieldNavigator(f)
 }
 
-// DatastoreOption configures datastore behavior through the functional options
+// Option configures datastore behavior through the functional options
 // pattern.
-type DatastoreOption = domain.DatastoreOption
+type Option = datastore.Option
 
 // WithFilename sets the database filename for the datastore.
-func WithFilename(f string) DatastoreOption {
-	return domain.WithFilename(f)
+func WithFilename(f string) Option {
+	return datastore.WithFilename(f)
 }
 
 // WithTimestamps enables automatic timestamping of documents with createdAt and
 // updatedAt fields.
-func WithTimestamps(t bool) DatastoreOption {
-	return domain.WithTimestamps(t)
+func WithTimestamps(t bool) Option {
+	return datastore.WithTimestamps(t)
 }
 
 // WithInMemoryOnly enables in-memory only mode without file persistence.
-func WithInMemoryOnly(i bool) DatastoreOption {
-	return domain.WithInMemoryOnly(i)
+func WithInMemoryOnly(i bool) Option {
+	return datastore.WithInMemoryOnly(i)
 }
 
 // WithSerializer sets the serializer for converting documents to bytes.
-func WithSerializer(s Serializer) DatastoreOption {
-	return domain.WithSerializer(s)
+func WithSerializer(s Serializer) Option {
+	return datastore.WithSerializer(s)
 }
 
 // WithDeserializer sets the deserializer for converting bytes to documents.
-func WithDeserializer(d Deserializer) DatastoreOption {
-	return domain.WithDeserializer(d)
+func WithDeserializer(d Deserializer) Option {
+	return datastore.WithDeserializer(d)
 }
 
 // WithCorruptionThreshold sets the threshold for corruption warnings.
-func WithCorruptionThreshold(c float64) DatastoreOption {
-	return domain.WithCorruptionThreshold(c)
+func WithCorruptionThreshold(c float64) Option {
+	return datastore.WithCorruptionThreshold(c)
 }
 
 // WithComparer sets the comparer for value comparison operations.
-func WithComparer(c Comparer) DatastoreOption {
-	return domain.WithComparer(c)
+func WithComparer(c Comparer) Option {
+	return datastore.WithComparer(c)
 }
 
 // WithFileMode sets the file permissions for database files.
-func WithFileMode(f os.FileMode) DatastoreOption {
-	return domain.WithFileMode(f)
+func WithFileMode(f os.FileMode) Option {
+	return datastore.WithFileMode(f)
 }
 
 // WithDirMode sets the directory permissions for database directories.
-func WithDirMode(d os.FileMode) DatastoreOption {
-	return domain.WithDirMode(d)
+func WithDirMode(d os.FileMode) Option {
+	return datastore.WithDirMode(d)
 }
 
 // WithPersistence sets the persistence implementation for data storage.
-func WithPersistence(p Persistence) DatastoreOption {
-	return domain.WithPersistence(p)
+func WithPersistence(p Persistence) Option {
+	return datastore.WithPersistence(p)
 }
 
 // WithStorage sets the storage implementation for low-level file operations.
-func WithStorage(s Storage) DatastoreOption {
-	return domain.WithStorage(s)
+func WithStorage(s Storage) Option {
+	return datastore.WithStorage(s)
 }
 
 // WithIndexFactory sets the factory function for creating index instances.
-func WithIndexFactory(i IndexFactory) DatastoreOption {
-	return domain.WithIndexFactory(i)
+func WithIndexFactory(i IndexFactory) Option {
+	return datastore.WithIndexFactory(i)
 }
 
 // WithDocumentFactory sets the factory function for creating [Document]
 // instances.
-func WithDocumentFactory(d DocumentFactory) DatastoreOption {
-	return domain.WithDocumentFactory(d)
+func WithDocumentFactory(d DocumentFactory) Option {
+	return datastore.WithDocumentFactory(d)
 }
 
 // WithDecoder sets the decoder for data format conversions.
-func WithDecoder(d Decoder) DatastoreOption {
-	return domain.WithDecoder(d)
+func WithDecoder(d Decoder) Option {
+	return datastore.WithDecoder(d)
 }
 
 // WithMatcher sets the matcher implementation for query evaluation.
-func WithMatcher(m Matcher) DatastoreOption {
-	return domain.WithMatcher(m)
+func WithMatcher(m Matcher) Option {
+	return datastore.WithMatcher(m)
 }
 
 // WithCursorFactory sets the factory function for creating cursor instances.
-func WithCursorFactory(c CursorFactory) DatastoreOption {
-	return domain.WithCursorFactory(c)
+func WithCursorFactory(c CursorFactory) Option {
+	return datastore.WithCursorFactory(c)
 }
 
 // WithModifier sets the modifier implementation for document updates.
-func WithModifier(m Modifier) DatastoreOption {
-	return domain.WithModifier(m)
+func WithModifier(m Modifier) Option {
+	return datastore.WithModifier(m)
 }
 
 // WithTimeGetter sets the time getter for timestamping operations.
-func WithTimeGetter(t TimeGetter) DatastoreOption {
-	return domain.WithTimeGetter(t)
+func WithTimeGetter(t TimeGetter) Option {
+	return datastore.WithTimeGetter(t)
 }
 
 // WithHasher sets the hasher for generating hash values.
-func WithHasher(h Hasher) DatastoreOption {
-	return domain.WithHasher(h)
+func WithHasher(h Hasher) Option {
+	return datastore.WithHasher(h)
 }
 
 // WithFieldNavigator sets the field getter for accessing document fields.
-func WithFieldNavigator(f FieldNavigator) DatastoreOption {
-	return domain.WithFieldNavigator(f)
+func WithFieldNavigator(f FieldNavigator) Option {
+	return datastore.WithFieldNavigator(f)
 }
 
 // WithIDGenerator sets the idgenerator to create new document ids.
-func WithIDGenerator(ig IDGenerator) DatastoreOption {
-	return domain.WithIDGenerator(ig)
+func WithIDGenerator(ig IDGenerator) Option {
+	return datastore.WithIDGenerator(ig)
 }
 
 // WithRandomReader sets the reader to be used by the IDGenerator.
-func WithRandomReader(r io.Reader) DatastoreOption {
-	return domain.WithRandomReader(r)
+func WithRandomReader(r io.Reader) Option {
+	return datastore.WithRandomReader(r)
 }
