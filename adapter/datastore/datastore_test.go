@@ -703,7 +703,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		// removes from previous indexes if any addition fails. To reach
 		// [Datastore.removeFromIndexes], at least one addition has to
 		// be successfully made. Insert should return nil error twice
-		// becasue we made the same mock be interpreted by [Datastore]
+		// because we made the same mock be interpreted by [Datastore]
 		// as two different instances of [domain.Index].
 		idxMock.On("Insert", mock.Anything, mock.Anything).
 			Return(nil).
