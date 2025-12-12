@@ -13,11 +13,11 @@ import (
 // Serializer implements domain.Serializer.
 type Serializer struct {
 	comparer        domain.Comparer
-	documentFactory func(any) (domain.Document, error)
+	documentFactory domain.DocumentFactory
 }
 
 // NewSerializer returns a new implementation of domain.Serializer.
-func NewSerializer(comparer domain.Comparer, documentFactory func(any) (domain.Document, error)) domain.Serializer {
+func NewSerializer(comparer domain.Comparer, documentFactory domain.DocumentFactory) domain.Serializer {
 	return &Serializer{
 		comparer:        comparer,
 		documentFactory: documentFactory,

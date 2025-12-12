@@ -19,7 +19,7 @@ type Querier struct {
 	cmpr   domain.Comparer
 	fn     domain.FieldNavigator
 	proj   domain.Projector
-	docFac func(any) (domain.Document, error)
+	docFac domain.DocumentFactory
 }
 
 // NewQuerier returns a new implementation of [domain.Querier].

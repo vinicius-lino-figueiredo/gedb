@@ -12,7 +12,7 @@ func WithFieldNavigator(fn domain.FieldNavigator) Option {
 
 // WithDocumentFactory sets the [domain.Document] factory function that will be
 // used by [Projector].
-func WithDocumentFactory(df func(any) (domain.Document, error)) Option {
+func WithDocumentFactory(df domain.DocumentFactory) Option {
 	return func(p *Projector) {
 		p.docFac = df
 	}

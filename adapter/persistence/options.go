@@ -83,7 +83,7 @@ func WithComparer(c domain.Comparer) Option {
 
 // WithDocFactory sets the factory function for creating
 // documents.
-func WithDocFactory(d func(any) (domain.Document, error)) Option {
+func WithDocFactory(d domain.DocumentFactory) Option {
 	return func(po *Persistence) {
 		po.documentFactory = d
 	}

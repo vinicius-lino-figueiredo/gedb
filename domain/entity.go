@@ -1,5 +1,7 @@
 package domain
 
+import "context"
+
 type IndexDTO struct {
 	IndexCreated IndexCreated `json:"$$indexCreated" gedb:"$$indexCreated,omitzero"`
 	IndexRemoved string       `json:"$$indexRemoved" gedb:"$$indexRemoved,omitzero"`
@@ -17,9 +19,15 @@ type Update struct {
 	NewDoc Document
 }
 
-type Sort []SortName
+type Sort = []SortName
 
 type SortName struct {
 	Key   string
 	Order int64
 }
+
+type DocumentFactory = func(any) (Document, error)
+
+type CursorFactory = func(context.Context, []Document, ...CursorOption) (Cursor, error)
+
+type IndexFactory = func(...IndexOption) (Index, error)

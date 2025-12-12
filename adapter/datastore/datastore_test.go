@@ -227,7 +227,7 @@ type DatastoreTestSuite struct {
 func (s *DatastoreTestSuite) SetupTest() {
 	s.testDbDir = s.T().TempDir()
 	s.testDb = filepath.Join(s.testDbDir, "test.db")
-	d, err := NewDatastore(domain.WithDatastoreFilename(s.testDb))
+	d, err := NewDatastore(domain.WithFilename(s.testDb))
 	s.NoError(err)
 	s.d = d.(*Datastore)
 	s.NoError(s.d.persistence.(*persistence.Persistence).EnsureParentDirectoryExists(ctx, s.testDb, DefaultDirMode))
@@ -268,7 +268,7 @@ func (s *DatastoreTestSuite) readCursor(cur domain.Cursor) ([]M, error) {
 }
 
 func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
-	db, err := NewDatastore(domain.WithDatastoreInMemoryOnly(true))
+	db, err := NewDatastore(domain.WithInMemoryOnly(true))
 	s.NoError(err)
 	s.NotNil(db)
 
@@ -276,7 +276,7 @@ func (s *DatastoreTestSuite) TestLoadInMemoryOnly() {
 }
 
 func (s *DatastoreTestSuite) TestInvalidFilename() {
-	db, err := NewDatastore(domain.WithDatastoreFilename("t~"))
+	db, err := NewDatastore(domain.WithFilename("t~"))
 	s.ErrorIs(err, domain.ErrDatafileName{
 		Name:   "t~",
 		Reason: "cannot end with '~', reserved for backup files",
@@ -289,7 +289,7 @@ func (s *DatastoreTestSuite) TestFailToCreateIDIndex() {
 	fn := func(...domain.IndexOption) (domain.Index, error) {
 		return nil, errIdxFac
 	}
-	db, err := NewDatastore(domain.WithDatastoreIndexFactory(fn))
+	db, err := NewDatastore(domain.WithIndexFactory(fn))
 	s.ErrorIs(err, errIdxFac)
 	s.Nil(db)
 }
@@ -482,8 +482,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 		}
 
 		s.NoError(s.d.EnsureIndex(ctx,
-			domain.WithEnsureIndexFieldNames("a"),
-			domain.WithEnsureIndexUnique(true),
+			domain.WithFields("a"),
+			domain.WithUnique(true),
 		))
 
 		_, err := s.d.Insert(ctx, _docs...)
@@ -523,9 +523,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -612,9 +612,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -651,9 +651,9 @@ func (s *DatastoreTestSuite) TestInsert() {
 		timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
@@ -696,8 +696,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 			return idxMock, nil
 		}
 
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("b")))
 
 		// [Datastore.addToIndexes] is called once per document, and
 		// removes from previous indexes if any addition fails. To reach
@@ -793,8 +793,8 @@ func (s *DatastoreTestSuite) TestInsert() {
 	s.Run("FailedPersistence", func() {
 		srMock := new(serializerMock)
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreSerializer(srMock),
+			domain.WithFilename(s.testDb),
+			domain.WithSerializer(srMock),
 		)
 		s.NoError(err)
 		s.NotNil(d)
@@ -882,7 +882,7 @@ func (s *DatastoreTestSuite) TestCheckDocument() {
 func (s *DatastoreTestSuite) TestGetCandidates() {
 	// Can use an index to get docs with a basic match
 	s.Run("BasicMatch", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf")))
 		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4}))
 		s.Len(_doc1, 1)
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6}))
@@ -906,7 +906,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	// cannot use simple match of list values
 	s.Run("MatchSlice", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf")))
 
 		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{4}}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{6}}))
@@ -921,7 +921,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	// Can use a compound index to get docs with a basic match
 	s.Run("BasicMatchCompoundIndex", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf", "tg")))
 
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "foo": 1}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
@@ -936,7 +936,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	// Can use an index to get docs with a $in match
 	s.Run("Match$inOperator", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf")))
 
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4}))
 		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
@@ -966,7 +966,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	// If no index can be used, return the whole database
 	s.Run("ReturnDatabaseIfNoUsabeIndex", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf")))
 
 		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4}))
 		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
@@ -989,7 +989,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 	// Can use indexes for comparison matches
 	s.Run("ComparisonMatch", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf")))
 
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4}))
 		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 6}))
@@ -1014,16 +1014,16 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
 
 		s.NoError(d.EnsureIndex(ctx,
-			domain.WithEnsureIndexFieldNames("exp"),
-			domain.WithEnsureIndexExpiry(200*time.Millisecond),
+			domain.WithFields("exp"),
+			domain.WithTTL(200*time.Millisecond),
 		))
 
 		// will be called on insert and on find
@@ -1057,16 +1057,16 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
 
 		s.NoError(d.EnsureIndex(ctx,
-			domain.WithEnsureIndexFieldNames("exp"),
-			domain.WithEnsureIndexExpiry(200*time.Millisecond),
+			domain.WithFields("exp"),
+			domain.WithTTL(200*time.Millisecond),
 		))
 
 		// will be called on insert and on find
@@ -1114,14 +1114,14 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		timeGetter := new(timeGetterMock)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		s.NoError(d.LoadDatabase(ctx))
 
-		s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("exp"), domain.WithEnsureIndexExpiry(200*time.Millisecond)))
+		s.NoError(d.EnsureIndex(ctx, domain.WithFields("exp"), domain.WithTTL(200*time.Millisecond)))
 
 		// will be called on insert and on find
 		firstTimestamp := timeGetter.On("GetTime").Return(now).Times(4)
@@ -1156,8 +1156,8 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		s.d.timeGetter = tmGetMock
 		s.NoError(s.d.EnsureIndex(
 			ctx,
-			domain.WithEnsureIndexFieldNames("a"),
-			domain.WithEnsureIndexExpiry(time.Nanosecond),
+			domain.WithFields("a"),
+			domain.WithTTL(time.Nanosecond),
 		))
 		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
@@ -1191,8 +1191,8 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 
 		s.NoError(s.d.EnsureIndex(
 			ctx,
-			domain.WithEnsureIndexFieldNames("a"),
-			domain.WithEnsureIndexExpiry(time.Nanosecond),
+			domain.WithFields("a"),
+			domain.WithTTL(time.Nanosecond),
 		))
 		cur, err := s.d.Insert(ctx, M{"a": time.UnixMilli(10000)})
 		s.NoError(err)
@@ -1224,7 +1224,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	})
 
 	s.Run("NotAllIndexedFields", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf", "tg")))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "foo": 1}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "foo": 3}))
@@ -1235,7 +1235,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 	})
 
 	s.Run("CompCandidateIgnoreFieldOfValueDoc", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("tf", "tg")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf", "tg")))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "j": 1}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "j": 2}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "j": 3}))
@@ -1456,8 +1456,8 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, M{"a": 15, "hello": "home"}))
 
 		cur, err := s.d.Find(ctx, nil,
-			domain.WithFindSort(S{{Key: "a", Order: 1}}),
-			domain.WithFindLimit(2),
+			domain.WithSort(S{{Key: "a", Order: 1}}),
+			domain.WithLimit(2),
 		)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
@@ -1475,27 +1475,27 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, M{"a": 15, "hello": "home"}))
 
 		doc := make(M)
-		err := s.d.FindOne(ctx, nil, &doc, domain.WithFindSort(S{{Key: "a", Order: 1}}))
+		err := s.d.FindOne(ctx, nil, &doc, domain.WithSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
 		s.Equal("world", doc["hello"])
 
 		doc2 := make(M)
-		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc2, domain.WithFindSort(S{{Key: "a", Order: 1}}))
+		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc2, domain.WithSort(S{{Key: "a", Order: 1}}))
 		s.NoError(err)
 		s.Equal("home", doc2["hello"])
 
 		doc3 := make(M)
 		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc3,
-			domain.WithFindSort(S{{Key: "a", Order: 1}}),
-			domain.WithFindSkip(1),
+			domain.WithSort(S{{Key: "a", Order: 1}}),
+			domain.WithSkip(1),
 		)
 		s.NoError(err)
 		s.Equal("earth", doc3["hello"])
 
 		doc4 := make(M)
 		err = s.d.FindOne(ctx, M{"a": M{"$gt": 14}}, &doc4,
-			domain.WithFindSort(S{{Key: "a", Order: 1}}),
-			domain.WithFindSkip(2),
+			domain.WithSort(S{{Key: "a", Order: 1}}),
+			domain.WithSkip(2),
 		)
 		s.ErrorIs(err, domain.ErrNotFound)
 	})
@@ -1506,7 +1506,7 @@ func (s *DatastoreTestSuite) TestFind() {
 		_ = s.insert(s.d.Insert(ctx, M{"a": 24, "hello": "earth"}))
 
 		cur, err := s.d.Find(ctx, M{"a": 2},
-			domain.WithFindProjection(M{"a": 0, "_id": 0}),
+			domain.WithProjection(M{"a": 0, "_id": 0}),
 		)
 		s.NoError(err)
 		docs, err := s.readCursor(cur)
@@ -1515,7 +1515,7 @@ func (s *DatastoreTestSuite) TestFind() {
 		s.Equal(M{"hello": "world"}, docs[0])
 
 		cur, err = s.d.Find(ctx, M{"a": 2},
-			domain.WithFindProjection(M{"a": 0, "hello": 1}),
+			domain.WithProjection(M{"a": 0, "hello": 1}),
 		)
 		s.ErrorIs(err, projector.ErrMixOmitType)
 		s.Nil(cur)
@@ -1528,20 +1528,20 @@ func (s *DatastoreTestSuite) TestFind() {
 
 		doc := make(M)
 		err := s.d.FindOne(ctx, M{"a": 2}, &doc,
-			domain.WithFindProjection(M{"a": 0, "_id": 0}),
+			domain.WithProjection(M{"a": 0, "_id": 0}),
 		)
 		s.NoError(err)
 		s.Equal(M{"hello": "world"}, doc)
 
 		doc2 := make(M)
 		err = s.d.FindOne(ctx, M{"a": 2}, &doc2,
-			domain.WithFindProjection(M{"a": 0, "hello": 1}),
+			domain.WithProjection(M{"a": 0, "hello": 1}),
 		)
 		s.ErrorIs(err, projector.ErrMixOmitType)
 	})
 
 	s.Run("InvalidProjection", func() {
-		cur, err := s.d.Find(ctx, nil, domain.WithFindProjection(1))
+		cur, err := s.d.Find(ctx, nil, domain.WithProjection(1))
 		s.ErrorAs(err, &domain.ErrDecode{})
 		s.Nil(cur)
 	})
@@ -1549,7 +1549,7 @@ func (s *DatastoreTestSuite) TestFind() {
 	s.Run("FailedGetRawCandidates", func() {
 		err := s.d.EnsureIndex(
 			ctx,
-			domain.WithEnsureIndexFieldNames("a", "b"),
+			domain.WithFields("a", "b"),
 		)
 		s.NoError(err)
 
@@ -1602,7 +1602,7 @@ func (s *DatastoreTestSuite) TestFind() {
 			Twice()
 		s.d.comparer = c
 
-		err := s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a"))
+		err := s.d.EnsureIndex(ctx, domain.WithFields("a"))
 		s.NoError(err)
 
 		cur, err := s.d.Insert(ctx, M{"a": 1})
@@ -1807,9 +1807,9 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		call := timeGetter.On("GetTime").Return(beginning)
 
 		d, err := NewDatastore(
-			domain.WithDatastoreFilename(s.testDb),
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithFilename(s.testDb),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 		insertedDocs := s.insert(d.Insert(ctx, M{"hello": "world"}))
@@ -2060,8 +2060,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 			cur, err = s.d.Find(
 				ctx, nil,
-				domain.WithFindProjection(M{"_id": 0}),
-				domain.WithFindSort(
+				domain.WithProjection(M{"_id": 0}),
+				domain.WithSort(
 					domain.Sort{{Key: "a", Order: 1}},
 				),
 			)
@@ -2301,7 +2301,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 
 	// If a multi update fails on one document, previous updates should be rolled back
 	s.Run("RollbackAllOnError", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 		doc1 := s.insert(s.d.Insert(ctx, M{"a": 4}))
 		doc2 := s.insert(s.d.Insert(ctx, M{"a": 5}))
 		doc3 := s.insert(s.d.Insert(ctx, M{"a": "abc"}))
@@ -2328,8 +2328,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 	// If an index constraint is violated by an update, all changes should be rolled back
 	s.Run("RespectIndexConstraints", func() {
 		s.NoError(s.d.EnsureIndex(ctx,
-			domain.WithEnsureIndexFieldNames("a"),
-			domain.WithEnsureIndexUnique(true),
+			domain.WithFields("a"),
+			domain.WithUnique(true),
 		))
 		doc1 := s.insert(s.d.Insert(ctx, M{"a": 4}))
 		doc2 := s.insert(s.d.Insert(ctx, M{"a": 5}))
@@ -2358,8 +2358,8 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		beginning := time.Now().Truncate(time.Millisecond)
 		timeGetter := new(timeGetterMock)
 		d2, err := NewDatastore(
-			domain.WithDatastoreTimestampData(true),
-			domain.WithDatastoreTimeGetter(timeGetter),
+			domain.WithTimestamps(true),
+			domain.WithTimeGetter(timeGetter),
 		)
 		s.NoError(err)
 
@@ -2655,7 +2655,7 @@ func (s *DatastoreTestSuite) TestRemove() {
 			Once()
 		s.NoError(s.d.EnsureIndex(
 			ctx,
-			domain.WithEnsureIndexFieldNames("a"),
+			domain.WithFields("a"),
 		))
 
 		idxMock.On("Remove", mock.Anything, mock.Anything).
@@ -2759,7 +2759,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.Equal("z", s.d.indexes["z"].FieldName())
 			s.False(s.d.indexes["z"].Unique())
 			s.False(s.d.indexes["z"].Sparse())
@@ -2773,7 +2773,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		s.Run("InvalidIndex", func() {
 			f := s.d.indexFactory
 			defer func() { s.d.indexFactory = f }()
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 
 			cur, err := s.d.Insert(ctx, M{"a": true})
 			s.NoError(err)
@@ -2801,7 +2801,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Len(docs, 2)
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("planet")))
 			s.Len(s.d.indexes, 2)
 
 			indexNames := slices.Collect(maps.Keys(s.d.indexes))
@@ -2811,7 +2811,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal("planet", indexNames[1])
 			s.Len(s.d.getAllData(), 2)
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("planet")))
 			s.Len(s.d.indexes, 2)
 
 			indexNames = slices.Collect(maps.Keys(s.d.indexes))
@@ -2836,7 +2836,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Len(docs, 2)
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star", "planet")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("star", "planet")))
 			s.Len(s.d.indexes, 2)
 
 			indexNames := slices.Collect(maps.Keys(s.d.indexes))
@@ -2846,7 +2846,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal("planet,star", indexNames[1])
 			s.Len(s.d.getAllData(), 2)
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star", "planet")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("star", "planet")))
 			s.Len(s.d.indexes, 2)
 
 			indexNames = slices.Collect(maps.Keys(s.d.indexes))
@@ -2859,12 +2859,12 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// ensureIndex cannot be called with an illegal field name
 		s.Run("IllegalFieldName", func() {
-			err := s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet"))
+			err := s.d.EnsureIndex(ctx, domain.WithFields("star,planet"))
 			s.ErrorIs(err, domain.ErrFieldName{
 				Field:  "star,planet",
 				Reason: "cannot contain ','",
 			})
-			err = s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("star,planet", "other"))
+			err = s.d.EnsureIndex(ctx, domain.WithFields("star,planet", "other"))
 			s.ErrorIs(err, domain.ErrFieldName{
 				Field:  "star,planet",
 				Reason: "cannot contain ','",
@@ -2902,7 +2902,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 
 			s.Equal("z", s.d.indexes["z"].FieldName())
 			s.False(s.d.indexes["z"].Unique())
@@ -2953,7 +2953,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			}
 
 			s.Len(s.d.getAllData(), 0)
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.Equal("z", s.d.indexes["z"].FieldName())
 			s.False(s.d.indexes["z"].Unique())
 			s.False(s.d.indexes["z"].Sparse())
@@ -2994,8 +2994,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			}
 
 			s.Len(s.d.getAllData(), 0)
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(0, s.d.indexes["a"].GetNumberOfKeys())
@@ -3039,8 +3039,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Len(s.d.getAllData(), 0)
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("z"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("z"),
+				domain.WithUnique(true),
 			))
 
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
@@ -3059,13 +3059,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": 3}))
 
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("b"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("b"),
+				domain.WithUnique(true),
 			))
 
 			err := s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("a"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("a"),
+				domain.WithUnique(true),
 			)
 			e := &bst.ErrViolated{}
 			s.ErrorAs(err, &e)
@@ -3073,7 +3073,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Can remove an index
 		s.Run("RemoveIndex", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("e")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("e")))
 			s.Len(s.d.indexes, 2)
 			s.Contains(s.d.indexes, "e")
 			s.NoError(s.d.RemoveIndex(ctx, "e"))
@@ -3082,7 +3082,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		})
 
 		s.Run("RemoveIndexComma", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a", "b")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a", "b")))
 			s.Len(s.d.indexes, 2)
 			s.Contains(s.d.indexes, "a,b")
 			err := s.d.RemoveIndex(ctx, "a,b")
@@ -3095,7 +3095,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		})
 
 		s.Run("RemoveFailedDocumentFactory", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("e")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("e")))
 			s.Len(s.d.indexes, 2)
 			s.Contains(s.d.indexes, "e")
 			errDocFac := fmt.Errorf("document factory error")
@@ -3123,7 +3123,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Newly inserted documents are indexed
 		s.Run("IndexNewlyInsertedDocs", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
@@ -3141,8 +3141,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// If multiple indexes are defined, the document is inserted in all of them
 		s.Run("InsertMultipleIndexes", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("ya")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("ya")))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(0, s.d.indexes["ya"].GetNumberOfKeys())
 
@@ -3170,7 +3170,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Can insert two docs at the same key for a non unique index
 		s.Run("AllowRepeatedNonUniqueIndexKey", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("z")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
@@ -3190,8 +3190,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// If the index has a unique constraint, an error is thrown if it is violated and the data is not modified
 		s.Run("NotModifyIfViolates", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("z"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("z"),
+				domain.WithUnique(true),
 			))
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
@@ -3220,12 +3220,12 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// If an index has a unique constraint, other indexes cannot be modified when it raises an error
 		s.Run("NotModifyOthersIfViolates", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("nonu1")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("nonu1")))
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("uni"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("uni"),
+				domain.WithUnique(true),
 			))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("nonu2")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("nonu2")))
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"nonu1": "yes", "nonu2": "yes2", "uni": "willfail"}))
 			s.Equal(1, s.d.indexes["nonu1"].GetNumberOfKeys())
@@ -3256,8 +3256,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// field is undefined except if they're sparse
 		s.Run("SparseAcceptUnset", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("zzz"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("zzz"),
+				domain.WithUnique(true),
 			))
 			s.Equal(0, s.d.indexes["zzz"].GetNumberOfKeys())
 
@@ -3273,9 +3273,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			// TODO: assert violated key
 
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("yyy"),
-				domain.WithEnsureIndexUnique(true),
-				domain.WithEnsureIndexSparse(true),
+				domain.WithFields("yyy"),
+				domain.WithUnique(true),
+				domain.WithSparse(true),
 			))
 
 			_ = s.insert(s.d.Insert(ctx, M{"a": 5, "z": "other", "zzz": "set"}))
@@ -3285,8 +3285,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Insertion still works as before with indexing
 		s.Run("InsertWithIndexing", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("b")))
 
 			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
@@ -3301,7 +3301,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// All indexes point to the same data as the main index on _id
 		s.Run("AllIndexesHaveSameData", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 
 			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
@@ -3340,8 +3340,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// If a unique constraint is violated, no index is changed, including the main one
 		s.Run("NoChangeOnUniqueViolation", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("a"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("a"),
+				domain.WithUnique(true),
 			))
 
 			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
@@ -3380,7 +3380,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 	s.Run("Update", func() {
 
 		s.Run("UpdateWithIndexing", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 
 			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
@@ -3410,8 +3410,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Indexes get updated when a document (or multiple documents) is updated
 		s.Run("", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("b")))
 
 			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
@@ -3502,16 +3502,16 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// rolled back and an error is thrown
 		s.Run("RollbackAllOnViolationSimple", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("a"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("a"),
+				domain.WithUnique(true),
 			))
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("b"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("b"),
+				domain.WithUnique(true),
 			))
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("c"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("c"),
+				domain.WithUnique(true),
 			))
 
 			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": 10, "c": 100}))
@@ -3569,16 +3569,16 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// rolled back and an error is thrown
 		s.Run("RollbackAllOnViolationMulti", func() {
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("a"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("a"),
+				domain.WithUnique(true),
 			))
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("b"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("b"),
+				domain.WithUnique(true),
 			))
 			s.NoError(s.d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("c"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("c"),
+				domain.WithUnique(true),
 			))
 
 			_doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": 10, "c": 100}))
@@ -3639,7 +3639,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Removing docs still works as before with indexing
 		s.Run("UpdateIndexOnRemoveDocs", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			_doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": "coin"}))
@@ -3665,8 +3665,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 		// Indexes get updated when a document (or multiple documents) is removed
 		s.Run("UpdateIndexesOnRemoveMulti", func() {
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("a")))
-			s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("b")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("b")))
 			_ = s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 			doc2 := s.insert(s.d.Insert(ctx, M{"a": 2, "b": "si"}))
 			doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": "coin"}))
@@ -3720,10 +3720,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				Return(nil).
 				Times(4)
 			s.NoError(s.d.EnsureIndex(
-				ctx, domain.WithEnsureIndexFieldNames("a")),
+				ctx, domain.WithFields("a")),
 			)
 			s.NoError(s.d.EnsureIndex(
-				ctx, domain.WithEnsureIndexFieldNames("b")),
+				ctx, domain.WithFields("b")),
 			)
 			_ = s.insert(s.d.Insert(
 				ctx, M{"a": 1}, M{"a": 2},
@@ -3760,7 +3760,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err := NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3773,7 +3773,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_, err = d.Insert(ctx, M{"planet": "Mars"})
 			s.NoError(err)
 
-			s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
+			s.NoError(d.EnsureIndex(ctx, domain.WithFields("planet")))
 
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
@@ -3782,7 +3782,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3794,7 +3794,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3815,7 +3815,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err := NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3829,8 +3829,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 
 			s.NoError(d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("planet"),
-				domain.WithEnsureIndexUnique(true),
+				domain.WithFields("planet"),
+				domain.WithUnique(true),
 			))
 
 			s.Len(d.indexes, 2)
@@ -3845,7 +3845,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_, err = d.Insert(ctx, M{"planet": "Jupiter"})
 			s.NoError(err)
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3857,7 +3857,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 3)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3872,8 +3872,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(d.indexes["planet"].Sparse())
 
 			s.NoError(d.EnsureIndex(ctx,
-				domain.WithEnsureIndexFieldNames("bloup"),
-				domain.WithEnsureIndexSparse(true),
+				domain.WithFields("bloup"),
+				domain.WithSparse(true),
 			))
 
 			s.Len(d.indexes, 3)
@@ -3890,7 +3890,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(d.indexes["bloup"].Unique())
 			s.True(d.indexes["bloup"].Sparse())
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3918,7 +3918,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				s.NoError(os.WriteFile(persDB, nil, DefaultFileMode))
 			}
 
-			db, err := NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err := NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d := db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3931,8 +3931,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_, err = d.Insert(ctx, M{"planet": "Mars"})
 			s.NoError(err)
 
-			s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("planet")))
-			s.NoError(d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("another")))
+			s.NoError(d.EnsureIndex(ctx, domain.WithFields("planet")))
+			s.NoError(d.EnsureIndex(ctx, domain.WithFields("another")))
 
 			s.Len(d.indexes, 3)
 			s.Contains(d.indexes, "_id")
@@ -3942,7 +3942,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes["planet"].GetAll(), 2)
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3962,7 +3962,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "another")
 			s.Len(d.indexes["_id"].GetAll(), 2)
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3972,7 +3972,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "another")
 			s.Len(d.indexes["_id"].GetAll(), 2)
 
-			db, err = NewDatastore(domain.WithDatastoreFilename(persDB))
+			db, err = NewDatastore(domain.WithFilename(persDB))
 			s.NoError(err)
 			d = db.(*Datastore)
 			s.NoError(db.LoadDatabase(ctx))
@@ -3987,7 +3987,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 	// Results of getMatching should never contain duplicates
 	s.Run("NoDuplicatesInGetMatching", func() {
-		s.NoError(s.d.EnsureIndex(ctx, domain.WithEnsureIndexFieldNames("bad")))
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("bad")))
 		_ = s.insert(s.d.Insert(ctx, M{"bad": []any{"a", "b"}}))
 		candidates, err := s.d.getCandidates(ctx, data.M{"$in": []any{"a", "b"}}, false)
 		s.NoError(err)
@@ -4005,7 +4005,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		}
 
 		err := s.d.EnsureIndex(
-			ctx, domain.WithEnsureIndexFieldNames("a"),
+			ctx, domain.WithFields("a"),
 		)
 		s.ErrorIs(err, errIdxFac)
 	})
@@ -4017,7 +4017,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		}
 
 		err := s.d.EnsureIndex(
-			ctx, domain.WithEnsureIndexFieldNames("a"),
+			ctx, domain.WithFields("a"),
 		)
 		s.ErrorIs(err, errDocFac)
 	})
@@ -4110,7 +4110,7 @@ func (s *DatastoreTestSuite) TestDropDatabase() {
 }
 
 func (s *DatastoreTestSuite) TestLoadDatabaseCancelledContext() {
-	db, err := NewDatastore(domain.WithDatastoreFilename(s.testDb))
+	db, err := NewDatastore(domain.WithFilename(s.testDb))
 	s.NoError(err)
 	s.NotNil(db)
 

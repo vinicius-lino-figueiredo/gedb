@@ -89,14 +89,14 @@ type sliceProps struct {
 // Modifier implements [domain.Modifier].
 type Modifier struct {
 	comp           domain.Comparer
-	docFac         func(any) (domain.Document, error)
+	docFac         domain.DocumentFactory
 	fieldNavigator domain.FieldNavigator
 	matcher        domain.Matcher
 	mods           map[string]modFunc
 }
 
 // NewModifier implements [domain.Modifier].
-func NewModifier(docFac func(any) (domain.Document, error), comp domain.Comparer, fn domain.FieldNavigator, matcher domain.Matcher) domain.Modifier {
+func NewModifier(docFac domain.DocumentFactory, comp domain.Comparer, fn domain.FieldNavigator, matcher domain.Matcher) domain.Modifier {
 	m := &Modifier{
 		comp:           comp,
 		docFac:         docFac,

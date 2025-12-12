@@ -3,7 +3,7 @@ package querier
 import "github.com/vinicius-lino-figueiredo/gedb/domain"
 
 // WithDocumentFactory sets the factory function for creating documents.
-func WithDocumentFactory(df func(any) (domain.Document, error)) Option {
+func WithDocumentFactory(df domain.DocumentFactory) Option {
 	return func(q *Querier) {
 		q.docFac = df
 	}

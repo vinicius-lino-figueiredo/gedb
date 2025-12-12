@@ -43,7 +43,7 @@ type Persistence struct {
 	storage               domain.Storage
 	decoder               domain.Decoder
 	comparer              domain.Comparer
-	documentFactory       func(any) (domain.Document, error)
+	documentFactory       domain.DocumentFactory
 	hasher                domain.Hasher
 }
 

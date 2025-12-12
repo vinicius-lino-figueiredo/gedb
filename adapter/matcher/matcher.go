@@ -63,7 +63,7 @@ type matchFn func(any, any) (bool, error)
 
 // Matcher implements [domain.Matcher].
 type Matcher struct {
-	documentFactory func(any) (domain.Document, error)
+	documentFactory domain.DocumentFactory
 	comparer        domain.Comparer
 	fieldNavigator  domain.FieldNavigator
 	compFuncs       map[string]oper

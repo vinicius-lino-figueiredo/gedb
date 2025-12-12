@@ -32,11 +32,11 @@ type field struct {
 
 // FieldNavigator implements [domain.FieldNavigator].
 type FieldNavigator struct {
-	docFac func(any) (domain.Document, error)
+	docFac domain.DocumentFactory
 }
 
 // NewFieldNavigator returns a new instance of [domain.FieldNavigator].
-func NewFieldNavigator(docFac func(any) (domain.Document, error)) domain.FieldNavigator {
+func NewFieldNavigator(docFac domain.DocumentFactory) domain.FieldNavigator {
 	return &FieldNavigator{
 		docFac: docFac,
 	}

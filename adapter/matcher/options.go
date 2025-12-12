@@ -4,7 +4,7 @@ import "github.com/vinicius-lino-figueiredo/gedb/domain"
 
 // WithDocumentFactory sets the document factory for creating documents during
 // matching.
-func WithDocumentFactory(d func(any) (domain.Document, error)) Option {
+func WithDocumentFactory(d domain.DocumentFactory) Option {
 	return func(mo *Matcher) {
 		mo.documentFactory = d
 	}

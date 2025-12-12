@@ -52,9 +52,9 @@ type Datastore struct {
 	persistence           domain.Persistence
 	indexes               map[string]domain.Index
 	ttlIndexes            map[string]time.Duration
-	indexFactory          func(...domain.IndexOption) (domain.Index, error)
-	documentFactory       func(any) (domain.Document, error)
-	cursorFactory         func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error)
+	indexFactory          domain.IndexFactory
+	documentFactory       domain.DocumentFactory
+	cursorFactory         domain.CursorFactory
 	matcher               domain.Matcher
 	decoder               domain.Decoder
 	modifier              domain.Modifier
@@ -477,7 +477,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	}
 	defer d.executor.Unlock()
 
-	options = append(options, domain.WithFindLimit(1))
+	options = append(options, domain.WithLimit(1))
 
 	cur, err := d.find(ctx, query, false, options...)
 	if err != nil {
@@ -849,7 +849,7 @@ func (d *Datastore) remove(ctx context.Context, query domain.Document, options .
 		limit = 0
 	}
 
-	cur, err := d.find(ctx, query, true, domain.WithFindLimit(limit))
+	cur, err := d.find(ctx, query, true, domain.WithLimit(limit))
 	if err != nil {
 		return 0, err
 	}
@@ -990,7 +990,7 @@ func (d *Datastore) update(ctx context.Context, query any, updateQuery any, opti
 }
 
 func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, limit int64) ([]domain.Document, bool, error) {
-	cur, err := d.find(ctx, query, false, domain.WithFindLimit(limit))
+	cur, err := d.find(ctx, query, false, domain.WithLimit(limit))
 	if err != nil {
 		return nil, false, fmt.Errorf("finding existing documents: %w", err)
 	}
@@ -1021,7 +1021,7 @@ func (d *Datastore) upsert(ctx context.Context, query any, mod domain.Document, 
 }
 
 func (d *Datastore) findAndModify(ctx context.Context, qry any, modQry domain.Document, limit int64) ([]domain.Document, []domain.Update, error) {
-	cur, err := d.find(ctx, qry, false, domain.WithFindLimit(limit))
+	cur, err := d.find(ctx, qry, false, domain.WithLimit(limit))
 	if err != nil {
 		return nil, nil, err
 	}

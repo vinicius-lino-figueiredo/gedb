@@ -1,36 +1,35 @@
 package domain
 
 import (
-	"context"
 	"io"
 	"os"
 	"time"
 )
 
-// WithFindProjection specifies which fields to include or exclude from query
+// WithProjection specifies which fields to include or exclude from query
 // results.
-func WithFindProjection(p any) FindOption {
+func WithProjection(p any) FindOption {
 	return func(fo *FindOptions) {
 		fo.Projection = p
 	}
 }
 
-// WithFindSkip sets the number of documents to skip in query results.
-func WithFindSkip(s int64) FindOption {
+// WithSkip sets the number of documents to skip in query results.
+func WithSkip(s int64) FindOption {
 	return func(fo *FindOptions) {
 		fo.Skip = s
 	}
 }
 
-// WithFindLimit sets the maximum number of documents to return.
-func WithFindLimit(l int64) FindOption {
+// WithLimit sets the maximum number of documents to return.
+func WithLimit(l int64) FindOption {
 	return func(fo *FindOptions) {
 		fo.Limit = l
 	}
 }
 
-// WithFindSort specifies the sort order for query results.
-func WithFindSort(s Sort) FindOption {
+// WithSort specifies the sort order for query results.
+func WithSort(s Sort) FindOption {
 	return func(fo *FindOptions) {
 		fo.Sort = s
 	}
@@ -94,31 +93,31 @@ type RemoveOptions struct {
 	Multi bool
 }
 
-// WithEnsureIndexFieldNames specifies the field names for the index.
-func WithEnsureIndexFieldNames(fn ...string) EnsureIndexOption {
+// WithFields specifies the field names for the index.
+func WithFields(fn ...string) EnsureIndexOption {
 	return func(eio *EnsureIndexOptions) {
 		eio.FieldNames = fn
 	}
 }
 
-// WithEnsureIndexUnique creates a unique index that prevents duplicate values.
-func WithEnsureIndexUnique(u bool) EnsureIndexOption {
+// WithUnique creates a unique index that prevents duplicate values.
+func WithUnique(u bool) EnsureIndexOption {
 	return func(eio *EnsureIndexOptions) {
 		eio.Unique = u
 	}
 }
 
-// WithEnsureIndexSparse creates a sparse index that excludes null/undefined
+// WithSparse creates a sparse index that excludes null/undefined
 // values.
-func WithEnsureIndexSparse(s bool) EnsureIndexOption {
+func WithSparse(s bool) EnsureIndexOption {
 	return func(eio *EnsureIndexOptions) {
 		eio.Sparse = s
 	}
 }
 
-// WithEnsureIndexExpiry creates a TTL index that automatically removes
+// WithTTL creates a TTL index that automatically removes
 // documents after the specified duration.
-func WithEnsureIndexExpiry(e time.Duration) EnsureIndexOption {
+func WithTTL(e time.Duration) EnsureIndexOption {
 	return func(eio *EnsureIndexOptions) {
 		eio.ExpireAfter = e
 	}
@@ -246,7 +245,7 @@ func WithIndexExpireAfter(e time.Duration) IndexOption {
 }
 
 // WithIndexDocumentFactory sets the document factory for creating documents during index operations.
-func WithIndexDocumentFactory(d func(any) (Document, error)) IndexOption {
+func WithIndexDocumentFactory(d DocumentFactory) IndexOption {
 	return func(io *IndexOptions) {
 		io.DocumentFactory = d
 	}
@@ -285,10 +284,11 @@ type IndexOptions struct {
 	Unique bool
 	// Sparse excludes documents with null/undefined values from the index.
 	Sparse bool
-	// ExpireAfter automatically removes documents after the specified duration (TTL).
+	// ExpireAfter automatically removes documents after the specified
+	// duration (TTL).
 	ExpireAfter time.Duration
 	// DocumentFactory creates document instances during index operations.
-	DocumentFactory func(any) (Document, error)
+	DocumentFactory DocumentFactory
 	// Comparer provides sorting operations for the index.
 	Comparer Comparer
 	// Hasher generates hash values for index operations.
@@ -297,161 +297,163 @@ type IndexOptions struct {
 	FieldNavigator FieldNavigator
 }
 
-// WithDatastoreFilename sets the database filename for the datastore.
-func WithDatastoreFilename(f string) DatastoreOption {
+// WithFilename sets the database filename for the datastore.
+func WithFilename(f string) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Filename = f
 	}
 }
 
-// WithDatastoreTimestampData enables automatic timestamping of documents with createdAt and updatedAt fields.
-func WithDatastoreTimestampData(t bool) DatastoreOption {
+// WithTimestamps enables automatic timestamping of documents with createdAt and
+// updatedAt fields.
+func WithTimestamps(t bool) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.TimestampData = t
 	}
 }
 
-// WithDatastoreInMemoryOnly enables in-memory only mode without file persistence.
-func WithDatastoreInMemoryOnly(i bool) DatastoreOption {
+// WithInMemoryOnly enables in-memory only mode without file persistence.
+func WithInMemoryOnly(i bool) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.InMemoryOnly = i
 	}
 }
 
-// WithDatastoreSerializer sets the serializer for converting documents to bytes.
-func WithDatastoreSerializer(s Serializer) DatastoreOption {
+// WithSerializer sets the serializer for converting documents to bytes.
+func WithSerializer(s Serializer) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Serializer = s
 	}
 }
 
-// WithDatastoreDeserializer sets the deserializer for converting bytes to documents.
-func WithDatastoreDeserializer(d Deserializer) DatastoreOption {
+// WithDeserializer sets the deserializer for converting bytes to documents.
+func WithDeserializer(d Deserializer) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Deserializer = d
 	}
 }
 
-// WithDatastoreCorruptAlertThreshold sets the threshold for corruption warnings.
-func WithDatastoreCorruptAlertThreshold(c float64) DatastoreOption {
+// WithCorruptionThreshold sets the threshold for corruption warnings.
+func WithCorruptionThreshold(c float64) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.CorruptAlertThreshold = c
 	}
 }
 
-// WithDatastoreComparer sets the comparer for value comparison operations.
-func WithDatastoreComparer(c Comparer) DatastoreOption {
+// WithComparer sets the comparer for value comparison operations.
+func WithComparer(c Comparer) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Comparer = c
 	}
 }
 
-// WithDatastoreFileMode sets the file permissions for database files.
-func WithDatastoreFileMode(f os.FileMode) DatastoreOption {
+// WithFileMode sets the file permissions for database files.
+func WithFileMode(f os.FileMode) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.FileMode = f
 	}
 }
 
-// WithDatastoreDirMode sets the directory permissions for database directories.
-func WithDatastoreDirMode(d os.FileMode) DatastoreOption {
+// WithDirMode sets the directory permissions for database directories.
+func WithDirMode(d os.FileMode) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.DirMode = d
 	}
 }
 
-// WithDatastorePersistence sets the persistence implementation for data storage.
-func WithDatastorePersistence(p Persistence) DatastoreOption {
+// WithPersistence sets the persistence implementation for data storage.
+func WithPersistence(p Persistence) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Persistence = p
 	}
 }
 
-// WithDatastoreStorage sets the storage implementation for low-level file operations.
-func WithDatastoreStorage(s Storage) DatastoreOption {
+// WithStorage sets the storage implementation for low-level file operations.
+func WithStorage(s Storage) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Storage = s
 	}
 }
 
-// WithDatastoreIndexFactory sets the factory function for creating index instances.
-func WithDatastoreIndexFactory(i func(...IndexOption) (Index, error)) DatastoreOption {
+// WithIndexFactory sets the factory function for creating index instances.
+func WithIndexFactory(i IndexFactory) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.IndexFactory = i
 	}
 }
 
-// WithDatastoreDocumentFactory sets the factory function for creating document instances.
-func WithDatastoreDocumentFactory(d func(any) (Document, error)) DatastoreOption {
+// WithDocumentFactory sets the factory function for creating document instances.
+func WithDocumentFactory(d DocumentFactory) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.DocumentFactory = d
 	}
 }
 
-// WithDatastoreDecoder sets the decoder for data format conversions.
-func WithDatastoreDecoder(d Decoder) DatastoreOption {
+// WithDecoder sets the decoder for data format conversions.
+func WithDecoder(d Decoder) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Decoder = d
 	}
 }
 
-// WithDatastoreMatcher sets the matcher implementation for query evaluation.
-func WithDatastoreMatcher(m Matcher) DatastoreOption {
+// WithMatcher sets the matcher implementation for query evaluation.
+func WithMatcher(m Matcher) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Matcher = m
 	}
 }
 
-// WithDatastoreCursorFactory sets the factory function for creating cursor instances.
-func WithDatastoreCursorFactory(c func(context.Context, []Document, ...CursorOption) (Cursor, error)) DatastoreOption {
+// WithCursorFactory sets the factory function for creating cursor instances.
+func WithCursorFactory(c CursorFactory) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.CursorFactory = c
 	}
 }
 
-// WithDatastoreModifier sets the modifier implementation for document updates.
-func WithDatastoreModifier(m Modifier) DatastoreOption {
+// WithModifier sets the modifier implementation for document updates.
+func WithModifier(m Modifier) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Modifier = m
 	}
 }
 
-// WithDatastoreTimeGetter sets the time getter for timestamping operations.
-func WithDatastoreTimeGetter(t TimeGetter) DatastoreOption {
+// WithTimeGetter sets the time getter for timestamping operations.
+func WithTimeGetter(t TimeGetter) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.TimeGetter = t
 	}
 }
 
-// WithDatastoreHasher sets the hasher for generating hash values.
-func WithDatastoreHasher(h Hasher) DatastoreOption {
+// WithHasher sets the hasher for generating hash values.
+func WithHasher(h Hasher) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.Hasher = h
 	}
 }
 
-// WithDatastoreFieldNavigator sets the field getter for accessing document fields.
-func WithDatastoreFieldNavigator(f FieldNavigator) DatastoreOption {
+// WithFieldNavigator sets the field getter for accessing document fields.
+func WithFieldNavigator(f FieldNavigator) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.FieldNavigator = f
 	}
 }
 
-// WithDatastoreIDGenerator sets the idgenerator to create new document ids.
-func WithDatastoreIDGenerator(ig IDGenerator) DatastoreOption {
+// WithIDGenerator sets the idgenerator to create new document ids.
+func WithIDGenerator(ig IDGenerator) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.IDGenerator = ig
 	}
 }
 
-// WithDatastoreRandomReader sets the reader to be used by the IDGenerator.
-func WithDatastoreRandomReader(r io.Reader) DatastoreOption {
+// WithRandomReader sets the reader to be used by the IDGenerator.
+func WithRandomReader(r io.Reader) DatastoreOption {
 	return func(dso *DatastoreOptions) {
 		dso.RandomReader = r
 	}
 }
 
-// DatastoreOption configures datastore behavior through the functional options pattern.
+// DatastoreOption configures datastore behavior through the functional options
+// pattern.
 type DatastoreOption func(*DatastoreOptions)
 
 // DatastoreOptions contains parameters for customizing datastore behavior.
@@ -479,15 +481,15 @@ type DatastoreOptions struct {
 	// Storage provides low-level file operations.
 	Storage Storage
 	// IndexFactory creates index instances.
-	IndexFactory func(...IndexOption) (Index, error)
+	IndexFactory IndexFactory
 	// DocumentFactory creates document instances.
-	DocumentFactory func(any) (Document, error)
+	DocumentFactory DocumentFactory
 	// Decoder converts between data representations.
 	Decoder Decoder
 	// Matcher evaluates whether documents match query criteria.
 	Matcher Matcher
 	// CursorFactory creates cursor instances.
-	CursorFactory func(context.Context, []Document, ...CursorOption) (Cursor, error)
+	CursorFactory CursorFactory
 	// Modifier applies update operations to documents.
 	Modifier Modifier
 	// TimeGetter provides current time for timestamping operations.

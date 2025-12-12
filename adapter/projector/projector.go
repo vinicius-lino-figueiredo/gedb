@@ -18,7 +18,7 @@ var (
 // Projector implements [domain.Projector].
 type Projector struct {
 	fn     domain.FieldNavigator
-	docFac func(any) (domain.Document, error)
+	docFac domain.DocumentFactory
 }
 
 // NewProjector returns a new implementation of [domain.Projector].
