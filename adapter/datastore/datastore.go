@@ -372,8 +372,7 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 		return nil
 	}
 
-	var err error
-	d.indexes[fields], err = d.indexFactory(_options...)
+	idx, err := d.indexFactory(_options...)
 	if err != nil {
 		return err
 	}
@@ -384,7 +383,7 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 
 	data := d.getAllData()
 	if len(data) > 0 {
-		if err := d.indexes[fields].Insert(ctx, data...); err != nil {
+		if err := idx.Insert(ctx, data...); err != nil {
 			delete(d.indexes, fields)
 			return fmt.Errorf("adding existing data to index: %w", err)
 		}
@@ -402,6 +401,8 @@ func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureInd
 	if err != nil {
 		return err
 	}
+
+	d.indexes[fields] = idx
 
 	return d.persistence.PersistNewState(ctx, idxDoc)
 }
