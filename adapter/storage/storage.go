@@ -28,7 +28,7 @@ var osSpecificSync = func(f *os.File, _ bool) error {
 	return f.Sync()
 }
 
-// Storage implements domain.Storage.
+// Storage implements [domain.Storage].
 type Storage struct {
 	osOpts osOps
 }
@@ -40,7 +40,7 @@ func NewStorage() domain.Storage {
 	}
 }
 
-// AppendFile implements domain.Storage.
+// AppendFile implements [domain.Storage].
 func (d *Storage) AppendFile(fileName string, mode os.FileMode, data []byte) (int, error) {
 	f, err := d.osOpts.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, mode)
 	if err != nil {
@@ -50,7 +50,7 @@ func (d *Storage) AppendFile(fileName string, mode os.FileMode, data []byte) (in
 	return f.Write(data)
 }
 
-// CrashSafeWriteFileLines implements domain.Storage.
+// CrashSafeWriteFileLines implements [domain.Storage].
 func (d *Storage) CrashSafeWriteFileLines(fileName string, lines [][]byte, dirMode os.FileMode, fileMode os.FileMode) error {
 	tempFilename := fileName + "~"
 
@@ -87,7 +87,7 @@ func (d *Storage) CrashSafeWriteFileLines(fileName string, lines [][]byte, dirMo
 	return nil
 }
 
-// EnsureDatafileIntegrity implements domain.Storage.
+// EnsureDatafileIntegrity implements [domain.Storage].
 func (d *Storage) EnsureDatafileIntegrity(fileName string, mode os.FileMode) error {
 	tempFilename := fileName + "~"
 
@@ -111,7 +111,7 @@ func (d *Storage) EnsureDatafileIntegrity(fileName string, mode os.FileMode) err
 	return d.osOpts.Rename(tempFilename, fileName)
 }
 
-// EnsureParentDirectoryExists implements domain.Storage.
+// EnsureParentDirectoryExists implements [domain.Storage].
 func (d *Storage) EnsureParentDirectoryExists(fileName string, mode os.FileMode) error {
 	dir := filepath.Dir(fileName)
 	parsedDir, err := filepath.Abs(dir)
@@ -122,7 +122,7 @@ func (d *Storage) EnsureParentDirectoryExists(fileName string, mode os.FileMode)
 	return osSpecificEnsureDir(d.osOpts, parsedDir, mode)
 }
 
-// Exists implements domain.Storage.
+// Exists implements [domain.Storage].
 func (d *Storage) Exists(fileName string) (bool, error) {
 	_, err := d.osOpts.Stat(fileName)
 	if err != nil {
@@ -154,7 +154,7 @@ func (d *Storage) flushToStorage(fileName string, isDir bool, mode os.FileMode) 
 	return nil
 }
 
-// ReadFileStream implements domain.Storage.
+// ReadFileStream implements [domain.Storage].
 func (d *Storage) ReadFileStream(fileName string, mode os.FileMode) (io.ReadCloser, error) {
 	return d.osOpts.OpenFile(fileName, os.O_RDONLY, mode)
 }
@@ -181,7 +181,7 @@ func (d *Storage) writeFileStream(fileName string, mode os.FileMode) (io.WriteCl
 	return d.osOpts.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 }
 
-// Remove implements domain.Storage.
+// Remove implements [domain.Storage].
 func (d *Storage) Remove(fileName string) error {
 	return d.osOpts.Remove(fileName)
 }

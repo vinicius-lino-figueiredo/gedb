@@ -2,7 +2,9 @@
 //
 // This package contains a new implementation of nedb. Most features there can
 // be used here.
-// TODO: finish package comment
+//
+// The basic usage starts with creating a new [GEDB] instance, which can be done
+// by calling [NewDB].
 package gedb
 
 import (
@@ -18,26 +20,47 @@ import (
 // NewDB creates a new GEDB instance with the provided configuration options:
 //
 // - [WithFilename]: sets the database filename for the datastore.
+//
 // - [WithTimestamps]: enables automatic timestamping of documents
+//
 // - [WithInMemoryOnly]: enables in-memory only mode without file persistence.
+//
 // - [WithSerializer]: sets the serializer for converting data to bytes.
+//
 // - [WithDeserializer]: sets the deserializer for converting bytes to data.
+//
 // - [WithCorruptionThreshold]: sets the threshold for corruption warnings.
+//
 // - [WithComparer]: sets the comparer for value comparison operations.
+//
 // - [WithFileMode]: sets the file permissions for database files.
+//
 // - [WithDirMode]: sets the directory permissions for database directories.
+//
 // - [WithPersistence]: sets the persistence implementation for data storage.
+//
 // - [WithStorage]: sets the storage implementation for file operations.
+//
 // - [WithIndexFactory]: sets the factory function for creating index instances.
-// - [WithDocumentFactory]: sets the func for creating [Document] instances.
+//
+// - [WithDocumentFactory]: sets the function for creating [Document] instances.
+//
 // - [WithDecoder]: sets the decoder for data format conversions.
+//
 // - [WithMatcher]: sets the matcher implementation for query evaluation.
-// - [WithCursorFactory]: sets the funct for creating cursor instances.
+//
+// - [WithCursorFactory]: sets the function for creating cursor instances.
+//
 // - [WithModifier]: sets the modifier implementation for document updates.
+//
 // - [WithTimeGetter]: sets the time getter for timestamping operations.
+//
 // - [WithHasher]: sets the hasher for generating hash values.
+//
 // - [WithFieldNavigator]: sets the field getter for accessing document fields.
+//
 // - [WithIDGenerator]: sets the idgenerator to create new document ids.
+//
 // - [WithRandomReader]: sets the reader to be used by the IDGenerator.
 func NewDB(options ...datastore.Option) (GEDB, error) {
 	return datastore.NewDatastore(options...)
@@ -47,12 +70,16 @@ func NewDB(options ...datastore.Option) (GEDB, error) {
 // It provides data persistence, indexing, and query functionality with
 // context-aware operations.
 //
-// All data is stored wither in-memory only or locally on disk, and operations
+// All data is stored either in-memory only or locally on disk, and operations
 // are safe to use concurrently from multiple goroutines.
+//
+// If set as in-memory-only, user can start using the db right away, but for
+// persistent databases, [GEDB.LoadDatabase] should be called to load the
+// datafile.
 type GEDB interface {
-	// LoadDatabase initializes or loads the database file, preparing it for
-	// further operations. Must be called before using other methods except
-	// for in-memory-only databases.
+	// LoadDatabase loads the database file, preparing it for further
+	// operations. Must be called before using other methods except for
+	// in-memory-only databases.
 	LoadDatabase(ctx context.Context) error
 
 	// DropDatabase permanently deletes all data and removes the database
@@ -97,7 +124,7 @@ type GEDB interface {
 
 	// Find filters data using [Index] and [Matcher], and returns a cursor
 	// over all documents matching the query. Options can also be added to
-	// control result propertis, those being:
+	// control result properties, those being:
 	// - [WithProjection]
 	// - [WithSkip]
 	// - [WithLimit]
@@ -173,7 +200,7 @@ type Index = domain.Index
 // IDGenerator is used to create unique IDs for new instances of [Document].
 type IDGenerator = domain.IDGenerator
 
-// Sort represents an orderd list of fields which should be used, respectively,
+// Sort represents an ordered list of fields which should be used, respectively,
 // to sort the results of a query.
 type Sort = []SortName
 
@@ -182,7 +209,7 @@ type Sort = []SortName
 // descending order.
 type SortName = domain.SortName
 
-// DocumentFactory represents a [Gocument] constructor that can be
+// DocumentFactory represents a [Document] constructor that can be
 // reimplemented. It should accept structured data types and create an
 // equivalent [Document], respecting the given structure. If nil is given as
 // argument, a document of length 0 should be returned.

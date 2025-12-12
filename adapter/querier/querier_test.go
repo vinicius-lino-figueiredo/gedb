@@ -20,12 +20,12 @@ type S = domain.Sort
 
 type comparerMock struct{ mock.Mock }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *comparerMock) Comparable(a any, b any) bool {
 	return c.Called(a, b).Bool(0)
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *comparerMock) Compare(a any, b any) (int, error) {
 	return c.Called(a, b).Get(0).(func(any, any) (int, error))(a, b)
 }

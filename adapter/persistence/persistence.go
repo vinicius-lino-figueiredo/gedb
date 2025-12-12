@@ -24,13 +24,17 @@ import (
 )
 
 const (
-	DefaultDirMode  os.FileMode = 0o755
+	// DefaultDirMode is used by [Persistence] if no mode for directories is
+	// provided
+	DefaultDirMode os.FileMode = 0o755
+	// DefaultFileMode is used by [Persistence] if no mode for files is
+	// provided
 	DefaultFileMode os.FileMode = 0o644
 )
 
 type docMap = *uncomparable.Map[domain.Document]
 
-// Persistence implements domain.Persistence.
+// Persistence implements [domain.Persistence].
 type Persistence struct {
 	inMemoryOnly          bool
 	filename              string
@@ -83,12 +87,12 @@ func NewPersistence(options ...Option) (domain.Persistence, error) {
 	return &p, nil
 }
 
-// SetCorruptAlertThreshold implements domain.Persistence.
+// SetCorruptAlertThreshold implements [domain.Persistence].
 func (p *Persistence) SetCorruptAlertThreshold(v float64) {
 	p.corruptAlertThreshold = v
 }
 
-// PersistNewState implements domain.Persistence.
+// PersistNewState implements [domain.Persistence].
 func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Document) error {
 	select {
 	case <-ctx.Done():
@@ -123,7 +127,7 @@ func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Doc
 	return err
 }
 
-// TreatRawStream implements domain.Persistence.
+// TreatRawStream implements [domain.Persistence].
 func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
 	select {
 	case <-ctx.Done():
@@ -220,7 +224,7 @@ func (p *Persistence) addOrDeleteDoc(doc domain.Document, m docMap) error {
 	return m.Set(doc.ID(), doc)
 }
 
-// LoadDatabase implements domain.Persistence.
+// LoadDatabase implements [domain.Persistence].
 func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
 	select {
 	case <-ctx.Done():
@@ -284,7 +288,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document,
 	return docs, indexes, nil
 }
 
-// DropDatabase implements domain.Persistence.
+// DropDatabase implements [domain.Persistence].
 func (p *Persistence) DropDatabase(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -304,7 +308,7 @@ func (p *Persistence) DropDatabase(ctx context.Context) error {
 	return nil
 }
 
-// PersistCachedDatabase implements domain.Persistence.
+// PersistCachedDatabase implements [domain.Persistence].
 func (p *Persistence) PersistCachedDatabase(ctx context.Context, allData []domain.Document, indexes map[string]domain.IndexDTO) error {
 	select {
 	case <-ctx.Done():
@@ -344,6 +348,7 @@ func (p *Persistence) PersistCachedDatabase(ctx context.Context, allData []domai
 	return nil
 }
 
+// EnsureParentDirectoryExists implements [domain.Persistence].
 func (p *Persistence) EnsureParentDirectoryExists(ctx context.Context, dir string, mode os.FileMode) error {
 	select {
 	case <-ctx.Done():
@@ -353,7 +358,7 @@ func (p *Persistence) EnsureParentDirectoryExists(ctx context.Context, dir strin
 	return p.storage.EnsureParentDirectoryExists(dir, mode)
 }
 
-// WaitCompaction implements domain.Persistence.
+// WaitCompaction implements [domain.Persistence].
 func (p *Persistence) WaitCompaction(ctx context.Context) error {
 	return p.broadcaster.WaitWithContext(ctx)
 }

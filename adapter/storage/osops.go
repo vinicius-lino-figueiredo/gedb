@@ -14,37 +14,37 @@ type osOps interface {
 
 type osImpl struct{}
 
-// IsNotExist implements osOpts.
+// IsNotExist implements [osOpts].
 func (o *osImpl) IsNotExist(err error) bool {
 	return os.IsNotExist(err)
 }
 
-// MkdirAll implements osOpts.
+// MkdirAll implements [osOpts].
 func (o *osImpl) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// OpenFile implements osOpts.
+// OpenFile implements [osOpts].
 func (o *osImpl) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	return os.OpenFile(name, flag, perm)
 }
 
-// Remove implements osOpts.
+// Remove implements [osOpts].
 func (o *osImpl) Remove(name string) error {
 	return os.Remove(name)
 }
 
-// Rename implements osOpts.
+// Rename implements [osOpts].
 func (o *osImpl) Rename(oldpath string, newpath string) error {
 	return os.Rename(oldpath, newpath)
 }
 
-// Stat implements osOpts.
+// Stat implements [osOpts].
 func (o *osImpl) Stat(name string) (os.FileInfo, error) {
 	return os.Stat(name)
 }
 
-// WriteFile implements osOpts.
+// WriteFile implements [osOpts].
 func (o *osImpl) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
 }

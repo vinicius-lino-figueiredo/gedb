@@ -92,7 +92,7 @@ type ErrCorruptFiles struct {
 // Error implements [error].
 func (e ErrCorruptFiles) Error() string {
 	return fmt.Sprintf(
-		"corrupted %.2f%% (%d of %d) exceeded theshold %.2f%%",
+		"corrupted %.2f%% (%d of %d) exceeded threshold %.2f%%",
 		100*e.CorruptionRate,
 		e.CorruptItems, e.DataLength,
 		100*e.CorruptAlertThreshold,

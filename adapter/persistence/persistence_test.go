@@ -42,7 +42,7 @@ func (s deserializeFunc) Deserialize(ctx context.Context, b []byte, v any) error
 
 type readerMock struct{ mock.Mock }
 
-// Read implements io.Reader.
+// Read implements [io.Reader].
 func (r *readerMock) Read(p []byte) (n int, err error) {
 	call := r.Called(p)
 	return call.Int(0), call.Error(1)
@@ -50,12 +50,12 @@ func (r *readerMock) Read(p []byte) (n int, err error) {
 
 type comparerMock struct{ mock.Mock }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *comparerMock) Comparable(a any, b any) bool {
 	return c.Called(a, b).Bool(0)
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *comparerMock) Compare(a any, b any) (int, error) {
 	call := c.Called(a, b)
 	return call.Int(0), call.Error(1)
@@ -63,40 +63,40 @@ func (c *comparerMock) Compare(a any, b any) (int, error) {
 
 type storageMock struct{ mock.Mock }
 
-// AppendFile implements domain.Storage.
+// AppendFile implements [domain.Storage].
 func (s *storageMock) AppendFile(f string, m os.FileMode, b []byte) (int, error) {
 	call := s.Called(f, m, b)
 	return call.Int(0), call.Error(1)
 }
 
-// CrashSafeWriteFileLines implements domain.Storage.
+// CrashSafeWriteFileLines implements [domain.Storage].
 func (s *storageMock) CrashSafeWriteFileLines(f string, l [][]byte, m1 os.FileMode, m2 os.FileMode) error {
 	return s.Called(f, l, m1, m2).Error(0)
 }
 
-// EnsureDatafileIntegrity implements domain.Storage.
+// EnsureDatafileIntegrity implements [domain.Storage].
 func (s *storageMock) EnsureDatafileIntegrity(f string, m os.FileMode) error {
 	return s.Called(f, m).Error(0)
 }
 
-// EnsureParentDirectoryExists implements domain.Storage.
+// EnsureParentDirectoryExists implements [domain.Storage].
 func (s *storageMock) EnsureParentDirectoryExists(f string, m os.FileMode) error {
 	return s.Called(f, m).Error(0)
 }
 
-// Exists implements domain.Storage.
+// Exists implements [domain.Storage].
 func (s *storageMock) Exists(f string) (bool, error) {
 	call := s.Called(f)
 	return call.Bool(0), call.Error(1)
 }
 
-// ReadFileStream implements domain.Storage.
+// ReadFileStream implements [domain.Storage].
 func (s *storageMock) ReadFileStream(f string, m os.FileMode) (io.ReadCloser, error) {
 	call := s.Called(f, m)
 	return call.Get(0).(io.ReadCloser), call.Error(1)
 }
 
-// Remove implements domain.Storage.
+// Remove implements [domain.Storage].
 func (s *storageMock) Remove(f string) error {
 	return s.Called(f).Error(0)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// Serializer implements domain.Serializer.
+// Serializer implements [domain.Serializer].
 type Serializer struct {
 	comparer        domain.Comparer
 	documentFactory domain.DocumentFactory
@@ -61,7 +61,7 @@ func (s *Serializer) copyAny(v any) (any, error) {
 	}
 }
 
-// Serialize implements domain.Serializer.
+// Serialize implements [domain.Serializer].
 func (s *Serializer) Serialize(ctx context.Context, value any) ([]byte, error) {
 	select {
 	case <-ctx.Done():

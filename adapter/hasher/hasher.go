@@ -25,7 +25,7 @@ func NewHasher() domain.Hasher {
 	return &Hasher{}
 }
 
-// Hash implements domain.Hasher.
+// Hash implements [domain.Hasher].
 func (h *Hasher) Hash(value any) (uint64, error) {
 	canonical := h.canonicalize(value)
 

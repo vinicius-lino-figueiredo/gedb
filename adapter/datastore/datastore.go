@@ -35,11 +35,15 @@ import (
 )
 
 const (
-	DefaultDirMode  os.FileMode = 0o755
+	// DefaultDirMode is used by [Datastore] if no mode for directories is
+	// provided
+	DefaultDirMode os.FileMode = 0o755
+	// DefaultFileMode is used by [Datastore] if no mode for files is
+	// provided
 	DefaultFileMode os.FileMode = 0o644
 )
 
-// Datastore implements domain.GEDB.
+// Datastore implements [domain.GEDB].
 type Datastore struct {
 	filename              string
 	timestampData         bool
@@ -264,7 +268,7 @@ func (d *Datastore) clone(v any) (any, error) {
 	}
 }
 
-// CompactDatafile implements domain.GEDB.
+// CompactDatafile implements [domain.GEDB].
 func (d *Datastore) CompactDatafile(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -277,7 +281,7 @@ func (d *Datastore) CompactDatafile(ctx context.Context) error {
 	return d.persistence.PersistCachedDatabase(ctx, allData, indexDTOs)
 }
 
-// Count implements domain.GEDB.
+// Count implements [domain.GEDB].
 func (d *Datastore) Count(ctx context.Context, query any) (int64, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return 0, err
@@ -315,7 +319,7 @@ func (d *Datastore) createNewID() (string, error) {
 	}
 }
 
-// DropDatabase implements domain.GEDB.
+// DropDatabase implements [domain.GEDB].
 func (d *Datastore) DropDatabase(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -332,7 +336,7 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	return d.persistence.DropDatabase(ctx)
 }
 
-// EnsureIndex implements domain.GEDB.
+// EnsureIndex implements [domain.GEDB].
 func (d *Datastore) EnsureIndex(ctx context.Context, options ...domain.EnsureIndexOption) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -423,7 +427,7 @@ func (d *Datastore) filterIndexNames(indexNames []string, k string, v any) bool 
 	return true
 }
 
-// Find implements domain.GEDB.
+// Find implements [domain.GEDB].
 func (d *Datastore) Find(ctx context.Context, query any, options ...domain.FindOption) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -474,7 +478,7 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 	return d.cursorFactory(ctx, res)
 }
 
-// FindOne implements domain.GEDB.
+// FindOne implements [domain.GEDB].
 func (d *Datastore) FindOne(ctx context.Context, query any, target any, options ...domain.FindOption) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -494,7 +498,7 @@ func (d *Datastore) FindOne(ctx context.Context, query any, target any, options 
 	return cur.Scan(ctx, target)
 }
 
-// GetAllData implements domain.GEDB.
+// GetAllData implements [domain.GEDB].
 func (d *Datastore) GetAllData(ctx context.Context) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -699,7 +703,7 @@ func (d *Datastore) matchingResult(dt []domain.Document, err error) ([]domain.Do
 	return dt, true, nil
 }
 
-// Insert implements domain.GEDB.
+// Insert implements [domain.GEDB].
 func (d *Datastore) Insert(ctx context.Context, newDocs ...any) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -754,7 +758,7 @@ func (d *Datastore) insertInCache(ctx context.Context, preparedDocs []domain.Doc
 	return nil
 }
 
-// LoadDatabase implements domain.GEDB.
+// LoadDatabase implements [domain.GEDB].
 func (d *Datastore) LoadDatabase(ctx context.Context) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -828,7 +832,7 @@ func (d *Datastore) prepareDocumentsForInsertion(newDocs []any) ([]domain.Docume
 	return preparedDocs, nil
 }
 
-// Remove implements domain.GEDB.
+// Remove implements [domain.GEDB].
 func (d *Datastore) Remove(ctx context.Context, query any, options ...domain.RemoveOption) (int64, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return 0, err
@@ -899,7 +903,7 @@ func (d *Datastore) removeFromIndexes(ctx context.Context, doc domain.Document) 
 	return nil
 }
 
-// RemoveIndex implements domain.GEDB.
+// RemoveIndex implements [domain.GEDB].
 func (d *Datastore) RemoveIndex(ctx context.Context, fieldNames ...string) error {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return err
@@ -938,7 +942,7 @@ func (d *Datastore) resetIndexes(ctx context.Context, docs ...domain.Document) e
 	return nil
 }
 
-// Update implements domain.GEDB.
+// Update implements [domain.GEDB].
 func (d *Datastore) Update(ctx context.Context, query any, updateQuery any, options ...domain.UpdateOption) (domain.Cursor, error) {
 	if err := d.executor.LockWithContext(ctx); err != nil {
 		return nil, err
@@ -1096,7 +1100,7 @@ func (d *Datastore) isInt(v any) bool {
 	}
 }
 
-// WaitCompaction implements domain.GEDB.
+// WaitCompaction implements [domain.GEDB].
 func (d *Datastore) WaitCompaction(ctx context.Context) error {
 	return d.persistence.WaitCompaction(ctx)
 }

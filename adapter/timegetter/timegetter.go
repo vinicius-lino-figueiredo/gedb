@@ -7,7 +7,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// TimeGetter implements domain.TimeGetter.
+// TimeGetter implements [domain.TimeGetter].
 type TimeGetter struct{}
 
 // NewTimeGetter returns a new implementation of domain.TimeGetter.
@@ -15,7 +15,7 @@ func NewTimeGetter() domain.TimeGetter {
 	return &TimeGetter{}
 }
 
-// GetTime implements domain.TimeGetter.
+// GetTime implements [domain.TimeGetter].
 func (t *TimeGetter) GetTime() time.Time {
 	return time.Now()
 }

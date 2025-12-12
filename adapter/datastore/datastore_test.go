@@ -45,70 +45,70 @@ func (t *timeGetterMock) GetTime() time.Time { return t.Called().Get(0).(time.Ti
 
 type contextMock struct{ mock.Mock }
 
-// Deadline implements context.Context.
+// Deadline implements [context.Context].
 func (c *contextMock) Deadline() (deadline time.Time, ok bool) {
 	call := c.Called()
 	return call.Get(0).(time.Time), call.Bool(1)
 }
 
-// Done implements context.Context.
+// Done implements [context.Context].
 func (c *contextMock) Done() <-chan struct{} {
 	return c.Called().Get(0).(<-chan struct{})
 }
 
-// Err implements context.Context.
+// Err implements [context.Context].
 func (c *contextMock) Err() error {
 	return c.Called().Error(0)
 }
 
-// Value implements context.Context.
+// Value implements [context.Context].
 func (c *contextMock) Value(key any) any {
 	return c.Called(key).Get(0)
 }
 
 type cursorMock struct{ mock.Mock }
 
-// Close implements domain.Cursor.
+// Close implements [domain.Cursor].
 func (c *cursorMock) Close() error {
 	return c.Called().Error(0)
 }
 
-// Err implements domain.Cursor.
+// Err implements [domain.Cursor].
 func (c *cursorMock) Err() error {
 	return c.Called().Error(0)
 }
 
-// Next implements domain.Cursor.
+// Next implements [domain.Cursor].
 func (c *cursorMock) Next() bool {
 	return c.Called().Bool(0)
 }
 
-// Scan implements domain.Cursor.
+// Scan implements [domain.Cursor].
 func (c *cursorMock) Scan(ctx context.Context, target any) error {
 	return c.Called(ctx, target).Error(0)
 }
 
 type fieldNavigatorMock struct{ mock.Mock }
 
-// EnsureField implements domain.FieldNavigator.
+// EnsureField implements [domain.FieldNavigator].
 func (fn *fieldNavigatorMock) EnsureField(value any, addr ...string) ([]domain.GetSetter, error) {
 	call := fn.Called(value, addr)
 	return call.Get(0).([]domain.GetSetter), call.Error(1)
 }
 
-// GetAddress implements domain.FieldNavigator.
+// GetAddress implements [domain.FieldNavigator].
 func (fn *fieldNavigatorMock) GetAddress(field string) ([]string, error) {
 	call := fn.Called(field)
 	return call.Get(0).([]string), call.Error(1)
 }
 
-// GetField implements domain.FieldNavigator.
+// GetField implements [domain.FieldNavigator].
 func (fn *fieldNavigatorMock) GetField(value any, addr ...string) (fields []domain.GetSetter, expanded bool, err error) {
 	call := fn.Called(value, addr)
 	return call.Get(0).([]domain.GetSetter), call.Bool(1), call.Error(2)
 }
 
-// SplitFields implements domain.FieldNavigator.
+// SplitFields implements [domain.FieldNavigator].
 func (fn *fieldNavigatorMock) SplitFields(joinedFields string) ([]string, error) {
 	call := fn.Called(joinedFields)
 	return call.Get(0).([]string), call.Error(1)
@@ -116,86 +116,86 @@ func (fn *fieldNavigatorMock) SplitFields(joinedFields string) ([]string, error)
 
 type indexMock struct{ mock.Mock }
 
-// FieldName implements domain.Index.
+// FieldName implements [domain.Index].
 func (i *indexMock) FieldName() string {
 	return i.Called().String(0)
 }
 
-// GetAll implements domain.Index.
+// GetAll implements [domain.Index].
 func (i *indexMock) GetAll() []domain.Document {
 	return i.Called().Get(0).([]domain.Document)
 }
 
-// GetBetweenBounds implements domain.Index.
+// GetBetweenBounds implements [domain.Index].
 func (i *indexMock) GetBetweenBounds(ctx context.Context, query domain.Document) ([]domain.Document, error) {
 	call := i.Called(ctx, query)
 	return call.Get(0).([]domain.Document), call.Error(1)
 }
 
-// GetMatching implements domain.Index.
+// GetMatching implements [domain.Index].
 func (i *indexMock) GetMatching(value ...any) ([]domain.Document, error) {
 	call := i.Called(value)
 	return call.Get(0).([]domain.Document), call.Error(1)
 }
 
-// GetNumberOfKeys implements domain.Index.
+// GetNumberOfKeys implements [domain.Index].
 func (i *indexMock) GetNumberOfKeys() int {
 	return i.Called().Int(0)
 }
 
-// Insert implements domain.Index.
+// Insert implements [domain.Index].
 func (i *indexMock) Insert(ctx context.Context, docs ...domain.Document) error {
 	return i.Called(ctx, docs).Error(0)
 }
 
-// Remove implements domain.Index.
+// Remove implements [domain.Index].
 func (i *indexMock) Remove(ctx context.Context, docs ...domain.Document) error {
 	return i.Called(ctx, docs).Error(0)
 }
 
-// Reset implements domain.Index.
+// Reset implements [domain.Index].
 func (i *indexMock) Reset(ctx context.Context, newData ...domain.Document) error {
 	return i.Called(ctx, newData).Error(0)
 }
 
-// RevertMultipleUpdates implements domain.Index.
+// RevertMultipleUpdates implements [domain.Index].
 func (i *indexMock) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Update) error {
 	return i.Called(ctx, pairs).Error(0)
 }
 
-// RevertUpdate implements domain.Index.
+// RevertUpdate implements [domain.Index].
 func (i *indexMock) RevertUpdate(ctx context.Context, oldDoc domain.Document, newDoc domain.Document) error {
 	return i.Called(ctx, oldDoc, newDoc).Error(0)
 }
 
-// Sparse implements domain.Index.
+// Sparse implements [domain.Index].
 func (i *indexMock) Sparse() bool {
 	return i.Called().Bool(0)
 }
 
-// Unique implements domain.Index.
+// Unique implements [domain.Index].
 func (i *indexMock) Unique() bool {
 	return i.Called().Bool(0)
 }
 
-// Update implements domain.Index.
+// Update implements [domain.Index].
 func (i *indexMock) Update(ctx context.Context, oldDoc domain.Document, newDoc domain.Document) error {
 	return i.Called(ctx, oldDoc, newDoc).Error(0)
 }
 
-// UpdateMultipleDocs implements domain.Index.
+// UpdateMultipleDocs implements [domain.Index].
 func (i *indexMock) UpdateMultipleDocs(ctx context.Context, pairs ...domain.Update) error {
 	return i.Called(ctx, pairs).Error(0)
 }
 
 type comparerMock struct{ mock.Mock }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *comparerMock) Comparable(a any, b any) bool {
 	return c.Called(a, b).Bool(0)
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *comparerMock) Compare(a any, b any) (int, error) {
 	call := c.Called(a, b)
 	return call.Int(0), call.Error(1)
@@ -203,7 +203,7 @@ func (c *comparerMock) Compare(a any, b any) (int, error) {
 
 type idGeneratorMock struct{ mock.Mock }
 
-// GenerateID implements domain.IDGenerator.
+// GenerateID implements [domain.IDGenerator].
 func (i *idGeneratorMock) GenerateID(l int) (string, error) {
 	call := i.Called(l)
 	return call.String(0), call.Error(1)
@@ -211,7 +211,7 @@ func (i *idGeneratorMock) GenerateID(l int) (string, error) {
 
 type serializerMock struct{ mock.Mock }
 
-// Serialize implements domain.Serializer.
+// Serialize implements [domain.Serializer].
 func (s *serializerMock) Serialize(ctx context.Context, value any) ([]byte, error) {
 	call := s.Called(ctx, value)
 	return []byte(call.String(0)), call.Error(1)

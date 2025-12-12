@@ -26,6 +26,8 @@ var (
 	ErrNonObject = errors.New("received data is not an object")
 )
 
+// TagName is the tag that will be used to rename or hide fields of a struct
+// while converting to a [domain.Document].
 const TagName = "gedb"
 
 var (
@@ -34,7 +36,7 @@ var (
 	stringTyp = goreflect.TypeOf(*new(string))
 )
 
-// M implements domain.Document by using a hashed map. Duplicates replace old
+// M implements [domain.Document] by using a hashed map. Duplicates replace old
 // values.
 type M map[string]any
 
@@ -264,27 +266,27 @@ func isNullable(t goreflect.Type) bool {
 		k == reflect.Chan
 }
 
-// ID implements domain.Document.
+// ID implements [domain.Document].
 func (d M) ID() any {
 	return d["_id"]
 }
 
-// Get implements domain.Document.
+// Get implements [domain.Document].
 func (d M) Get(key string) any {
 	return d[key]
 }
 
-// Set implements domain.Document.
+// Set implements [domain.Document].
 func (d M) Set(key string, value any) {
 	d[key] = value
 }
 
-// Unset implements domain.Document.
+// Unset implements [domain.Document].
 func (d M) Unset(key string) {
 	delete(d, key)
 }
 
-// D implements domain.Document.
+// D implements [domain.Document].
 func (d M) D(key string) domain.Document {
 	r := d[key]
 	if r == nil {
@@ -296,33 +298,33 @@ func (d M) D(key string) domain.Document {
 	return nil
 }
 
-// Iter implements domain.Document.
+// Iter implements [domain.Document].
 func (d M) Iter() iter.Seq2[string, any] {
 	return maps.All(d)
 }
 
-// Keys implements domain.Document.
+// Keys implements [domain.Document].
 func (d M) Keys() iter.Seq[string] {
 	return maps.Keys(d)
 }
 
-// Len implements domain.Document.
+// Len implements [domain.Document].
 func (d M) Len() int {
 	return len(d)
 }
 
-// Values implements domain.Document.
+// Values implements [domain.Document].
 func (d M) Values() iter.Seq[any] {
 	return maps.Values(d)
 }
 
-// Has implements domain.Document.
+// Has implements [domain.Document].
 func (d M) Has(key string) bool {
 	_, has := d[key]
 	return has
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements [json.Unmarshaler].
 func (d *M) UnmarshalJSON(input []byte) error {
 	doc := &parser{data: input, n: len(input)}
 	v, err := doc.parse()

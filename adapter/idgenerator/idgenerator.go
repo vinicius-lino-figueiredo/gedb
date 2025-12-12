@@ -1,3 +1,5 @@
+// Package idgenerator contains the default [domain.IDGenerator] implementation
+// using base64-encoded random bytes.
 package idgenerator
 
 import (

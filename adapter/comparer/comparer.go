@@ -12,7 +12,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// Comparer implements domain.Comparer.
+// Comparer implements [domain.Comparer].
 type Comparer struct{}
 
 // NewComparer returns a new implementation of domain.Comparer.
@@ -20,7 +20,7 @@ func NewComparer() domain.Comparer {
 	return &Comparer{}
 }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *Comparer) Comparable(a, b any) bool {
 	if !c.isSet(a) || !c.isSet(b) {
 		return false
@@ -44,7 +44,7 @@ func (c *Comparer) Comparable(a, b any) bool {
 	return equal
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *Comparer) Compare(a any, b any) (int, error) {
 
 	// [domain.Getter]. Equivalent to js undefined

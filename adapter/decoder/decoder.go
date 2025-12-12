@@ -11,7 +11,7 @@ import (
 
 var docReflectType = reflect.TypeOf((*domain.Document)(nil)).Elem()
 
-// Decoder implements domain.Decoder.
+// Decoder implements [domain.Decoder].
 type Decoder struct{}
 
 // NewDecoder returns a new implementation of domain.Decoder.
@@ -19,7 +19,7 @@ func NewDecoder() domain.Decoder {
 	return &Decoder{}
 }
 
-// Decode implements domain.Decoder.
+// Decode implements [domain.Decoder].
 func (d *Decoder) Decode(source any, target any) error {
 	if target == nil {
 		return domain.ErrTargetNil

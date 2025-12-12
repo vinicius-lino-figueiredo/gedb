@@ -19,7 +19,7 @@ func NewDeserializer(decoder domain.Decoder) domain.Deserializer {
 	}
 }
 
-// Deserializer implements domain.Deserializer.
+// Deserializer implements [domain.Deserializer].
 type Deserializer struct {
 	decoder domain.Decoder
 }
@@ -51,7 +51,7 @@ func (d *Deserializer) convertAny(v any) any {
 	}
 }
 
-// Deserialize implements domain.Deserializer.
+// Deserialize implements [domain.Deserializer].
 func (d *Deserializer) Deserialize(ctx context.Context, b []byte, target any) error {
 	select {
 	case <-ctx.Done():

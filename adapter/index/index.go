@@ -17,7 +17,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/pkg/uncomparable"
 )
 
-// Index implements domain.Index.
+// Index implements [domain.Index].
 type Index struct {
 	fieldName string
 	_fields   []string
@@ -32,17 +32,17 @@ type Index struct {
 	fieldNavigator domain.FieldNavigator
 }
 
-// FieldName implements domain.Index.
+// FieldName implements [domain.Index].
 func (i *Index) FieldName() string {
 	return i.fieldName
 }
 
-// Sparse implements domain.Index.
+// Sparse implements [domain.Index].
 func (i *Index) Sparse() bool {
 	return i.sparse
 }
 
-// Unique implements domain.Index.
+// Unique implements [domain.Index].
 func (i *Index) Unique() bool {
 	return i.unique
 }
@@ -91,7 +91,7 @@ func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 	}, nil
 }
 
-// Reset implements domain.Index.
+// Reset implements [domain.Index].
 func (i *Index) Reset(ctx context.Context, newData ...domain.Document) error {
 	select {
 	case <-ctx.Done():
@@ -185,7 +185,7 @@ func (i *Index) getKeysMultiField(doc domain.Document) ([]any, error) {
 	return []any{k}, nil
 }
 
-// Insert implements domain.Index.
+// Insert implements [domain.Index].
 func (i *Index) Insert(ctx context.Context, docs ...domain.Document) error {
 	select {
 	case <-ctx.Done():
@@ -244,7 +244,7 @@ DocInsertion:
 	return nil
 }
 
-// Remove implements domain.Index.
+// Remove implements [domain.Index].
 func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 	select {
 	case <-ctx.Done():
@@ -298,7 +298,7 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 	return nil
 }
 
-// Update implements domain.Index.
+// Update implements [domain.Index].
 func (i *Index) Update(ctx context.Context, oldDoc, newDoc domain.Document) error {
 	select {
 	case <-ctx.Done():
@@ -318,7 +318,7 @@ func (i *Index) Update(ctx context.Context, oldDoc, newDoc domain.Document) erro
 	return nil
 }
 
-// UpdateMultipleDocs implements domain.Index.
+// UpdateMultipleDocs implements [domain.Index].
 func (i *Index) UpdateMultipleDocs(ctx context.Context, pairs ...domain.Update) error {
 	select {
 	case <-ctx.Done():
@@ -363,12 +363,12 @@ Loop:
 	return err
 }
 
-// RevertUpdate implements domain.Index.
+// RevertUpdate implements [domain.Index].
 func (i *Index) RevertUpdate(ctx context.Context, oldDoc, newDoc domain.Document) error {
 	return i.Update(ctx, newDoc, oldDoc)
 }
 
-// RevertMultipleUpdates implements domain.Index.
+// RevertMultipleUpdates implements [domain.Index].
 func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Update) error {
 	select {
 	case <-ctx.Done():
@@ -383,7 +383,7 @@ func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Updat
 	return i.UpdateMultipleDocs(ctx, revert...)
 }
 
-// GetMatching implements domain.Index.
+// GetMatching implements [domain.Index].
 func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 	res := []domain.Document{}
 	_res := uncomparable.New[[]domain.Document](i.hasher, i.comparer)
@@ -426,7 +426,7 @@ func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 	return res, nil
 }
 
-// GetBetweenBounds implements domain.Index.
+// GetBetweenBounds implements [domain.Index].
 func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) ([]domain.Document, error) {
 	select {
 	case <-ctx.Done():
@@ -444,7 +444,7 @@ func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) ([]
 	return res, nil
 }
 
-// GetAll implements domain.Index.
+// GetAll implements [domain.Index].
 func (i *Index) GetAll() []domain.Document {
 	var res []domain.Document
 	i.Tree.ExecuteOnEveryNode(func(bst *bst.BinarySearchTree) {
@@ -455,7 +455,7 @@ func (i *Index) GetAll() []domain.Document {
 	return res
 }
 
-// GetNumberOfKeys implements domain.Index.
+// GetNumberOfKeys implements [domain.Index].
 func (i *Index) GetNumberOfKeys() int {
 	return i.Tree.GetNumberOfKeys()
 }

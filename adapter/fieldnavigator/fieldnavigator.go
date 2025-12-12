@@ -1,4 +1,4 @@
-// Package fieldnavigator contains the defalt implementation of
+// Package fieldnavigator contains the default implementation of
 // [domain.FieldNavigator] for GEDB package.
 package fieldnavigator
 

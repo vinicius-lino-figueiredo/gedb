@@ -24,7 +24,7 @@ type osOptsMock struct {
 	mockCount int
 }
 
-// IsNotExist implements osOps.
+// IsNotExist implements [osOps].
 func (o *osOptsMock) IsNotExist(err error) bool {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -33,7 +33,7 @@ func (o *osOptsMock) IsNotExist(err error) bool {
 	return o.Called(err).Bool(0)
 }
 
-// MkdirAll implements osOps.
+// MkdirAll implements [osOps].
 func (o *osOptsMock) MkdirAll(path string, perm os.FileMode) error {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -42,7 +42,7 @@ func (o *osOptsMock) MkdirAll(path string, perm os.FileMode) error {
 	return o.Called(path, perm).Error(0)
 }
 
-// OpenFile implements osOps.
+// OpenFile implements [osOps].
 func (o *osOptsMock) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -52,7 +52,7 @@ func (o *osOptsMock) OpenFile(name string, flag int, perm os.FileMode) (*os.File
 	return call.Get(0).(*os.File), call.Error(1)
 }
 
-// Remove implements osOps.
+// Remove implements [osOps].
 func (o *osOptsMock) Remove(name string) error {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -61,7 +61,7 @@ func (o *osOptsMock) Remove(name string) error {
 	return o.Called(name).Error(0)
 }
 
-// Rename implements osOps.
+// Rename implements [osOps].
 func (o *osOptsMock) Rename(oldpath string, newpath string) error {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -70,7 +70,7 @@ func (o *osOptsMock) Rename(oldpath string, newpath string) error {
 	return o.Called(oldpath, newpath).Error(0)
 }
 
-// Stat implements osOps.
+// Stat implements [osOps].
 func (o *osOptsMock) Stat(name string) (os.FileInfo, error) {
 	if o.mockCount > 0 {
 		o.mockCount--
@@ -83,7 +83,7 @@ func (o *osOptsMock) Stat(name string) (os.FileInfo, error) {
 	return call.Get(0).(os.FileInfo), call.Error(1)
 }
 
-// WriteFile implements osOps.
+// WriteFile implements [osOps].
 func (o *osOptsMock) WriteFile(name string, data []byte, perm os.FileMode) error {
 	if o.mockCount > 0 {
 		o.mockCount--

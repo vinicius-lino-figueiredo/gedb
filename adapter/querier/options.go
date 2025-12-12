@@ -23,16 +23,15 @@ func WithComparer(c domain.Comparer) Option {
 	}
 }
 
-// WithFieldNavigator sets the field getter for accessing document
-// fields.
+// WithFieldNavigator sets the field getter for accessing document fields.
 func WithFieldNavigator(f domain.FieldNavigator) Option {
 	return func(q *Querier) {
 		q.fn = f
 	}
 }
 
-// WithProjector sets the implementation what will be sed to project
-// the resultant documents.
+// WithProjector sets the implementation that will be used to project the
+// resultant documents.
 func WithProjector(p domain.Projector) Option {
 	return func(q *Querier) {
 		q.proj = p

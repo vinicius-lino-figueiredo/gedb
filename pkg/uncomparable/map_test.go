@@ -14,7 +14,7 @@ import (
 
 type hasherMock struct{ mock.Mock }
 
-// Hash implements domain.Hasher.
+// Hash implements [domain.Hasher].
 func (h *hasherMock) Hash(v any) (uint64, error) {
 	call := h.Called(v)
 	return uint64(call.Int(0)), call.Error(1)
@@ -22,12 +22,12 @@ func (h *hasherMock) Hash(v any) (uint64, error) {
 
 type comparerMock struct{ mock.Mock }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *comparerMock) Comparable(a any, b any) bool {
 	return c.Called(a, b).Bool(0)
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *comparerMock) Compare(a any, b any) (int, error) {
 	call := c.Called(a, b)
 	return call.Int(0), call.Error(1)

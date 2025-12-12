@@ -1,6 +1,6 @@
 // Package uncomparable contains an implementation that allows user to create
-// a map with key of type [any] the given compare function, which returns an
-// error instead of panicking.
+// a map with key of type [any] using the given compare function, which returns
+// an error instead of panicking.
 package uncomparable
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// Map represents a map[K]T, where T does not need to me [comparable].
+// Map represents a map[K]T, where T does not need to be [comparable].
 type Map[T any] struct {
 	buckets  [][]kv[T]
 	hasher   domain.Hasher
@@ -80,7 +80,7 @@ func (m *Map[T]) getBucketIndex(key any) (uint64, error) {
 	return h % uint64(len(m.buckets)), nil
 }
 
-// Keys returns an unorderd [iter.Seq] containing all the stored keys.
+// Keys returns an unordered [iter.Seq] containing all the stored keys.
 func (m *Map[T]) Keys() iter.Seq[any] {
 	return func(yield func(any) bool) {
 		for _, bucket := range m.buckets {
@@ -137,7 +137,7 @@ func (m *Map[T]) Set(key any, value T) error {
 	return nil
 }
 
-// Values returns an unorderd [iter.Seq] containing all the stored values.
+// Values returns an unordered [iter.Seq] containing all the stored values.
 func (m *Map[T]) Values() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for _, bucket := range m.buckets {

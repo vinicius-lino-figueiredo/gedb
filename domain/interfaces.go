@@ -22,7 +22,7 @@ type Serializer interface {
 
 // Deserializer converts bytes to binary data.
 type Deserializer interface {
-	// Deserialize converts bytes to compiled data types. Artument target
+	// Deserialize converts bytes to compiled data types. Argument target
 	// must be a pointer so it can be changed.
 	Deserialize(ctx context.Context, b []byte, target any) error
 }

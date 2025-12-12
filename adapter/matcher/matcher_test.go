@@ -25,25 +25,25 @@ func (u Undefined) Get() (any, bool) { return nil, false }
 
 type fieldNavigatorMock struct{ mock.Mock }
 
-// EnsureField implements domain.FieldNavigator.
+// EnsureField implements [domain.FieldNavigator].
 func (f *fieldNavigatorMock) EnsureField(obj any, addr ...string) ([]domain.GetSetter, error) {
 	call := f.Called(obj, addr)
 	return call.Get(0).([]domain.GetSetter), call.Error(1)
 }
 
-// GetAddress implements domain.FieldNavigator.
+// GetAddress implements [domain.FieldNavigator].
 func (f *fieldNavigatorMock) GetAddress(field string) ([]string, error) {
 	call := f.Called(field)
 	return call.Get(0).([]string), call.Error(1)
 }
 
-// GetField implements domain.FieldNavigator.
+// GetField implements [domain.FieldNavigator].
 func (f *fieldNavigatorMock) GetField(obj any, addr ...string) ([]domain.GetSetter, bool, error) {
 	call := f.Called(obj, addr)
 	return call.Get(0).([]domain.GetSetter), call.Bool(1), call.Error(2)
 }
 
-// SplitFields implements domain.FieldNavigator.
+// SplitFields implements [domain.FieldNavigator].
 func (f *fieldNavigatorMock) SplitFields(in string) ([]string, error) {
 	call := f.Called(in)
 	return call.Get(0).([]string), call.Error(1)
@@ -51,12 +51,12 @@ func (f *fieldNavigatorMock) SplitFields(in string) ([]string, error) {
 
 type comparerMock struct{ mock.Mock }
 
-// Comparable implements domain.Comparer.
+// Comparable implements [domain.Comparer].
 func (c *comparerMock) Comparable(a any, b any) bool {
 	return c.Called(a, b).Bool(0)
 }
 
-// Compare implements domain.Comparer.
+// Compare implements [domain.Comparer].
 func (c *comparerMock) Compare(a any, b any) (int, error) {
 	call := c.Called(a, b)
 	return call.Int(0), call.Error(1)

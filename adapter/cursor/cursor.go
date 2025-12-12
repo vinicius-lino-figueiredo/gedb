@@ -8,7 +8,7 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
-// Cursor implements domain.Cursor.
+// Cursor implements [domain.Cursor].
 type Cursor struct {
 	data   []domain.Document
 	ctx    context.Context
@@ -45,12 +45,12 @@ func NewCursor(ctx context.Context, dt []domain.Document, options ...domain.Curs
 	return cur, nil
 }
 
-// Err implements domain.Cursor.
+// Err implements [domain.Cursor].
 func (c *Cursor) Err() error {
 	return context.Cause(c.ctx)
 }
 
-// Scan implements domain.Cursor.
+// Scan implements [domain.Cursor].
 func (c *Cursor) Scan(ctx context.Context, target any) error {
 	select {
 	case <-c.ctx.Done():
@@ -65,7 +65,7 @@ func (c *Cursor) Scan(ctx context.Context, target any) error {
 	return c.dec.Decode(c.data[c.index], target)
 }
 
-// Close implements domain.Cursor.
+// Close implements [domain.Cursor].
 func (c *Cursor) Close() error {
 	select {
 	case <-c.ctx.Done():
@@ -77,7 +77,7 @@ func (c *Cursor) Close() error {
 	return nil
 }
 
-// Next implements domain.Cursor.
+// Next implements [domain.Cursor].
 func (c *Cursor) Next() bool {
 	select {
 	case <-c.ctx.Done():
