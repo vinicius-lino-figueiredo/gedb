@@ -13,12 +13,16 @@ import (
 
 // IDGenerator implements [domain.IDGenerator].
 type IDGenerator struct {
-	reader io.Reader
+	reader   io.Reader
+	replacer *strings.Replacer
 }
 
 // NewIDGenerator implements [domain.IDGenerator].
 func NewIDGenerator(opts ...Option) domain.IDGenerator {
-	i := IDGenerator{reader: rand.Reader}
+	i := IDGenerator{
+		reader:   rand.Reader,
+		replacer: strings.NewReplacer("+", "", "/", ""),
+	}
 	for _, opt := range opts {
 		opt(&i)
 	}
@@ -32,6 +36,22 @@ func (i *IDGenerator) GenerateID(l int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	enc := base64.StdEncoding.EncodeToString(buf)
-	return strings.NewReplacer("+", "", "/", "").Replace(enc)[:l], nil
+
+	dst := base64.StdEncoding.EncodeToString(buf)
+
+	res := make([]byte, l)
+	w := 0
+	for _, b := range []byte(dst) {
+		switch b {
+		case '+', '/':
+		default:
+			res[w] = b
+			w++
+		}
+		if w == l {
+			break
+		}
+	}
+
+	return string(res), nil
 }

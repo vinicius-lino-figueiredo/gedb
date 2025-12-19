@@ -5,7 +5,6 @@ package comparer
 
 import (
 	"cmp"
-	"math/big"
 	"slices"
 	"time"
 
@@ -121,10 +120,8 @@ func (c *Comparer) checkNil(a, b any) (int, bool) {
 
 func (c *Comparer) checkNumbers(a, b any) (int, bool) {
 	if a, ok := c.asNumber(a); ok {
-		// Using big.Float to safely compare float64 and int64 without
-		// precision loss
 		if b, ok := c.asNumber(b); ok {
-			return a.Cmp(b), true
+			return cmp.Compare(a, b), true
 		}
 		return -1, true
 	}
@@ -266,37 +263,35 @@ func (c *Comparer) compareDoc(a domain.Document, b domain.Document) (int, error)
 	return c.compareArray(aKeysAny, bKeysAny)
 }
 
-func (c *Comparer) asNumber(v any) (*big.Float, bool) {
-	r := big.NewFloat(0)
+func (c *Comparer) asNumber(v any) (float64, bool) {
 	switch n := v.(type) {
 	case int:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int8:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int16:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int32:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int64:
-		r.SetInt64(n)
+		return float64(n), true
 	case uint:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint8:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint16:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint32:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint64:
-		r.SetUint64(n)
+		return float64(n), true
 	case float32:
-		r.SetFloat64(float64(n))
+		return float64(n), true
 	case float64:
-		r.SetFloat64(n)
+		return n, true
 	default:
-		return nil, false
+		return 0, false
 	}
-	return r, true
 }
 
 func (c *Comparer) isSet(v any) bool {

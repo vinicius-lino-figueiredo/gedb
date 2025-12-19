@@ -5,7 +5,7 @@ package matcher
 import (
 	"errors"
 	"fmt"
-	"math/big"
+	"math"
 	"regexp"
 	"strings"
 
@@ -388,40 +388,39 @@ func (m *Matcher) getValue(v any) (any, bool) {
 }
 
 func (m *Matcher) asInt(v any) (int, bool) {
-	r := big.NewFloat(0)
+	r := 0.0
 	switch n := v.(type) {
 	case int:
-		r.SetInt64(int64(n))
+		return int(n), true
 	case int8:
-		r.SetInt64(int64(n))
+		return int(n), true
 	case int16:
-		r.SetInt64(int64(n))
+		return int(n), true
 	case int32:
-		r.SetInt64(int64(n))
+		return int(n), true
 	case int64:
-		r.SetInt64(n)
+		return int(n), true
 	case uint:
-		r.SetUint64(uint64(n))
+		return int(n), true
 	case uint8:
-		r.SetUint64(uint64(n))
+		return int(n), true
 	case uint16:
-		r.SetUint64(uint64(n))
+		return int(n), true
 	case uint32:
-		r.SetUint64(uint64(n))
+		return int(n), true
 	case uint64:
-		r.SetUint64(n)
+		return int(n), true
 	case float32:
-		r.SetFloat64(float64(n))
+		r += float64(n)
 	case float64:
-		r.SetFloat64(n)
+		r += float64(n)
 	default:
 		return 0, false
 	}
-	if !r.IsInt() {
+	if r != math.Floor(r) {
 		return 0, false
 	}
-	i64, _ := r.Int64()
-	return int(i64), true
+	return int(r), true
 }
 
 func (m *Matcher) regex(obj domain.Document, addr []string, b any) (bool, error) {

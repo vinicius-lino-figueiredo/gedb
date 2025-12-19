@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math/big"
+	"math"
 	"strings"
 
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
@@ -269,37 +269,35 @@ func (m *Modifier) copyAny(v any) (any, error) {
 	}
 }
 
-func (m *Modifier) asNumber(v any) (*big.Float, bool) {
-	r := big.NewFloat(0)
+func (m *Modifier) asNumber(v any) (float64, bool) {
 	switch n := v.(type) {
 	case int:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int8:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int16:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int32:
-		r.SetInt64(int64(n))
+		return float64(n), true
 	case int64:
-		r.SetInt64(n)
+		return float64(n), true
 	case uint:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint8:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint16:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint32:
-		r.SetUint64(uint64(n))
+		return float64(n), true
 	case uint64:
-		r.SetUint64(n)
+		return float64(n), true
 	case float32:
-		r.SetFloat64(float64(n))
+		return float64(n), true
 	case float64:
-		r.SetFloat64(n)
+		return n, true
 	default:
-		return nil, false
+		return 0, false
 	}
-	return r, true
 }
 
 func (m *Modifier) set(obj domain.Document, addr []string, arg any) error {
@@ -349,9 +347,7 @@ func (m *Modifier) inc(obj domain.Document, addr []string, v any) error {
 		if !ok {
 			return ErrModFieldType{Mod: "$inc", Want: "number", Actual: value}
 		}
-		sum := num.Add(num, incNum)
-		sumFloat, _ := sum.Float64()
-		field.Set(sumFloat)
+		field.Set(num + incNum)
 	}
 	return nil
 }
@@ -407,9 +403,8 @@ func (m *Modifier) getSliceProperties(d domain.Document) (*sliceProps, error) {
 		return nil, ErrModArgType{Mod: "$each", Want: "array", Actual: each}
 	}
 
-	if s, ok := m.asNumber(d.Get("$slice")); ok && s.IsInt() {
+	if s, ok := m.asNumber(d.Get("$slice")); ok && s == math.Floor(s) {
 		res.usedFields++
-		s, _ := s.Int64()
 		res = &sliceProps{
 			each:       res.each,
 			hasEach:    res.hasEach,
@@ -501,18 +496,16 @@ func (m *Modifier) addToSet(obj domain.Document, addr []string, v any) error {
 
 func (m *Modifier) pop(obj domain.Document, addr []string, v any) error {
 
-	bigN, ok := m.asNumber(v)
-	if !ok || !bigN.IsInt() {
+	f, ok := m.asNumber(v)
+	if !ok || f != math.Floor(f) {
 		return ErrModArgType{Mod: "$pop", Want: "integer", Actual: v}
 	}
 
-	num64, _ := bigN.Int64()
-
-	if num64 == 0 {
+	if f == 0 {
 		return nil
 	}
 
-	num := int(num64)
+	num := int(f)
 
 	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
 	if err != nil {
