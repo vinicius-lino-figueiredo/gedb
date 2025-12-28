@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"github.com/vinicius-lino-figueiredo/bst"
+	"github.com/vinicius-lino-figueiredo/bst/adapter/unbalanced"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/fieldnavigator"
@@ -25,9 +25,9 @@ type Index struct {
 	sparse    bool
 	// Exported to allow testing. Should not be a problem because Index is
 	// used as interface.
-	Tree           *bst.BinarySearchTree
-	treeOptions    bst.Options
+	Tree           bst.BST[any, domain.Document]
 	comparer       domain.Comparer
+	bstComparer    bst.Comparer[any, domain.Document]
 	hasher         domain.Hasher
 	fieldNavigator domain.FieldNavigator
 }
@@ -67,25 +67,21 @@ func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 		opts.FieldNavigator = fieldnavigator.NewFieldNavigator(opts.DocumentFactory)
 	}
 
-	treeOptions := bst.Options{
-		Unique: opts.Unique,
-		CompareKeys: func(a, b any) int {
-			comp, _ := opts.Comparer.Compare(a, b)
-			return comp
-		},
-	}
 	fields, err := opts.FieldNavigator.SplitFields(opts.FieldName)
 	if err != nil {
 		return nil, err
 	}
+
+	bstComparer := NewBSTComparer(opts.Comparer)
+
 	return &Index{
 		fieldName:      opts.FieldName,
 		_fields:        fields,
 		unique:         opts.Unique,
 		sparse:         opts.Sparse,
-		treeOptions:    treeOptions,
-		Tree:           bst.NewBinarySearchTree(treeOptions),
+		Tree:           unbalanced.NewBST(opts.Unique, 8, bstComparer),
 		comparer:       opts.Comparer,
+		bstComparer:    bstComparer,
 		hasher:         opts.Hasher,
 		fieldNavigator: opts.FieldNavigator,
 	}, nil
@@ -98,7 +94,7 @@ func (i *Index) Reset(ctx context.Context, newData ...domain.Document) error {
 		return ctx.Err()
 	default:
 	}
-	i.Tree = bst.NewBinarySearchTree(i.treeOptions)
+	i.Tree = unbalanced.NewBST(i.unique, 8, i.bstComparer)
 	return i.Insert(ctx, newData...)
 }
 
@@ -223,7 +219,7 @@ DocInsertion:
 			}
 
 			if err = i.Tree.Insert(k, d); err != nil {
-				if e := new(bst.ErrViolated); errors.As(err, &e) {
+				if e := new(bst.ErrUniqueViolated); errors.As(err, e) {
 					err = fmt.Errorf("%w: %w", domain.ErrConstraintViolated, err)
 				}
 				break DocInsertion
@@ -234,10 +230,17 @@ DocInsertion:
 		}
 	}
 	if err != nil {
+		nErrs := make([]error, 1, len(keys)+1)
+		nErrs[0] = err
 		for _, v := range keys {
 			for _, d := range v.docs {
-				i.Tree.Delete(v.key, d)
+				if err := i.Tree.Delete(v.key, &d); err != nil {
+					nErrs = append(nErrs, err)
+				}
 			}
+		}
+		if len(nErrs) > 1 {
+			return errors.Join(nErrs...)
 		}
 		return err
 	}
@@ -289,10 +292,10 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 		slices.SortFunc(uniq, i.compareThings)
 		uniq = slices.Compact(uniq)
 		for _, _key := range uniq {
-			i.Tree.Delete(_key, d)
+			i.Tree.Delete(_key, &d)
 		}
 
-		i.Tree.Delete(keys, d)
+		i.Tree.Delete(keys, &d)
 	}
 
 	return nil
@@ -388,16 +391,15 @@ func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 	res := []domain.Document{}
 	_res := uncomparable.New[[]domain.Document](i.hasher, i.comparer)
 	for _, v := range value {
-		found := i.Tree.Search(v)
-		if len(found) == 0 {
+		found, err := i.Tree.Search(v)
+		if err != nil {
+			return nil, err
+		}
+		if found == nil || len(found.Values) == 0 {
 			continue
 		}
-		id := found[0].(domain.Document).ID()
-		foundDocs := make([]domain.Document, len(found))
-		for n, d := range found {
-			foundDocs[n] = d.(domain.Document)
-		}
-		if err := _res.Set(id, foundDocs); err != nil {
+		foundDocs := slices.Clone(found.Values)
+		if err := _res.Set(found.Key, foundDocs); err != nil {
 			return nil, err
 		}
 	}
@@ -434,25 +436,34 @@ func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) ([]
 	default:
 	}
 
-	m := maps.Collect(query.Iter())
+	var qry bst.Query[any]
+	for k, v := range query.Iter() {
+		switch k {
+		case "$gt":
+			qry.GreaterThan = &bst.Bound[any]{Value: v, IncludeEqual: false}
+		case "$gte":
+			qry.GreaterThan = &bst.Bound[any]{Value: v, IncludeEqual: true}
+		case "$lt":
+			qry.LowerThan = &bst.Bound[any]{Value: v, IncludeEqual: false}
+		case "$lte":
+			qry.LowerThan = &bst.Bound[any]{Value: v, IncludeEqual: true}
+		}
+	}
 
-	found := i.Tree.BetweenBounds(m, nil, nil)
-	res := make([]domain.Document, len(found))
-	for n, f := range found {
-		res[n] = f.(domain.Document)
+	found := i.Tree.Query(qry)
+	res := make([]domain.Document, 0, i.GetNumberOfKeys())
+	for f, err := range found {
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, f)
 	}
 	return res, nil
 }
 
 // GetAll implements [domain.Index].
 func (i *Index) GetAll() []domain.Document {
-	var res []domain.Document
-	i.Tree.ExecuteOnEveryNode(func(bst *bst.BinarySearchTree) {
-		for _, data := range bst.Data() {
-			res = append(res, data.(domain.Document))
-		}
-	})
-	return res
+	return slices.Collect(i.Tree.GetAll())
 }
 
 // GetNumberOfKeys implements [domain.Index].

@@ -420,7 +420,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		s.Equal("test", newDoc[0]["_id"])
 
 		_, err := s.d.Insert(ctx, M{"_id": "test", "otherstuff": 42})
-		e := &bst.ErrViolated{}
+		e := bst.ErrUniqueViolated{}
 		s.ErrorAs(err, &e)
 	})
 
@@ -487,7 +487,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 		))
 
 		_, err := s.d.Insert(ctx, _docs...)
-		e := &bst.ErrViolated{}
+		e := bst.ErrUniqueViolated{}
 		s.ErrorAs(err, &e)
 
 		cur, err := s.d.Find(ctx, nil)
@@ -2765,9 +2765,17 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(s.d.indexes["z"].Sparse())
 			s.Equal(3, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(3, s.d.indexes["z"].GetNumberOfKeys())
-			s.Equal(s.d.getAllData()[0], s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
-			s.Equal(s.d.getAllData()[1], s.d.indexes["z"].(*index.Index).Tree.Search("2")[0])
-			s.Equal(s.d.getAllData()[2], s.d.indexes["z"].(*index.Index).Tree.Search("3")[0])
+
+			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
+			s.NoError(err)
+			s2, err := s.d.indexes["z"].(*index.Index).Tree.Search("2")
+			s.NoError(err)
+			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
+			s.NoError(err)
+
+			s.Equal(s.d.getAllData()[0], s1.Values[0])
+			s.Equal(s.d.getAllData()[1], s2.Values[0])
+			s.Equal(s.d.getAllData()[2], s3.Values[0])
 		})
 
 		s.Run("InvalidIndex", func() {
@@ -2911,14 +2919,22 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			matching, err := s.d.indexes["_id"].GetMatching("aaa")
 			s.NoError(err)
-			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
+
+			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
+			s.NoError(err)
+			s12, err := s.d.indexes["z"].(*index.Index).Tree.Search("12")
+			s.NoError(err)
+			s14, err := s.d.indexes["z"].(*index.Index).Tree.Search("14")
+			s.NoError(err)
+
+			s.Equal(matching[0], s1.Values[0])
 			matching, err = s.d.indexes["_id"].GetMatching(newDoc1[0]["_id"])
 			s.NoError(err)
-			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("12")[0])
+			s.Equal(matching[0], s12.Values[0])
 
 			matching, err = s.d.indexes["_id"].GetMatching(newDoc2[0]["_id"])
 			s.NoError(err)
-			s.Equal(matching[0], s.d.indexes["z"].(*index.Index).Tree.Search("14")[0])
+			s.Equal(matching[0], s14.Values[0])
 
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
@@ -2970,9 +2986,17 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(dt, 3)
 
 			s.Equal(3, s.d.indexes["z"].GetNumberOfKeys())
-			s.Equal(doc1, s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
-			s.Equal(doc2, s.d.indexes["z"].(*index.Index).Tree.Search("2")[0])
-			s.Equal(doc3, s.d.indexes["z"].(*index.Index).Tree.Search("3")[0])
+
+			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
+			s.NoError(err)
+			s2, err := s.d.indexes["z"].(*index.Index).Tree.Search("2")
+			s.NoError(err)
+			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
+			s.NoError(err)
+
+			s.Equal(doc1, s1.Values[0])
+			s.Equal(doc2, s2.Values[0])
+			s.Equal(doc3, s3.Values[0])
 		})
 
 		// Can initialize multiple indexes on a database load
@@ -3011,14 +3035,29 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(dt, 3)
 
 			s.Equal(3, s.d.indexes["z"].GetNumberOfKeys())
-			s.Equal(doc1, s.d.indexes["z"].(*index.Index).Tree.Search("1")[0])
-			s.Equal(doc2, s.d.indexes["z"].(*index.Index).Tree.Search("2")[0])
-			s.Equal(doc3, s.d.indexes["z"].(*index.Index).Tree.Search("3")[0])
+
+			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
+			s.NoError(err)
+			s.Equal(doc1, s1.Values[0])
+			s2, err := s.d.indexes["z"].(*index.Index).Tree.Search("2")
+			s.NoError(err)
+			s.Equal(doc2, s2.Values[0])
+			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
+			s.NoError(err)
+			s.Equal(doc3, s3.Values[0])
 
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
-			s.Equal(doc1, s.d.indexes["a"].(*index.Index).Tree.Search(2)[0])
-			s.Equal(doc2, s.d.indexes["a"].(*index.Index).Tree.Search("world")[0])
-			s.Equal(doc3, s.d.indexes["a"].(*index.Index).Tree.Search(data.M{"today": now})[0])
+
+			s2n, err := s.d.indexes["a"].(*index.Index).Tree.Search(2)
+			s.NoError(err)
+			world, err := s.d.indexes["a"].(*index.Index).Tree.Search("world")
+			s.NoError(err)
+			today, err := s.d.indexes["a"].(*index.Index).Tree.Search(data.M{"today": now})
+			s.NoError(err)
+
+			s.Equal(doc1, s2n.Values[0])
+			s.Equal(doc2, world.Values[0])
+			s.Equal(doc3, today.Values[0])
 		})
 
 		// If a unique constraint is not respected, database loading will not work and no data will be inserted
@@ -3046,7 +3085,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(s.d.LoadDatabase(ctx), &e)
 			s.Len(s.d.getAllData(), 0)
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
@@ -3067,7 +3106,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				domain.WithFields("a"),
 				domain.WithUnique(true),
 			)
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 		})
 
@@ -3202,7 +3241,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.EqualDocs(newDoc, matching)
 
 			newDoc2, err := s.d.Insert(ctx, M{"a": 5, "z": "yes"})
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(newDoc2)
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
@@ -3233,7 +3272,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(1, s.d.indexes["nonu2"].GetNumberOfKeys())
 
 			_, err := s.d.Insert(ctx, M{"nonu1": "no", "nonu2": "no2", "uni": "willfail"})
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 
 			s.Equal(1, s.d.indexes["nonu1"].GetNumberOfKeys())
@@ -3268,7 +3307,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.EqualDocs(newDoc, matching)
 
 			_, err = s.d.Insert(ctx, M{"a": 5, "z": "other"})
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 			// TODO: assert violated key
 
@@ -3347,7 +3386,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			doc1 := s.insert(s.d.Insert(ctx, M{"a": 1, "b": "hello"}))
 
 			_, err := s.d.Insert(ctx, M{"a": 1, "b": "si"})
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 
 			cur, err := s.d.Find(ctx, nil)
@@ -3519,7 +3558,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": 30, "c": 300}))
 
 			n, err := s.d.Update(ctx, M{"a": 2}, M{"$inc": M{"a": 10, "c": 1000}, "$set": M{"b": 30}})
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 
@@ -3586,7 +3625,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_doc3 := s.insert(s.d.Insert(ctx, M{"a": 3, "b": 30, "c": 300}))
 
 			n, err := s.d.Update(ctx, M{"a": M{"$in": []any{1, 2}}}, M{"$inc": M{"a": 10, "c": 1000}, "$set": M{"b": 30}}, domain.WithUpdateMulti(true))
-			e := &bst.ErrViolated{}
+			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 

@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.10.0
-	github.com/vinicius-lino-figueiredo/bst v0.0.9
+	github.com/vinicius-lino-figueiredo/bst v0.2.5
 )
 
 require (

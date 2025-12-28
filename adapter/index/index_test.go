@@ -126,13 +126,25 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{data.M{"a": 5, "tf": "hello"}}, idx.Tree.Search("hello"))
-		s.Equal([]any{data.M{"a": 8, "tf": "world"}}, idx.Tree.Search("world"))
-		s.Equal([]any{data.M{"a": 2, "tf": "bloup"}}, idx.Tree.Search("bloup"))
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		bloup, err := idx.Tree.Search("bloup")
+		s.NoError(err)
+
+		s.Equal([]domain.Document{data.M{"a": 5, "tf": "hello"}}, hello.Values)
+		s.Equal([]domain.Document{data.M{"a": 8, "tf": "world"}}, world.Values)
+		s.Equal([]domain.Document{data.M{"a": 2, "tf": "bloup"}}, bloup.Values)
 
 		// The nodes contain pointers to the actual documents
-		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(idx.Tree.Search("world")[0].(data.M)).Pointer())
-		idx.Tree.Search("bloup")[0].(domain.Document).Set("a", 42)
+		world, err = idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(world.Values[0].(data.M)).Pointer())
+
+		bloup, err = idx.Tree.Search("bloup")
+		s.NoError(err)
+		bloup.Values[0].Set("a", 42)
 		s.Equal(42, doc3.Get("a"))
 	})
 
@@ -153,13 +165,27 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{data.M{"a": 5, "tf": "hello", "tg": "world"}}, idx.Tree.Search(data.M{"tf": "hello", "tg": "world"}))
-		s.Equal([]any{data.M{"a": 8, "tf": "hello", "tg": "bloup"}}, idx.Tree.Search(data.M{"tf": "hello", "tg": "bloup"}))
-		s.Equal([]any{data.M{"a": 2, "tf": "bloup", "tg": "bloup"}}, idx.Tree.Search(data.M{"tf": "bloup", "tg": "bloup"}))
+
+		helloWorld, err := idx.Tree.Search(data.M{"tf": "hello", "tg": "world"})
+		s.NoError(err)
+		helloBloup, err := idx.Tree.Search(data.M{"tf": "hello", "tg": "bloup"})
+		s.NoError(err)
+		bloupBloup, err := idx.Tree.Search(data.M{"tf": "bloup", "tg": "bloup"})
+		s.NoError(err)
+
+		s.Equal([]domain.Document{data.M{"a": 5, "tf": "hello", "tg": "world"}}, helloWorld.Values)
+		s.Equal([]domain.Document{data.M{"a": 8, "tf": "hello", "tg": "bloup"}}, helloBloup.Values)
+		s.Equal([]domain.Document{data.M{"a": 2, "tf": "bloup", "tg": "bloup"}}, bloupBloup.Values)
 
 		// The nodes contain pointers to the actual documents
-		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(idx.Tree.Search(data.M{"tf": "hello", "tg": "bloup"})[0].(data.M)).Pointer())
-		idx.Tree.Search(data.M{"tf": "bloup", "tg": "bloup"})[0].(domain.Document).Set("a", 42)
+		helloBloup, err = idx.Tree.Search(data.M{"tf": "hello", "tg": "bloup"})
+		s.NoError(err)
+
+		s.Equal(reflect.ValueOf(doc2).Pointer(), reflect.ValueOf(helloBloup.Values[0].(data.M)).Pointer())
+
+		bloupBloup, err = idx.Tree.Search(data.M{"tf": "bloup", "tg": "bloup"})
+		s.NoError(err)
+		bloupBloup.Values[0].Set("a", 42)
 		s.Equal(42, doc3.Get("a"))
 	})
 
@@ -288,12 +314,24 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		// The underlying BST now has 3 nodes which contain the docs where it's expected
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc2}, idx.Tree.Search("world"))
-		s.Equal([]any{doc3}, idx.Tree.Search("bloup"))
+
+		s.Equal(3, idx.GetNumberOfKeys())
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		bloup, err := idx.Tree.Search("bloup")
+		s.NoError(err)
+
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc2}, world.Values)
+		s.Equal([]domain.Document{doc3}, bloup.Values)
 
 		// The nodes contain pointers to the actual documents
-		idx.Tree.Search("bloup")[0].(domain.Document).Set("a", 42)
+
+		bloup, err = idx.Tree.Search("bloup")
+		s.NoError(err)
+		bloup.Values[0].Set("a", 42)
 		s.Equal(42, doc3.Get("a"))
 	})
 
@@ -311,9 +349,17 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 		s.NoError(idx.Insert(ctx, doc1, doc2, doc3))
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc2}, idx.Tree.Search("world"))
-		s.Equal([]any{doc3}, idx.Tree.Search("bloup"))
+
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		bloup, err := idx.Tree.Search("bloup")
+		s.NoError(err)
+
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc2}, world.Values)
+		s.Equal([]domain.Document{doc3}, bloup.Values)
 	})
 
 	// When inserting an array of elements, if an error is thrown all inserts need to be rolled back
@@ -334,13 +380,21 @@ func (s *IndexesTestSuite) TestInsertion() {
 		ctx := context.Background()
 
 		err = idx.Insert(ctx, doc1, doc2, doc2b, doc3)
-		e := &bst.ErrViolated{}
+		e := bst.ErrUniqueViolated{}
 		s.ErrorAs(err, &e)
 
 		s.Equal(0, idx.GetNumberOfKeys())
-		s.Equal([]any{}, idx.Tree.Search("hello"))
-		s.Equal([]any{}, idx.Tree.Search("world"))
-		s.Equal([]any{}, idx.Tree.Search("bloup"))
+
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		bloup, err := idx.Tree.Search("bloup")
+		s.NoError(err)
+
+		s.Nil(hello)
+		s.Nil(world)
+		s.Nil(bloup)
 	})
 
 	s.Run("ArrayFields", func() {
@@ -531,13 +585,24 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 			// The underlying BST now has 3 nodes which contain the docs where it's expected
 			s.Equal(3, idx.GetNumberOfKeys())
-			s.Equal([]any{data.M{"a": int64(5), "tf": "hello", "tf2": int64(7)}}, idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(7)}))
-			s.Equal([]any{data.M{"a": int64(8), "tf": "hello", "tf2": int64(6)}}, idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(6)}))
-			s.Equal([]any{data.M{"a": int64(2), "tf": "bloup", "tf2": int64(3)}}, idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)}))
+
+			hello57, err := idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(7)})
+			s.NoError(err)
+			s.Equal([]domain.Document{data.M{"a": int64(5), "tf": "hello", "tf2": int64(7)}}, hello57.Values)
+			hello86, err := idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(6)})
+			s.NoError(err)
+			s.Equal([]domain.Document{data.M{"a": int64(8), "tf": "hello", "tf2": int64(6)}}, hello86.Values)
+			bloup23, err := idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)})
+			s.NoError(err)
+			s.Equal([]domain.Document{data.M{"a": int64(2), "tf": "bloup", "tf2": int64(3)}}, bloup23.Values)
 
 			// The nodes contain pointers to the actual documents
-			s.Equal(doc2, idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(6)})[0])
-			idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)})[0].(domain.Document).Set("a", 42)
+			hello6, err := idx.Tree.Search(data.M{"tf": "hello", "tf2": int64(6)})
+			s.NoError(err)
+			s.Equal(doc2, hello6.Values[0])
+
+			bloup3, err := idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)})
+			bloup3.Values[0].Set("a", 42)
 			s.Equal(42, doc3.Get("a"))
 		})
 	})
@@ -609,12 +674,18 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 		s.NoError(idx.Remove(ctx, doc1))
 		s.Equal(2, idx.GetNumberOfKeys())
-		s.Len(idx.Tree.Search("hello"), 0)
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		s.Nil(hello)
 
 		s.NoError(idx.Remove(ctx, doc2))
 		s.Equal(2, idx.GetNumberOfKeys())
-		s.Len(idx.Tree.Search("world"), 1)
-		s.Equal(doc4, idx.Tree.Search("world")[0])
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		s.Len(world.Values, 1)
+		world, err = idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal(doc4, world.Values[0])
 	})
 
 	// If we have a sparse index, removing a non indexed doc has no effect
@@ -661,12 +732,19 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 		s.NoError(idx.Remove(ctx, doc1))
 		s.Equal(2, idx.GetNumberOfKeys())
-		s.Len(idx.Tree.Search("hello"), 0)
+
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		s.Nil(hello)
 
 		s.NoError(idx.Remove(ctx, doc2))
 		s.Equal(2, idx.GetNumberOfKeys())
-		s.Len(idx.Tree.Search("world"), 1)
-		s.Equal(doc4, idx.Tree.Search("world")[0])
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		s.Len(world.Values, 1)
+		world, err = idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal(doc4, world.Values[0])
 	})
 
 	// Can remove an array of documents
@@ -685,9 +763,17 @@ func (s *IndexesTestSuite) TestRemoval() {
 		s.Equal(3, idx.GetNumberOfKeys())
 		s.NoError(idx.Remove(ctx, doc1, doc3))
 		s.Equal(1, idx.GetNumberOfKeys())
-		s.Equal([]any{}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc2}, idx.Tree.Search("world"))
-		s.Equal([]any{}, idx.Tree.Search("bloup"))
+
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		bloup, err := idx.Tree.Search("bloup")
+		s.NoError(err)
+
+		s.Nil(hello)
+		s.Equal([]domain.Document{doc2}, world.Values)
+		s.Nil(bloup)
 	})
 
 	// Can remove from multi field
@@ -774,16 +860,24 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc2}, idx.Tree.Search("world"))
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal([]domain.Document{doc2}, world.Values)
 
 		s.NoError(idx.Update(ctx, doc2, doc4))
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc4}, idx.Tree.Search("world"))
+		world, err = idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal([]domain.Document{doc4}, world.Values)
 
 		s.NoError(idx.Update(ctx, doc1, doc5))
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc5}, idx.Tree.Search("changed"))
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+		s.Nil(hello)
+		changed, err := idx.Tree.Search("changed")
+		s.NoError(err)
+		s.Equal([]domain.Document{doc5}, changed.Values)
 	})
 
 	// If a simple update violates a unique constraint, changes are rolled back and an error thrown
@@ -808,18 +902,22 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc3))
 
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
 
-		e := &bst.ErrViolated{}
+		hello, err := idx.Tree.Search("hello")
+		s.NoError(err)
+
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc1}, hello.Values)
+
+		e := bst.ErrUniqueViolated{}
 		s.ErrorAs(idx.Update(ctx, doc3, bad), &e)
 
 		// No change
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
-		s.Equal([]any{doc1}, idx.Tree.Search("hello"))
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc1}, hello.Values)
+		s.Equal([]domain.Document{doc1}, hello.Values)
 	})
 
 	// Can update an array of documents
@@ -883,7 +981,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc3))
 		s.Equal(3, idx.GetNumberOfKeys())
 
-		e := &bst.ErrViolated{}
+		e := bst.ErrUniqueViolated{}
 		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []domain.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
 		s.Equal(3, idx.GetNumberOfKeys())
@@ -901,7 +999,7 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.Equal(doc3, blopMatches[0])
 
 		// Don't know why this is repeated in the original code, but added just in case
-		e = &bst.ErrViolated{}
+		e = bst.ErrUniqueViolated{}
 		s.ErrorAs(idx.UpdateMultipleDocs(ctx, []domain.Update{{OldDoc: doc1, NewDoc: doc1b}, {OldDoc: doc2, NewDoc: doc2b}, {OldDoc: doc3, NewDoc: doc3b}}...), &e)
 
 		s.Equal(3, idx.GetNumberOfKeys())
@@ -941,11 +1039,16 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.NoError(idx.Insert(ctx, doc2))
 		s.NoError(idx.Insert(ctx, doc3))
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{doc2}, idx.Tree.Search("world"))
+
+		world, err := idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal([]domain.Document{doc2}, world.Values)
 
 		s.NoError(idx.Update(ctx, doc2, noChange)) // No error returned
 		s.Equal(3, idx.GetNumberOfKeys())
-		s.Equal([]any{noChange}, idx.Tree.Search("world"))
+		world, err = idx.Tree.Search("world")
+		s.NoError(err)
+		s.Equal([]domain.Document{noChange}, world.Values)
 	})
 
 	// Can revert simple and batch updates
@@ -1346,9 +1449,8 @@ func (s *IndexesTestSuite) TestGetMatchingInvalidParameter() {
 	ctx := context.Background()
 
 	s.NoError(idx.Insert(ctx, data.M{"_id": []string{}}))
-	s.NoError(idx.Insert(ctx, data.M{"_id": []string{}}))
 
-	data, err := idx.GetMatching([]string{}, []string{})
+	data, err := idx.GetMatching([]string{})
 	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(data)
 }
