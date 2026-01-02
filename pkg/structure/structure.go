@@ -27,7 +27,7 @@ func (e ErrorNonObject) Error() string {
 	return ""
 }
 
-// ErrorNonObject TODO
+// ErrorNonList TODO
 type ErrorNonList struct {
 	Type reflect.Type
 }

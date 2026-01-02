@@ -174,6 +174,13 @@ func WithQueryProjection(p map[string]uint8) QueryOption {
 	}
 }
 
+// WithQueryCap TODO
+func WithQueryCap(c int) QueryOption {
+	return func(qo *QueryOptions) {
+		qo.Cap = c
+	}
+}
+
 // QueryOption configures query behavior through the functional options pattern.
 type QueryOption func(*QueryOptions)
 
@@ -195,6 +202,7 @@ type QueryOptions struct {
 	Comparer Comparer
 	// FieldNavigator provides field access operations.
 	FieldNavigator FieldNavigator
+	Cap            int
 }
 
 // WithCursorDecoder sets the decoder for converting cursor results.

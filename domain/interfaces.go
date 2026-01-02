@@ -163,11 +163,6 @@ type Persistence interface {
 	LoadDatabase(ctx context.Context) (docs []Document, indexes map[string]IndexDTO, err error)
 	// PersistNewState appends new documents to the persistence layer.
 	PersistNewState(ctx context.Context, newDocs ...Document) error
-	// SetCorruptAlertThreshold sets the threshold for corruption warnings.
-	SetCorruptAlertThreshold(v float64)
-	// TreatRawStream parses a raw data stream and extracts documents and
-	// indexes.
-	TreatRawStream(ctx context.Context, rawStream io.Reader) (docs []Document, indexes map[string]IndexDTO, err error)
 	// WaitCompaction blocks until any running compaction process completes.
 	WaitCompaction(ctx context.Context) error
 	// PersistCachedDatabase writes all data and indexes to storage in one
@@ -191,7 +186,7 @@ type Cursor interface {
 
 // Querier treats query options when finding data.
 type Querier interface {
-	Query(data []Document, opts ...QueryOption) ([]Document, error)
+	Query(data iter.Seq2[Document, error], opts ...QueryOption) ([]Document, error)
 }
 
 // Projector is used to determine which fields to include in the returned
@@ -209,11 +204,11 @@ type IDGenerator interface {
 // Index provides fast document lookups based on field values.
 type Index interface {
 	// GetAll returns all documents in the index.
-	GetAll() []Document
+	GetAll() iter.Seq[Document]
 	// GetBetweenBounds returns documents matching range queries.
-	GetBetweenBounds(ctx context.Context, query Document) ([]Document, error)
+	GetBetweenBounds(ctx context.Context, query Document) (iter.Seq2[Document, error], error)
 	// GetMatching returns documents with the specified field values.
-	GetMatching(value ...any) ([]Document, error)
+	GetMatching(value ...any) (iter.Seq2[Document, error], error)
 	// Insert adds documents to the index.
 	Insert(ctx context.Context, docs ...Document) error
 	// Remove removes documents from the index.

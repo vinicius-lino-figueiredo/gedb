@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/vinicius-lino-figueiredo/bst"
@@ -387,8 +388,7 @@ func (i *Index) RevertMultipleUpdates(ctx context.Context, pairs ...domain.Updat
 }
 
 // GetMatching implements [domain.Index].
-func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
-	res := []domain.Document{}
+func (i *Index) GetMatching(value ...any) (iter.Seq2[domain.Document, error], error) {
 	_res := uncomparable.New[[]domain.Document](i.hasher, i.comparer)
 	for _, v := range value {
 		found, err := i.Tree.Search(v)
@@ -418,18 +418,24 @@ func (i *Index) GetMatching(value ...any) ([]domain.Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, _id := range keys {
-		v, _, err := _res.Get(_id)
-		if err != nil {
-			return nil, err
+	return func(yield func(domain.Document, error) bool) {
+		for _, _id := range keys {
+			v, _, err := _res.Get(_id)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			for _, i := range v {
+				if !yield(i, nil) {
+					return
+				}
+			}
 		}
-		res = append(res, v...)
-	}
-	return res, nil
+	}, nil
 }
 
 // GetBetweenBounds implements [domain.Index].
-func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) ([]domain.Document, error) {
+func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) (iter.Seq2[domain.Document, error], error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -450,20 +456,12 @@ func (i *Index) GetBetweenBounds(ctx context.Context, query domain.Document) ([]
 		}
 	}
 
-	found := i.Tree.Query(qry)
-	res := make([]domain.Document, 0, i.GetNumberOfKeys())
-	for f, err := range found {
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, f)
-	}
-	return res, nil
+	return i.Tree.Query(qry), nil
 }
 
 // GetAll implements [domain.Index].
-func (i *Index) GetAll() []domain.Document {
-	return slices.Collect(i.Tree.GetAll())
+func (i *Index) GetAll() iter.Seq[domain.Document] {
+	return i.Tree.GetAll()
 }
 
 // GetNumberOfKeys implements [domain.Index].

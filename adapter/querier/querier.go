@@ -3,6 +3,7 @@ package querier
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
@@ -51,14 +52,18 @@ func NewQuerier(opts ...Option) domain.Querier {
 }
 
 // Query implements [domain.Querier].
-func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]domain.Document, error) {
-	var options domain.QueryOptions
+func (q *Querier) Query(data iter.Seq2[domain.Document, error], opts ...domain.QueryOption) ([]domain.Document, error) {
+	if data == nil {
+		return make([]domain.Document, 0), nil
+	}
+
+	options := domain.QueryOptions{Cap: 256}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
 	var skipped int64
-	res := make([]domain.Document, 0, len(data))
+	res := make([]domain.Document, 0, options.Cap)
 
 	if options.Query != nil {
 		if err := q.mtchr.SetQuery(options.Query); err != nil {
@@ -66,7 +71,10 @@ func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]d
 		}
 	}
 
-	for _, doc := range data {
+	for doc, err := range data {
+		if err != nil {
+			return nil, err
+		}
 		if options.Query != nil {
 			matches, err := q.mtchr.Match(doc)
 			if err != nil {

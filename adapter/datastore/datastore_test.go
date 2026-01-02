@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"maps"
 	"os"
 	"path/filepath"
@@ -21,7 +22,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/bst"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
-	"github.com/vinicius-lino-figueiredo/gedb/adapter/cursor"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/idgenerator"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/index"
@@ -122,20 +122,20 @@ func (i *indexMock) FieldName() string {
 }
 
 // GetAll implements [domain.Index].
-func (i *indexMock) GetAll() []domain.Document {
-	return i.Called().Get(0).([]domain.Document)
+func (i *indexMock) GetAll() iter.Seq[domain.Document] {
+	return slices.Values(i.Called().Get(0).([]domain.Document))
 }
 
 // GetBetweenBounds implements [domain.Index].
-func (i *indexMock) GetBetweenBounds(ctx context.Context, query domain.Document) ([]domain.Document, error) {
+func (i *indexMock) GetBetweenBounds(ctx context.Context, query domain.Document) (iter.Seq2[domain.Document, error], error) {
 	call := i.Called(ctx, query)
-	return call.Get(0).([]domain.Document), call.Error(1)
+	return call.Get(0).(iter.Seq2[domain.Document, error]), call.Error(1)
 }
 
 // GetMatching implements [domain.Index].
-func (i *indexMock) GetMatching(value ...any) ([]domain.Document, error) {
+func (i *indexMock) GetMatching(value ...any) (iter.Seq2[domain.Document, error], error) {
 	call := i.Called(value)
-	return call.Get(0).([]domain.Document), call.Error(1)
+	return call.Get(0).(iter.Seq2[domain.Document, error]), call.Error(1)
 }
 
 // GetNumberOfKeys implements [domain.Index].
@@ -240,7 +240,7 @@ func (s *DatastoreTestSuite) SetupTest() {
 	}
 
 	s.NoError(s.d.LoadDatabase(ctx))
-	s.Len(s.d.getAllData(), 0)
+	s.Len(slices.Collect(s.d.getAllData()), 0)
 }
 
 func (s *DatastoreTestSuite) SetupSubTest() {
@@ -782,7 +782,7 @@ func (s *DatastoreTestSuite) TestInsert() {
 
 		errGetMtch := fmt.Errorf("get matching error")
 		idxMock.On("GetMatching", []any{"123"}).
-			Return([]domain.Document{}, errGetMtch).
+			Return(maps.All(map[domain.Document]error{}), errGetMtch).
 			Once()
 
 		cur, err := s.d.Insert(ctx, M{"a": 1})
@@ -889,7 +889,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
 		s.Len(_doc2, 1)
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 9}))
-		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "tf": 4}, false)
+		dt, err := listCandidates(s.d.getCandidates(ctx, data.M{"r": 6, "tf": 4}, false))
 		s.NoError(err)
 		s.Len(dt, 2)
 		doc1ID := slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })
@@ -913,10 +913,12 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{"another"}}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": []any{9}}))
 
-		dt, err := s.d.getCandidates(ctx, data.M{"tf": []any{}}, false)
+		dt, err := listCandidates(s.d.getCandidates(
+			ctx, data.M{"tf": []any{}}, false,
+		))
 		s.NoError(err)
 
-		s.Equal(s.d.getAllData(), dt)
+		s.Equal(slices.Collect(s.d.getAllData()), dt)
 	})
 
 	// Can use a compound index to get docs with a basic match
@@ -927,7 +929,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
 		_doc1 := s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 1, "foo": 3}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 1, "foo": 4}))
-		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "tg": 1}, false)
+		dt, err := listCandidates(s.d.getCandidates(ctx, data.M{"tf": 4, "tg": 1}, false))
 		s.NoError(err)
 		s.Len(dt, 1)
 		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
@@ -943,15 +945,15 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
 		_doc2 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
-		dt, err := s.d.getCandidates(ctx, data.M{"tf": data.M{"$in": 1}}, false)
+		dt, err := listCandidates(s.d.getCandidates(ctx, data.M{"tf": data.M{"$in": 1}}, false))
 		s.NoError(err)
 		s.Len(dt, 0)
 
-		dt, err = s.d.getCandidates(ctx, data.M{"tg": nil}, false)
+		dt, err = listCandidates(s.d.getCandidates(ctx, data.M{"tg": nil}, false))
 		s.NoError(err)
 		s.Len(dt, 4)
 
-		dt, err = s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false)
+		dt, err = listCandidates(s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$in": []any{6, 9, 5}}}, false))
 		s.NoError(err)
 		s.Len(dt, 2)
 
@@ -973,7 +975,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_doc3 := s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
 		_doc4 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
-		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "notf": data.M{"$in": []any{6, 9, 5}}}, false)
+		dt, err := listCandidates(s.d.getCandidates(ctx, data.M{"r": 6, "notf": data.M{"$in": []any{6, 9, 5}}}, false))
 		s.NoError(err)
 
 		doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
@@ -996,7 +998,7 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "an": "other"}))
 		_doc4 := s.insert(s.d.Insert(ctx, M{"tf": 9}))
 
-		dt, err := s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$lte": 9, "$gte": 6}}, false)
+		dt, err := listCandidates(s.d.getCandidates(ctx, data.M{"r": 6, "tf": data.M{"$lte": 9, "$gte": 6}}, false))
 		s.NoError(err)
 
 		doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
@@ -1229,7 +1231,9 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "foo": 2}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "foo": 3}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "th": 1, "foo": 4}))
-		dt, err := s.d.getCandidates(ctx, data.M{"tf": 4, "th": 1}, false)
+		dt, err := listCandidates(s.d.getCandidates(
+			ctx, data.M{"tf": 4, "th": 1}, false,
+		))
 		s.NoError(err)
 		s.Len(dt, 4) // using no index
 	})
@@ -1240,9 +1244,9 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "tg": 0, "j": 2}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "th": 1, "j": 3}))
 		_ = s.insert(s.d.Insert(ctx, M{"tf": 6, "th": 1, "j": 4}))
-		dt, err := s.d.getCandidates(
+		dt, err := listCandidates(s.d.getCandidates(
 			ctx, data.M{"tf": 4, "tg": data.M{}}, false,
-		)
+		))
 		s.NoError(err)
 		s.Len(dt, 4) // using no index
 	})
@@ -1748,25 +1752,6 @@ func (s *DatastoreTestSuite) TestCount() {
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
 	})
 
-	s.Run("FailedCursor", func() {
-		cur, err := s.d.Insert(ctx, M{"a": 1})
-		s.NoError(err)
-		s.NotNil(cur)
-		s.d.cursorFactory = func(ctx context.Context, d []domain.Document, co ...domain.CursorOption) (domain.Cursor, error) {
-			cur, err := cursor.NewCursor(ctx, d, co...)
-			if err != nil {
-				return nil, err
-			}
-			if err := cur.Close(); err != nil {
-				return nil, err
-			}
-			return cur, nil
-		}
-		c, err := s.d.Count(ctx, nil)
-		s.ErrorIs(err, domain.ErrCursorClosed)
-		s.Zero(c)
-	})
-
 } // ==== End of 'Count' ==== //
 
 func (s *DatastoreTestSuite) TestUpdate() {
@@ -2075,22 +2060,6 @@ func (s *DatastoreTestSuite) TestUpdate() {
 			s.Equal([]M{{"b": true}, {"b": true}}, res)
 		})
 
-		s.Run("FailedCursor", func() {
-			cm := new(cursorMock)
-			errCur := fmt.Errorf("cursor error")
-			cm.On("Next").Return(false).Once()
-			cm.On("Err").Return(errCur).Once()
-
-			s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
-				return cm, nil
-			}
-
-			cur, err := s.d.Update(ctx, nil, nil, domain.WithUpsert(true))
-			s.ErrorIs(err, errCur)
-			s.Nil(cur)
-			cm.AssertExpectations(s.T())
-		})
-
 		s.Run("FailedDocumentFactory", func() {
 			errDocFac := fmt.Errorf("document factory error")
 			var c int
@@ -2313,7 +2282,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
-			docs := idx.GetAll()
+			docs := slices.Collect(idx.GetAll())
 			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0]["_id"].(string) })]
 			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0]["_id"].(string) })]
 			d3 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc3[0]["_id"].(string) })]
@@ -2341,7 +2310,7 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Nil(n, 0)
 
 		for _, idx := range s.d.indexes {
-			docs := idx.GetAll()
+			docs := slices.Collect(idx.GetAll())
 			d1 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc1[0]["_id"].(string) })]
 			d2 := docs[slices.IndexFunc(docs, func(d domain.Document) bool { return d.ID().(string) == doc2[0]["_id"].(string) })]
 
@@ -2410,65 +2379,6 @@ func (s *DatastoreTestSuite) TestUpdate() {
 		s.Nil(cur)
 	})
 
-	s.Run("FailedNewEmptyDocument", func() {
-		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
-
-		errDocFac := fmt.Errorf("document factory error")
-
-		var c int
-		s.d.documentFactory = func(a any) (domain.Document, error) {
-			if c > 2 {
-				return nil, errDocFac
-			}
-			c++
-			return data.NewDocument(a)
-		}
-		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
-		s.ErrorIs(err, errDocFac)
-		s.Nil(cur)
-	})
-
-	s.Run("FailedCursor", func() {
-		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
-
-		curMock := new(cursorMock)
-		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
-			return curMock, nil
-		}
-
-		errCursor := fmt.Errorf("cursor error")
-
-		curMock.On("Next").Return(false).Once()
-		curMock.On("Err").Return(errCursor).Once()
-
-		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
-		s.ErrorIs(err, errCursor)
-		s.Nil(cur)
-
-		curMock.AssertExpectations(s.T())
-	})
-
-	s.Run("FailedCursorScan", func() {
-		_ = s.insert(s.d.Insert(ctx, M{"a": 1}))
-
-		curMock := new(cursorMock)
-		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
-			return curMock, nil
-		}
-
-		errCursor := fmt.Errorf("cursor error")
-
-		curMock.On("Next").Return(true).Once()
-		curMock.On("Scan", mock.Anything, mock.Anything).
-			Return(errCursor).
-			Once()
-
-		cur, err := s.d.Update(ctx, M{"a": 1}, M{"a": 2})
-		s.ErrorIs(err, errCursor)
-		s.Nil(cur)
-
-		curMock.AssertExpectations(s.T())
-	})
 } // ==== End of 'Update' ==== //
 
 func (s *DatastoreTestSuite) TestRemove() {
@@ -2677,32 +2587,6 @@ func (s *DatastoreTestSuite) TestRemove() {
 		s.Zero(count)
 	})
 
-	s.Run("FailedCursor", func() {
-		curMock := new(cursorMock)
-		s.d.cursorFactory = func(context.Context, []domain.Document, ...domain.CursorOption) (domain.Cursor, error) {
-			return curMock, nil
-		}
-		errCursor := fmt.Errorf("cursor error")
-
-		curMock.On("Next").Return(true).Once()
-		curMock.On("Scan", mock.Anything, mock.Anything).
-			Return(errCursor).
-			Once()
-
-		count, err := s.d.Remove(ctx, nil)
-		s.ErrorIs(err, errCursor)
-		s.Zero(count)
-
-		errCursor2 := fmt.Errorf("second cursor error")
-		curMock.On("Next").Return(false).Once()
-		curMock.On("Err").Return(errCursor2).Once()
-
-		count, err = s.d.Remove(ctx, nil)
-		s.ErrorIs(err, errCursor2)
-		s.Zero(count)
-		curMock.AssertExpectations(s.T())
-	})
-
 	s.Run("FailedPersistence", func() {
 		cur, err := s.d.Insert(ctx, M{})
 		s.NoError(err)
@@ -2737,7 +2621,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 		// ensureIndex can be called right after a loadDatabase and be initialized and filled correctly
 		s.Run("EnsureIndexOnLoad", func() {
 			now := time.Now()
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 
 			buf := make([]byte, 0, 1024)
 			docs := [...]M{
@@ -2755,7 +2639,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 
 			s.NoError(s.d.LoadDatabase(ctx))
-			s.Len(s.d.getAllData(), 3)
+			s.Len(slices.Collect(s.d.getAllData()), 3)
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
@@ -2773,9 +2657,10 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
 			s.NoError(err)
 
-			s.Equal(s.d.getAllData()[0], s1.Values[0])
-			s.Equal(s.d.getAllData()[1], s2.Values[0])
-			s.Equal(s.d.getAllData()[2], s3.Values[0])
+			allData := slices.Collect(s.d.getAllData())
+			s.Equal(allData[0], s1.Values[0])
+			s.Equal(allData[1], s2.Values[0])
+			s.Equal(allData[2], s3.Values[0])
 		})
 
 		s.Run("InvalidIndex", func() {
@@ -2817,7 +2702,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal("_id", indexNames[0])
 			s.Equal("planet", indexNames[1])
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("planet")))
 			s.Len(s.d.indexes, 2)
@@ -2827,7 +2712,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal("_id", indexNames[0])
 			s.Equal("planet", indexNames[1])
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 		})
 
 		// ensureIndex can be called twice on the same compound fields, the second call will have no effect
@@ -2852,7 +2737,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal("_id", indexNames[0])
 			s.Equal("planet,star", indexNames[1])
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("star", "planet")))
 			s.Len(s.d.indexes, 2)
@@ -2862,7 +2747,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal("_id", indexNames[0])
 			s.Equal("planet,star", indexNames[1])
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 		})
 
 		// ensureIndex cannot be called with an illegal field name
@@ -2893,12 +2778,12 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				buf = append(buf, append(b, '\n')...)
 			}
 
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 
 			s.Equal([]string{"_id"}, slices.Collect(maps.Keys(s.d.indexes)))
 
@@ -2917,7 +2802,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.False(s.d.indexes["z"].Sparse())
 			s.Equal(3, s.d.indexes["z"].GetNumberOfKeys())
 
-			matching, err := s.d.indexes["_id"].GetMatching("aaa")
+			matching, err := listMatching(s.d.indexes["_id"].GetMatching("aaa"))
 			s.NoError(err)
 
 			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
@@ -2928,11 +2813,11 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 
 			s.Equal(matching[0], s1.Values[0])
-			matching, err = s.d.indexes["_id"].GetMatching(newDoc1[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(newDoc1[0]["_id"]))
 			s.NoError(err)
 			s.Equal(matching[0], s12.Values[0])
 
-			matching, err = s.d.indexes["_id"].GetMatching(newDoc2[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(newDoc2[0]["_id"]))
 			s.NoError(err)
 			s.Equal(matching[0], s14.Values[0])
 
@@ -2968,7 +2853,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				buf = append(buf, append(b, '\n')...)
 			}
 
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.Equal("z", s.d.indexes["z"].FieldName())
 			s.False(s.d.indexes["z"].Unique())
@@ -2978,7 +2863,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "1" })]
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "2" })]
 			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "3" })]
@@ -3017,7 +2902,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				buf = append(buf, append(b, '\n')...)
 			}
 
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("z")))
 			s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
 
@@ -3027,7 +2912,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			s.NoError(s.d.LoadDatabase(ctx))
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "1" })]
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "2" })]
 			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.Get("z") == "3" })]
@@ -3076,7 +2961,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 				buf = append(buf, append(b, '\n')...)
 			}
 
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithFields("z"),
 				domain.WithUnique(true),
@@ -3087,7 +2972,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(os.WriteFile(s.testDb, buf, DefaultFileMode))
 			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(s.d.LoadDatabase(ctx), &e)
-			s.Len(s.d.getAllData(), 0)
+			s.Len(slices.Collect(s.d.getAllData()), 0)
 			s.Equal(0, s.d.indexes["z"].GetNumberOfKeys())
 		})
 
@@ -3167,13 +3052,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err := s.d.indexes["z"].GetMatching("yes")
+			matching, err := listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
 			newDoc = s.insert(s.d.Insert(ctx, M{"a": 5, "z": "nope"}))
 			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err = s.d.indexes["z"].GetMatching("nope")
+			matching, err = listMatching(s.d.indexes["z"].GetMatching("nope"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 		})
@@ -3188,20 +3073,20 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes", "ya": "indeed"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["ya"].GetNumberOfKeys())
-			matching, err := s.d.indexes["z"].GetMatching("yes")
+			matching, err := listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
-			matching, err = s.d.indexes["ya"].GetMatching("indeed")
+			matching, err = listMatching(s.d.indexes["ya"].GetMatching("indeed"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
 			newDoc2 := s.insert(s.d.Insert(ctx, M{"a": 5, "z": "nope", "ya": "sure"}))
 			s.Equal(2, s.d.indexes["z"].GetNumberOfKeys())
 			s.Equal(2, s.d.indexes["ya"].GetNumberOfKeys())
-			matching, err = s.d.indexes["z"].GetMatching("nope")
+			matching, err = listMatching(s.d.indexes["z"].GetMatching("nope"))
 			s.NoError(err)
 			s.EqualDocs(newDoc2, matching)
-			matching, err = s.d.indexes["ya"].GetMatching("sure")
+			matching, err = listMatching(s.d.indexes["ya"].GetMatching("sure"))
 			s.NoError(err)
 			s.EqualDocs(newDoc2, matching)
 
@@ -3214,13 +3099,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err := s.d.indexes["z"].GetMatching("yes")
+			matching, err := listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
 			newDoc2 := s.insert(s.d.Insert(ctx, M{"a": 5, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err = s.d.indexes["z"].GetMatching("yes")
+			matching, err = listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(append(newDoc, newDoc2...), matching)
 
@@ -3236,7 +3121,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err := s.d.indexes["z"].GetMatching("yes")
+			matching, err := listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
@@ -3248,13 +3133,15 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			// TODO: assert violated key
 
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			matching, err = s.d.indexes["z"].GetMatching("yes")
+			matching, err = listMatching(s.d.indexes["z"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
-			s.EqualDocs(newDoc, s.d.getAllData())
+			allData := slices.Collect(s.d.getAllData())
+			s.EqualDocs(newDoc, allData)
 			s.NoError(s.d.LoadDatabase(ctx))
-			s.Equal(data.M{"_id": newDoc[0]["_id"], "a": 2.0, "z": "yes"}, s.d.getAllData()[0])
+			allData = slices.Collect(s.d.getAllData())
+			s.Equal(data.M{"_id": newDoc[0]["_id"], "a": 2.0, "z": "yes"}, allData[0])
 		})
 
 		// If an index has a unique constraint, other indexes cannot be modified when it raises an error
@@ -3279,13 +3166,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(1, s.d.indexes["uni"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["nonu2"].GetNumberOfKeys())
 
-			matching, err := s.d.indexes["nonu1"].GetMatching("yes")
+			matching, err := listMatching(s.d.indexes["nonu1"].GetMatching("yes"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
-			matching, err = s.d.indexes["uni"].GetMatching("willfail")
+			matching, err = listMatching(s.d.indexes["uni"].GetMatching("willfail"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
-			matching, err = s.d.indexes["nonu2"].GetMatching("yes2")
+			matching, err = listMatching(s.d.indexes["nonu2"].GetMatching("yes2"))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
@@ -3302,7 +3189,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			newDoc := s.insert(s.d.Insert(ctx, M{"a": 2, "z": "yes"}))
 			s.Equal(1, s.d.indexes["zzz"].GetNumberOfKeys())
-			matching, err := s.d.indexes["zzz"].GetMatching(nil)
+			matching, err := listMatching(s.d.indexes["zzz"].GetMatching(nil))
 			s.NoError(err)
 			s.EqualDocs(newDoc, matching)
 
@@ -3318,8 +3205,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			))
 
 			_ = s.insert(s.d.Insert(ctx, M{"a": 5, "z": "other", "zzz": "set"}))
-			s.Len(s.d.indexes["yyy"].GetAll(), 0)
-			s.Len(s.d.indexes["zzz"].GetAll(), 2)
+			s.Equal(0, s.d.indexes["yyy"].GetNumberOfKeys())
+			s.Equal(2, s.d.indexes["zzz"].GetNumberOfKeys())
 		})
 
 		// Insertion still works as before with indexing
@@ -3349,29 +3236,29 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			docs, err := s.readCursor(cur)
 			s.NoError(err)
 			s.Len(docs, 2)
-			s.Len(s.d.getAllData(), 2)
+			s.Len(slices.Collect(s.d.getAllData()), 2)
 
-			matching, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
+			matching, err := listMatching(s.d.indexes["_id"].GetMatching(doc1[0]["_id"]))
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["a"].GetMatching(1)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(doc1[0]["_id"]))
 			s.NoError(err)
-			expected, err := s.d.indexes["a"].GetMatching(1)
+			expected, err := listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
 			s.Equal(expected[0], matching[0])
 
-			matching, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(doc2[0]["_id"]))
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(doc2[0]["_id"]))
 			s.NoError(err)
-			expected, err = s.d.indexes["a"].GetMatching(2)
+			expected, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(expected[0], matching[0])
 		})
@@ -3395,21 +3282,21 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 
 			s.Len(docs, 1)
-			s.Len(s.d.getAllData(), 1)
+			s.Len(slices.Collect(s.d.getAllData()), 1)
 
-			matching, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
+			matching, err := listMatching(s.d.indexes["_id"].GetMatching(doc1[0]["_id"]))
 			s.NoError(err)
 			s.Len(matching, 1)
-			matching, err = s.d.indexes["a"].GetMatching(1)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
 			s.Len(matching, 1)
-			expected, err := s.d.indexes["a"].GetMatching(1)
+			expected, err := listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
-			matching, err = s.d.indexes["_id"].GetMatching(docs[0]["_id"])
+			matching, err = listMatching(s.d.indexes["_id"].GetMatching(docs[0]["_id"]))
 			s.NoError(err)
 			s.Equal(expected[0], matching[0])
 
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Len(matching, 0)
 		})
@@ -3427,7 +3314,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			n := s.update(s.d.Update(ctx, M{"a": 1}, M{"$set": M{"a": 456, "b": "no"}}))
 			s.Len(n, 1)
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 
@@ -3438,7 +3325,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			n = s.update(s.d.Update(ctx, nil, M{"$inc": M{"a": 10}, "$set": M{"b": "same"}}, domain.WithUpdateMulti(true)))
 			s.Len(n, 2)
 
-			dt = s.d.getAllData()
+			dt = slices.Collect(s.d.getAllData())
 			doc1 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 			doc2 = dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 
@@ -3459,18 +3346,18 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(n, 1)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
-			matching, err := s.d.indexes["a"].GetMatching(456)
+			matching, err := listMatching(s.d.indexes["a"].GetMatching(456))
 			s.NoError(err)
 			s.Equal(doc1[0]["_id"], matching[0].ID())
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(doc2[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
-			matching, err = s.d.indexes["b"].GetMatching("no")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("no"))
 			s.NoError(err)
 			s.Equal(doc1[0]["_id"], matching[0].ID())
-			matching, err = s.d.indexes["b"].GetMatching("si")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("si"))
 			s.NoError(err)
 			s.Equal(doc2[0]["_id"], matching[0].ID())
 
@@ -3478,21 +3365,21 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err := s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
+			expected, err := listMatching(s.d.indexes["_id"].GetMatching(doc1[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(456)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(456))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			matching, err = s.d.indexes["b"].GetMatching("no")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("no"))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
+			expected, err = listMatching(s.d.indexes["_id"].GetMatching(doc2[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			matching, err = s.d.indexes["b"].GetMatching("si")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("si"))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
@@ -3500,18 +3387,18 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(n, 2)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
-			matching, err = s.d.indexes["a"].GetMatching(466)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(466))
 			s.NoError(err)
 			s.Equal(doc1[0]["_id"], matching[0].ID())
-			matching, err = s.d.indexes["a"].GetMatching(12)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(12))
 			s.NoError(err)
 			s.Equal(doc2[0]["_id"], matching[0].ID())
 
 			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
-			matching, err = s.d.indexes["b"].GetMatching("same")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("same"))
 			s.NoError(err)
 			s.Len(matching, 2)
-			matching, err = s.d.indexes["b"].GetMatching("same")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("same"))
 			s.NoError(err)
 			ids := make([]any, len(matching))
 			for n, m := range matching {
@@ -3522,17 +3409,17 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
 			s.Equal(1, s.d.indexes["b"].GetNumberOfKeys())
-			s.Len(s.d.indexes["b"].GetAll(), 2)
+			s.Len(slices.Collect(s.d.indexes["b"].GetAll()), 2)
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc1[0]["_id"])
+			expected, err = listMatching(s.d.indexes["_id"].GetMatching(doc1[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(466)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(466))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			expected, err = s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
+			expected, err = listMatching(s.d.indexes["_id"].GetMatching(doc2[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(12)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(12))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 		})
@@ -3562,44 +3449,44 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
-			matching, err := s.d.indexes["a"].GetMatching(1)
+			matching, err := listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["a"].GetMatching(3)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(3))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["b"].GetNumberOfKeys())
-			matching, err = s.d.indexes["b"].GetMatching(10)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(10))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["b"].GetMatching(20)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(20))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["b"].GetMatching(30)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(30))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["c"].GetNumberOfKeys())
-			matching, err = s.d.indexes["c"].GetMatching(100)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(100))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["c"].GetMatching(200)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(200))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["c"].GetMatching(300)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(300))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 		})
@@ -3629,44 +3516,44 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.ErrorAs(err, &e)
 			s.Nil(n, 0)
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc1 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc1[0]["_id"] })]
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
-			matching, err := s.d.indexes["a"].GetMatching(1)
+			matching, err := listMatching(s.d.indexes["a"].GetMatching(1))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["a"].GetMatching(3)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(3))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["b"].GetNumberOfKeys())
-			matching, err = s.d.indexes["b"].GetMatching(10)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(10))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["b"].GetMatching(20)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(20))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["b"].GetMatching(30)
+			matching, err = listMatching(s.d.indexes["b"].GetMatching(30))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 
 			s.Len(dt, 3)
 			s.Equal(3, s.d.indexes["c"].GetNumberOfKeys())
-			matching, err = s.d.indexes["c"].GetMatching(100)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(100))
 			s.NoError(err)
 			s.Equal(doc1, matching[0])
-			matching, err = s.d.indexes["c"].GetMatching(200)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(200))
 			s.NoError(err)
 			s.Equal(doc2, matching[0])
-			matching, err = s.d.indexes["c"].GetMatching(300)
+			matching, err = listMatching(s.d.indexes["c"].GetMatching(300))
 			s.NoError(err)
 			s.Equal(doc3, matching[0])
 		})
@@ -3686,7 +3573,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Equal(int64(1), n)
 
-			dt := s.d.getAllData()
+			dt := slices.Collect(s.d.getAllData())
 			doc2 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc2[0]["_id"] })]
 			doc3 := dt[slices.IndexFunc(dt, func(d domain.Document) bool { return d.ID() == _doc3[0]["_id"] })]
 
@@ -3698,7 +3585,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 			s.Equal(int64(2), n)
 
-			dt = s.d.getAllData()
+			dt = slices.Collect(s.d.getAllData())
 			s.Len(dt, 0)
 		})
 
@@ -3714,38 +3601,38 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Equal(int64(1), n)
 
 			s.Equal(2, s.d.indexes["a"].GetNumberOfKeys())
-			matching, err := s.d.indexes["a"].GetMatching(2)
+			matching, err := listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(doc2[0]["_id"], matching[0].ID())
-			matching, err = s.d.indexes["a"].GetMatching(3)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(3))
 			s.NoError(err)
 			s.Equal(doc3[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["b"].GetNumberOfKeys())
-			matching, err = s.d.indexes["b"].GetMatching("si")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("si"))
 			s.NoError(err)
 			s.Equal(doc2[0]["_id"], matching[0].ID())
-			matching, err = s.d.indexes["b"].GetMatching("coin")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("coin"))
 			s.NoError(err)
 			s.Equal(doc3[0]["_id"], matching[0].ID())
 
 			s.Equal(2, s.d.indexes["_id"].GetNumberOfKeys())
 
-			expected, err := s.d.indexes["_id"].GetMatching(doc2[0]["_id"])
+			expected, err := listMatching(s.d.indexes["_id"].GetMatching(doc2[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(2)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(2))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			matching, err = s.d.indexes["b"].GetMatching("si")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("si"))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 
-			expected, err = s.d.indexes["_id"].GetMatching(doc3[0]["_id"])
+			expected, err = listMatching(s.d.indexes["_id"].GetMatching(doc3[0]["_id"]))
 			s.NoError(err)
-			matching, err = s.d.indexes["a"].GetMatching(3)
+			matching, err = listMatching(s.d.indexes["a"].GetMatching(3))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
-			matching, err = s.d.indexes["b"].GetMatching("coin")
+			matching, err = listMatching(s.d.indexes["b"].GetMatching("coin"))
 			s.NoError(err)
 			s.Equal(reflect.ValueOf(expected[0]).Pointer(), reflect.ValueOf(matching[0]).Pointer())
 		})
@@ -3817,8 +3704,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
 			db, err = NewDatastore(WithFilename(persDB))
@@ -3829,8 +3716,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
 			db, err = NewDatastore(WithFilename(persDB))
@@ -3841,8 +3728,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 		})
 
@@ -3875,8 +3762,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 			s.True(d.indexes["planet"].Unique())
 			s.False(d.indexes["planet"].Sparse())
@@ -3892,8 +3779,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 3)
-			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Equal(3, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(3, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
 			db, err = NewDatastore(WithFilename(persDB))
@@ -3904,8 +3791,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
-			s.Len(d.indexes["_id"].GetAll(), 3)
-			s.Len(d.indexes["planet"].GetAll(), 3)
+			s.Equal(3, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(3, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 			s.True(d.indexes["planet"].Unique())
 			s.False(d.indexes["planet"].Sparse())
@@ -3919,9 +3806,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
 			s.Contains(d.indexes, "bloup")
-			s.Len(d.indexes["_id"].GetAll(), 3)
-			s.Len(d.indexes["planet"].GetAll(), 3)
-			s.Len(d.indexes["bloup"].GetAll(), 0)
+			s.Equal(3, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(3, d.indexes["planet"].GetNumberOfKeys())
+			s.Equal(0, d.indexes["bloup"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 			s.Equal("bloup", d.indexes["bloup"].FieldName())
 			s.True(d.indexes["planet"].Unique())
@@ -3938,9 +3825,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
 			s.Contains(d.indexes, "bloup")
-			s.Len(d.indexes["_id"].GetAll(), 3)
-			s.Len(d.indexes["planet"].GetAll(), 3)
-			s.Len(d.indexes["bloup"].GetAll(), 0)
+			s.Equal(3, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(3, d.indexes["planet"].GetNumberOfKeys())
+			s.Equal(0, d.indexes["bloup"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 			s.Equal("bloup", d.indexes["bloup"].FieldName())
 			s.True(d.indexes["planet"].Unique())
@@ -3977,8 +3864,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
 			s.Contains(d.indexes, "another")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
 			db, err = NewDatastore(WithFilename(persDB))
@@ -3990,8 +3877,8 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "planet")
 			s.Contains(d.indexes, "another")
-			s.Len(d.indexes["_id"].GetAll(), 2)
-			s.Len(d.indexes["planet"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
+			s.Equal(2, d.indexes["planet"].GetNumberOfKeys())
 			s.Equal("planet", d.indexes["planet"].FieldName())
 
 			s.NoError(d.RemoveIndex(ctx, "planet"))
@@ -3999,7 +3886,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "another")
-			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
 
 			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
@@ -4009,7 +3896,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "another")
-			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
 
 			db, err = NewDatastore(WithFilename(persDB))
 			s.NoError(err)
@@ -4019,7 +3906,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.Len(d.indexes, 2)
 			s.Contains(d.indexes, "_id")
 			s.Contains(d.indexes, "another")
-			s.Len(d.indexes["_id"].GetAll(), 2)
+			s.Equal(2, d.indexes["_id"].GetNumberOfKeys())
 		})
 
 	}) // ==== End of 'Persisting indexes' ====
@@ -4028,7 +3915,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 	s.Run("NoDuplicatesInGetMatching", func() {
 		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("bad")))
 		_ = s.insert(s.d.Insert(ctx, M{"bad": []any{"a", "b"}}))
-		candidates, err := s.d.getCandidates(ctx, data.M{"$in": []any{"a", "b"}}, false)
+		candidates, err := listCandidates(s.d.getCandidates(ctx, data.M{"$in": []any{"a", "b"}}, false))
 		s.NoError(err)
 		s.Len(candidates, 1)
 	})
@@ -4284,4 +4171,32 @@ func (s *DatastoreTestSuite) update(in domain.Cursor, err error) []domain.Docume
 		res = append(res, m)
 	}
 	return res
+}
+
+func listMatching[T any](seq iter.Seq2[T, error], err error) ([]T, error) {
+	res := make([]T, 0, 126)
+	if err != nil {
+		return nil, err
+	}
+	for i, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, i)
+	}
+	return res, nil
+}
+
+func listCandidates[T any](seq iter.Seq2[T, error], err error) ([]T, error) {
+	res := make([]T, 0, 126)
+	if err != nil {
+		return nil, err
+	}
+	for i, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, i)
+	}
+	return res, nil
 }

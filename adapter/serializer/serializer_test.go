@@ -83,14 +83,14 @@ func (s *SerializerTestSuite) TestDate() {
 
 // Can serialize sub objects.
 func (s *SerializerTestSuite) TestNestedDocs() {
-	d := time.Now()
+	d := time.Now().Truncate(time.Millisecond)
 
 	a := data.M{"test": data.M{"something": 39, "also": d, "yes": data.M{"again": "yes"}}}
 	b, err := s.s.Serialize(ctx, a)
 	s.NoError(err)
 	var r data.M
 	s.NoError(json.Unmarshal(b, &r))
-	s.Equal(float64(d.UnixMilli()), r.D("test").D("also").Get("$$date"))
+	s.Equal(d, r.D("test").Get("also"))
 	s.Equal("yes", r.D("test").D("yes").Get("again"))
 }
 

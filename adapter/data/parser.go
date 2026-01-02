@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -119,7 +120,7 @@ func (p *parser) value() (any, error) {
 	}
 }
 
-func (p *parser) obj() (M, error) {
+func (p *parser) obj() (any, error) {
 	p.i++ // skip '{'
 	p.skip()
 	m := make(M)
@@ -156,6 +157,13 @@ func (p *parser) obj() (M, error) {
 			return nil, ErrNoComma
 		}
 		p.i++
+	}
+	if len(m) == 1 {
+		if d, ok := m["$$date"]; ok {
+			if n, ok := d.(float64); ok {
+				return time.UnixMilli(int64(n)), nil
+			}
+		}
 	}
 	return m, nil
 }

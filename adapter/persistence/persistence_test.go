@@ -184,7 +184,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 3)
@@ -195,7 +195,7 @@ func (s *PersistenceTestSuite) TestEveryLineIsADocStream() {
 
 // Badly formatted lines have no impact on the treated data (with stream).
 func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
-	p.SetCorruptAlertThreshold(1) // to prevent a corruption alert
+	p.corruptAlertThreshold = 1 // to prevent a corruption alert
 
 	ctx := context.Background()
 
@@ -205,7 +205,7 @@ func (s *PersistenceTestSuite) TestBadlyFormatedLinesStream() {
 	s.NoError(err1)
 	s.NoError(err2)
 	rawData := []byte(string(rawData1) + "\n" + "garbage" + "\n" + string(rawData2))
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
@@ -226,7 +226,7 @@ func (s *PersistenceTestSuite) TestWellFormatedNoIDStream() {
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
@@ -248,7 +248,7 @@ func (s *PersistenceTestSuite) TestRepeatedID() {
 	s.NoError(err2)
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	_ = treatedData
 
@@ -273,7 +273,7 @@ func (s *PersistenceTestSuite) TestDeleteDoc() {
 	s.NoError(err4)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3) + "\n" + string(rawData4))
 
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.NoError(err)
 	s.Len(treatedData, 2)
@@ -294,7 +294,7 @@ func (s *PersistenceTestSuite) TestDeleteUnexistentDoc() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, _, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, _, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	slices.SortFunc(treatedData, func(a, b domain.Document) int { return s.compareThings(a.ID(), b.ID()) })
 	s.Len(treatedData, 2)
@@ -315,7 +315,7 @@ func (s *PersistenceTestSuite) TestIndexCreated() {
 	s.NoError(err3)
 	rawData := []byte(string(rawData1) + "\n" + string(rawData2) + "\n" + string(rawData3))
 
-	treatedData, indexes, err := p.TreatRawStream(ctx, bytes.NewReader(rawData))
+	treatedData, indexes, err := p.treatRawStream(ctx, bytes.NewReader(rawData))
 	s.NoError(err)
 	s.Len(indexes, 1)
 	s.Equal(domain.IndexDTO{IndexCreated: domain.IndexCreated{FieldName: "test", Unique: true}}, indexes["test"])
@@ -435,7 +435,7 @@ func (s *PersistenceTestSuite) TestTreatRawStreamFailScan() {
 		Return(0, errRead).
 		Once()
 
-	doc, index, err := p.TreatRawStream(context.Background(), r)
+	doc, index, err := p.treatRawStream(context.Background(), r)
 	s.ErrorIs(err, errRead)
 	s.Nil(doc)
 	s.Nil(index)
@@ -454,7 +454,7 @@ func (s *PersistenceTestSuite) TestIgnoreEmptyLines() {
 {"_id":"three","hello":"you"}`
 
 	r := strings.NewReader(fakeData)
-	docs, indexes, err := p.TreatRawStream(context.Background(), r)
+	docs, indexes, err := p.treatRawStream(context.Background(), r)
 	s.NoError(err)
 	s.Len(indexes, 0)
 	s.Len(docs, 3)
@@ -532,7 +532,7 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 
 	ctx := context.Background()
 
-	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.ErrorIs(err, domain.ErrCorruptFiles{
 		CorruptionRate:        0.5,
 		CorruptItems:          1,
@@ -551,7 +551,7 @@ func (s *PersistenceTestSuite) TestDocFactoryFailsAreCorruption() {
 	s.NoError(err)
 	p = per.(*Persistence)
 
-	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 2)
 	s.Len(indexes, 0)
@@ -584,7 +584,7 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.ErrorIs(err, domain.ErrCorruptFiles{
 		CorruptionRate:        1,
 		CorruptItems:          1,
@@ -611,7 +611,7 @@ func (s *PersistenceTestSuite) TestFailCheckingDeleted() {
 	p = per.(*Persistence)
 
 	ctx = context.Background()
-	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 1)
 	s.Len(indexes, 0)
@@ -635,7 +635,7 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.ErrorIs(err, domain.ErrCorruptFiles{
 		CorruptionRate:        1,
 		CorruptItems:          1,
@@ -654,7 +654,7 @@ func (s *PersistenceTestSuite) TestFailIndex() {
 	p = per.(*Persistence)
 
 	ctx = context.Background()
-	docs, indexes, err = p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err = p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 1)
 	s.Len(indexes, 0)
@@ -678,7 +678,7 @@ func (s *PersistenceTestSuite) TestRemoveIndex() {
 	p = per.(*Persistence)
 
 	ctx := context.Background()
-	docs, indexes, err := p.TreatRawStream(ctx, strings.NewReader(fakeData))
+	docs, indexes, err := p.treatRawStream(ctx, strings.NewReader(fakeData))
 	s.NoError(err)
 	s.Len(docs, 0)
 	s.Len(indexes, 1)
@@ -1515,7 +1515,7 @@ func (s *PersistenceTestSuite) TestPersistCancelledContext() {
 	err := p.PersistNewState(ctx)
 	s.ErrorIs(err, context.Canceled)
 
-	docs, indexes, err := p.TreatRawStream(ctx, nil)
+	docs, indexes, err := p.treatRawStream(ctx, nil)
 	s.ErrorIs(err, context.Canceled)
 	s.Nil(docs)
 	s.Nil(indexes)

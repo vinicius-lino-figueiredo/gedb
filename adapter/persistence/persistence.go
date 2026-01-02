@@ -127,8 +127,7 @@ func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Doc
 	return err
 }
 
-// TreatRawStream implements [domain.Persistence].
-func (p *Persistence) TreatRawStream(ctx context.Context, rawStream io.Reader) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
+func (p *Persistence) treatRawStream(ctx context.Context, rawStream io.Reader) (docs []domain.Document, indexes map[string]domain.IndexDTO, err error) {
 	select {
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
@@ -256,7 +255,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document,
 	}
 	defer fileStream.Close()
 
-	docs, indexes, err = p.TreatRawStream(ctx, fileStream)
+	docs, indexes, err = p.treatRawStream(ctx, fileStream)
 	if err != nil {
 		return nil, nil, err
 	}

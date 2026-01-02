@@ -2,6 +2,7 @@ package querier
 
 import (
 	"fmt"
+	"iter"
 	"testing"
 	"time"
 
@@ -117,14 +118,14 @@ func (s *QuerierTestSuite) SetupSubTest() {
 }
 
 func (s *QuerierTestSuite) TestNoTreatment() {
-	docs, err := s.q.Query(s.docs1)
+	docs, err := s.q.Query(s.Values(s.docs1))
 	s.NoError(err)
 	s.Equal(s.docs1, docs)
 }
 
 func (s *QuerierTestSuite) TestEmptyQuery() {
 	docs, err := s.q.Query(
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuery(M{}),
 	)
 	s.NoError(err)
@@ -133,7 +134,7 @@ func (s *QuerierTestSuite) TestEmptyQuery() {
 
 func (s *QuerierTestSuite) TestSimpleQuery() {
 	docs, err := s.q.Query(
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuery(M{"age": M{"$gt": 23}}),
 	)
 	s.NoError(err)
@@ -157,7 +158,7 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 			Return(([]string)(nil), errGetAddr).
 			Once()
 		docs, err := s.q.Query(
-			data,
+			s.Values(data),
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
 		s.ErrorIs(err, errGetAddr)
@@ -176,7 +177,7 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 			Once()
 		s.q.fn = fnm
 		docs, err := s.q.Query(
-			data,
+			s.Values(data),
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
 		s.ErrorIs(err, errGetField)
@@ -199,7 +200,7 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 			Once()
 		s.q.fn = fnm
 		docs, err := s.q.Query(
-			data,
+			s.Values(data),
 			domain.WithQuerySort(S{{Key: "a", Order: 1}}),
 		)
 		s.ErrorIs(err, errGetField)
@@ -209,32 +210,32 @@ func (s *QuerierTestSuite) TestSortFailedFieldNavigation() {
 }
 
 func (s *QuerierTestSuite) TestEmptyCollection() {
-	docs, err := s.q.Query([]domain.Document{})
+	docs, err := s.q.Query(s.Values([]domain.Document{}))
 	s.NoError(err)
 	s.Len(docs, 0)
 }
 
 func (s *QuerierTestSuite) TestNilCollection() {
-	docs, err := s.q.Query([]domain.Document{})
+	docs, err := s.q.Query(s.Values([]domain.Document{}))
 	s.NoError(err)
 	s.Len(docs, 0)
 }
 
 func (s *QuerierTestSuite) TestLimit() {
-	docs, err := s.q.Query(s.docs1, domain.WithQueryLimit(3))
+	docs, err := s.q.Query(s.Values(s.docs1), domain.WithQueryLimit(3))
 	s.NoError(err)
 	s.Len(docs, 3)
 }
 
 func (s *QuerierTestSuite) TestSkip() {
-	docs, err := s.q.Query(s.docs1, domain.WithQuerySkip(2))
+	docs, err := s.q.Query(s.Values(s.docs1), domain.WithQuerySkip(2))
 	s.NoError(err)
 	s.Len(docs, 3)
 }
 
 func (s *QuerierTestSuite) TestLimitAndSkip() {
 	docs, err := s.q.Query(
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQueryLimit(4),
 		domain.WithQuerySkip(3),
 	)
@@ -244,7 +245,7 @@ func (s *QuerierTestSuite) TestLimitAndSkip() {
 
 func (s *QuerierTestSuite) TestSort() {
 	docs, err := s.q.Query(
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 	)
 	s.NoError(err)
@@ -256,7 +257,7 @@ func (s *QuerierTestSuite) TestSort() {
 	}
 
 	docs, err = s.q.Query(
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: -1}}),
 	)
 	s.NoError(err)
@@ -285,7 +286,7 @@ func (s *QuerierTestSuite) TestSortCustomComparison() {
 	s.q.cmpr = cm
 
 	docs, err := s.q.Query(
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{{Key: "name", Order: 1}}),
 	)
 	s.NoError(err)
@@ -296,7 +297,7 @@ func (s *QuerierTestSuite) TestSortCustomComparison() {
 	}
 
 	docs, err = s.q.Query(
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{{Key: "name", Order: -1}}),
 	)
 	s.NoError(err)
@@ -313,14 +314,13 @@ func (s *QuerierTestSuite) TestFailMatching() {
 	data := []domain.Document{
 		M{"error": []string{}},
 	}
-	docs, err := s.q.Query(data, domain.WithQuery(M{"error": []int{}}))
+	docs, err := s.q.Query(s.Values(data), domain.WithQuery(M{"error": []int{}}))
 	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(docs)
 }
 
 func (s *QuerierTestSuite) TestSortEmpty() {
 	docs, err := s.q.Query(
-
 		nil,
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 	)
@@ -330,8 +330,7 @@ func (s *QuerierTestSuite) TestSortEmpty() {
 
 func (s *QuerierTestSuite) TestLimitAndSort() {
 	docs, err := s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQueryLimit(3),
 	)
@@ -342,8 +341,7 @@ func (s *QuerierTestSuite) TestLimitAndSort() {
 	s.Equal(52, docs[2].Get("age"))
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: -1}}),
 		domain.WithQueryLimit(2),
 	)
@@ -355,8 +353,7 @@ func (s *QuerierTestSuite) TestLimitAndSort() {
 
 func (s *QuerierTestSuite) TestLimitGreaterThanTotal() {
 	docs, err := s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQueryLimit(7),
 	)
@@ -371,8 +368,7 @@ func (s *QuerierTestSuite) TestLimitGreaterThanTotal() {
 
 func (s *QuerierTestSuite) TestLimitSkipAndSort() {
 	docs, err := s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQueryLimit(1),
 		domain.WithQuerySkip(2),
@@ -382,8 +378,7 @@ func (s *QuerierTestSuite) TestLimitSkipAndSort() {
 	s.Equal(52, docs[0].Get("age"))
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQueryLimit(3),
 		domain.WithQuerySkip(1),
@@ -395,8 +390,7 @@ func (s *QuerierTestSuite) TestLimitSkipAndSort() {
 	s.Equal(57, docs[2].Get("age"))
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: -1}}),
 		domain.WithQueryLimit(2),
 		domain.WithQuerySkip(2),
@@ -409,8 +403,7 @@ func (s *QuerierTestSuite) TestLimitSkipAndSort() {
 
 func (s *QuerierTestSuite) TestTooBigLimitWithSkipAndSort() {
 	docs, err := s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQueryLimit(8),
 		domain.WithQuerySkip(2),
@@ -424,8 +417,7 @@ func (s *QuerierTestSuite) TestTooBigLimitWithSkipAndSort() {
 
 func (s *QuerierTestSuite) TestNoReturnTooBigSkip() {
 	docs, err := s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQuerySkip(5),
 	)
@@ -433,8 +425,7 @@ func (s *QuerierTestSuite) TestNoReturnTooBigSkip() {
 	s.Len(docs, 0)
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQuerySkip(5),
 	)
@@ -442,8 +433,7 @@ func (s *QuerierTestSuite) TestNoReturnTooBigSkip() {
 	s.Len(docs, 0)
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQuerySkip(7),
 		domain.WithQueryLimit(3),
@@ -452,8 +442,7 @@ func (s *QuerierTestSuite) TestNoReturnTooBigSkip() {
 	s.Len(docs, 0)
 
 	docs, err = s.q.Query(
-
-		s.docs1,
+		s.Values(s.docs1),
 		domain.WithQuerySort(S{{Key: "age", Order: 1}}),
 		domain.WithQuerySkip(7),
 		domain.WithQueryLimit(6),
@@ -469,14 +458,14 @@ func (s *QuerierTestSuite) TestSortStrings() {
 		M{"name": "sue"},
 	}
 
-	docs, err := s.q.Query(data, domain.WithQuerySort(S{{Key: "name", Order: 1}}))
+	docs, err := s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "name", Order: 1}}))
 	s.NoError(err)
 	s.Len(docs, 3)
 	s.Equal("jakeb", docs[0].Get("name"))
 	s.Equal("jako", docs[1].Get("name"))
 	s.Equal("sue", docs[2].Get("name"))
 
-	docs, err = s.q.Query(data, domain.WithQuerySort(S{{Key: "name", Order: -1}}))
+	docs, err = s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "name", Order: -1}}))
 	s.NoError(err)
 	s.Len(docs, 3)
 	s.Equal("sue", docs[0].Get("name"))
@@ -492,8 +481,7 @@ func (s *QuerierTestSuite) TestSortDates() {
 	}
 
 	docs, err := s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{{Key: "event.recorded", Order: 1}}),
 	)
 	s.NoError(err)
@@ -502,8 +490,7 @@ func (s *QuerierTestSuite) TestSortDates() {
 	s.Equal(time.UnixMilli(60000), docs[2].D("event").Get("recorded"))
 
 	docs, err = s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{{Key: "event.recorded", Order: -1}}),
 	)
 	s.NoError(err)
@@ -520,7 +507,7 @@ func (s *QuerierTestSuite) TestSortSomeUndefined() {
 		M{"name": "henry", "other": 4},
 	}
 
-	docs, err := s.q.Query(data, domain.WithQuerySort(S{{Key: "other", Order: 1}}))
+	docs, err := s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "other", Order: 1}}))
 	s.NoError(err)
 	s.Len(docs, 4)
 	s.False(docs[0].Has("other"))
@@ -533,8 +520,7 @@ func (s *QuerierTestSuite) TestSortSomeUndefined() {
 	s.Equal(4, docs[3].Get("other"))
 
 	docs, err = s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{{Key: "other", Order: -1}}),
 		domain.WithQuery(M{
 			"name": M{"$in": A{"suzy", "jakeb", "jako"}},
@@ -555,13 +541,13 @@ func (s *QuerierTestSuite) TestSortAllUndefined() {
 		M{"name": "sue"},
 	}
 
-	docs, err := s.q.Query(data, domain.WithQuerySort(S{{Key: "other", Order: 1}}))
+	docs, err := s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "other", Order: 1}}))
 	s.NoError(err)
 	s.Len(docs, 3)
 
 	data = []domain.Document{M{"name": "jakeb"}, M{"name": "sue"}}
 
-	docs, err = s.q.Query(data, domain.WithQuerySort(S{{Key: "other", Order: 1}}))
+	docs, err = s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "other", Order: 1}}))
 	s.NoError(err)
 	s.Len(docs, 2)
 }
@@ -576,8 +562,7 @@ func (s *QuerierTestSuite) TestSortMultipleTimes() {
 	}
 
 	docs, err := s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{
 			{Key: "name", Order: 1},
 			{Key: "age", Order: -1},
@@ -592,8 +577,7 @@ func (s *QuerierTestSuite) TestSortMultipleTimes() {
 	s.Equal(4, docs[4].Get("nid"))
 
 	docs, err = s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{
 			{Key: "name", Order: 1},
 			{Key: "age", Order: 1},
@@ -608,8 +592,7 @@ func (s *QuerierTestSuite) TestSortMultipleTimes() {
 	s.Equal(4, docs[4].Get("nid"))
 
 	docs, err = s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{
 			{Key: "age", Order: 1},
 			{Key: "name", Order: 1},
@@ -624,8 +607,7 @@ func (s *QuerierTestSuite) TestSortMultipleTimes() {
 	s.Equal(1, docs[4].Get("nid"))
 
 	docs, err = s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{
 			{Key: "age", Order: 1},
 			{Key: "name", Order: -1},
@@ -655,8 +637,7 @@ func (s *QuerierTestSuite) TestSortSimilarDataMultipleTimes() {
 		}
 	}
 	docs, err := s.q.Query(
-
-		data,
+		s.Values(data),
 		domain.WithQuerySort(S{
 			{Key: "company", Order: 1},
 			{Key: "cost", Order: 1},
@@ -674,9 +655,19 @@ func (s *QuerierTestSuite) TestFailSorting() {
 		M{"error": []string{}},
 		M{"error": nil},
 	}
-	docs, err := s.q.Query(data, domain.WithQuerySort(S{{Key: "error", Order: 1}}))
+	docs, err := s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "error", Order: 1}}))
 	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(docs)
+}
+
+func (s *QuerierTestSuite) Values(docs []domain.Document) iter.Seq2[domain.Document, error] {
+	return func(yield func(domain.Document, error) bool) {
+		for _, doc := range docs {
+			if !yield(doc, nil) {
+				return
+			}
+		}
+	}
 }
 
 func TestQuerierTestSuite(t *testing.T) {
