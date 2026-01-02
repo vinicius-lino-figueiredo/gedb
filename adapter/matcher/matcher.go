@@ -5,14 +5,16 @@ package matcher
 import (
 	"errors"
 	"fmt"
-	"math"
+	"iter"
 	"regexp"
-	"strings"
+	"slices"
+	"time"
 
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
+	"github.com/vinicius-lino-figueiredo/gedb/pkg/structure"
 )
 
 var (
@@ -57,17 +59,13 @@ func (e ErrCompArgType) Error() string {
 	)
 }
 
-type oper func(domain.Document, []string, any) (bool, error)
-
-type matchFn func(any, any) (bool, error)
-
 // Matcher implements [domain.Matcher].
 type Matcher struct {
 	documentFactory domain.DocumentFactory
 	comparer        domain.Comparer
 	fieldNavigator  domain.FieldNavigator
-	compFuncs       map[string]oper
-	logicOps        map[string]func(domain.Document, any) (bool, error)
+	query           Query
+	doc             domain.Document
 }
 
 // NewMatcher returns a new implementation of domain.Matcher.
@@ -81,26 +79,6 @@ func NewMatcher(options ...Option) domain.Matcher {
 		),
 	}
 
-	m.logicOps = map[string]func(domain.Document, any) (bool, error){
-		"$and":   m.and,
-		"$not":   m.not,
-		"$or":    m.or,
-		"$where": m.where,
-	}
-	m.compFuncs = map[string]oper{
-		"$regex":     m.regex,
-		"$nin":       m.nin,
-		"$lt":        m.lt,
-		"$gte":       m.gte,
-		"$lte":       m.lte,
-		"$gt":        m.gt,
-		"$ne":        m.ne,
-		"$in":        m.in,
-		"$exists":    m.exists,
-		"$size":      m.size,
-		"$elemMatch": m.elemMatch,
-	}
-
 	for _, option := range options {
 		option(m)
 	}
@@ -108,544 +86,729 @@ func NewMatcher(options ...Option) domain.Matcher {
 	return m
 }
 
-// Match implements [domain.Matcher].
-func (m *Matcher) Match(value any, query any) (bool, error) {
+// SetQuery implements [domain\.Matcher].
+func (m *Matcher) SetQuery(query any) error {
+	qry, err := m.makeQuery(query)
+	if err == nil {
+		m.query = qry
+	}
+	return err
+}
+
+func (m *Matcher) makeQuery(query any) (qry Query, err error) {
 	if query == nil {
-		return true, nil
+		return qry, nil
 	}
-	doc, ok := value.(domain.Document)
-	if !ok {
-		return m.nonDocMatch(value, query)
+	i, l, err := structure.Seq2(query)
+	if err != nil {
+		qry = Query{Sub: true, Lo: []LogicOp{
+			{Type: And, Rules: []FieldRule{
+				{Addr: []string{"needAKey"}, Conds: []Cond{
+					{Op: Eq, Val: query},
+				}},
+			}},
+		}}
+		return qry, nil
 	}
 
-	queryDoc, ok := query.(domain.Document)
-	if !ok {
-		// if val is not a doc, there is no non-doc value that can match
-		return false, nil
+	mapping, dollar, err := m.ensureNotMixed(i, l)
+	if err != nil {
+		return qry, err
 	}
 
-	return m.matchDocs(doc, queryDoc)
+	if dollar > 0 {
+		qry.Lo, qry.Sub, err = m.dollarCond(mapping, true, make([]LogicOp, 0, l))
+		if err != nil {
+			return qry, err
+		}
+		return qry, nil
+	}
 
+	qry.Lo = make([]LogicOp, 1)
+	qry.Lo[0], err = m.equalCond(mapping)
+	if err != nil {
+		return qry, err
+	}
+	m.query = qry
+	return qry, nil
 }
 
-func (m *Matcher) nonDocMatch(val any, qry any) (bool, error) {
-	valDoc, err := m.documentFactory(nil)
-	if err != nil {
-		return false, err
+func (m *Matcher) ensureNotMixed(i iter.Seq2[string, any], l int) (map[string]any, int, error) {
+	mapping := make(map[string]any, l)
+	var dollar, total int
+	for k, v := range i {
+		total++
+		if len(k) != 0 && k[0] == '$' {
+			dollar++
+		}
+		if dollar > 0 && dollar != total {
+			return nil, dollar, ErrMixedOperators
+		}
+		mapping[k] = v
 	}
-	qryDoc, err := m.documentFactory(nil)
-	if err != nil {
-		return false, err
-	}
-
-	valDoc.Set("needAKey", val)
-	qryDoc.Set("needAKey", qry)
-
-	matches, err := m.matchDocs(valDoc, qryDoc)
-	if err != nil {
-		return false, err
-	}
-	return matches, nil
+	return mapping, dollar, nil
 }
 
-func (m *Matcher) matchDocs(obj, qry domain.Document) (bool, error) {
-
-	qryMap, hasOps, err := m.mapQuery(qry)
+func (m *Matcher) makeLogicOp(typ uint8, name string, v any) (LogicOp, error) {
+	lo := LogicOp{Type: typ}
+	items, l, err := structure.Seq(v)
 	if err != nil {
-		return false, err
+		return lo, fmt.Errorf("%w: %w", ErrCompArgType{Comp: name, Want: "list", Actual: v}, err)
 	}
-
-	matchFunction := m.matchSimpleField
-	if hasOps {
-		matchFunction = m.matchDollarField
+	if l == 0 {
+		return lo, nil
 	}
+	lo.Sub = make([]LogicOp, 0, l)
 
-	for field, value := range qryMap {
-		matches, err := matchFunction(obj, field, value)
-		if err != nil || !matches {
-			return false, err
+	var i iter.Seq2[string, any]
+
+	for item := range items {
+		i, l, err = structure.Seq2(item)
+		if err != nil {
+			return lo, err
+		}
+		lo.Sub, err = m.subOp(i, l, lo.Sub)
+		if err != nil {
+			return lo, err
 		}
 	}
-	return true, nil
-
+	return lo, nil
 }
 
-func (m *Matcher) matchDollarField(obj domain.Document, field string, value any) (bool, error) {
-	fn, ok := m.logicOps[field]
-	if !ok {
-		return false, ErrUnknownOperator{Operator: field}
+func (m *Matcher) subOp(i iter.Seq2[string, any], l int, sub []LogicOp) (_ []LogicOp, err error) {
+
+	mapping, dollar, err := m.ensureNotMixed(i, l)
+	if err != nil {
+		return nil, err
 	}
-	return fn(obj, value)
+
+	if dollar == 0 {
+		sub = append(sub, LogicOp{})
+		sub[len(sub)-1], err = m.equalCond(mapping)
+		return sub, err
+	}
+
+	sub, _, err = m.dollarCond(mapping, false, sub)
+
+	return sub, err
 }
 
-func (m *Matcher) matchSimpleField(obj domain.Document, field string, value any) (bool, error) {
+func (m *Matcher) dollarCond(mapping map[string]any, root bool, target []LogicOp) (_ []LogicOp, invalid bool, err error) {
+	var found bool
+
+	for key, value := range mapping {
+		switch key {
+		case "$and":
+			or, err := m.makeLogicOp(And, "$or", value)
+			if err != nil {
+				return nil, false, err
+			}
+			target = append(target, or)
+			return target, false, nil
+		case "$or":
+			or, err := m.makeLogicOp(Or, "$or", value)
+			if err != nil {
+				return target, false, err
+			}
+			target = append(target, or)
+			return target, false, nil
+		case "$not":
+			i, l, err := structure.Seq2(value)
+			if err != nil {
+				return nil, false, err
+			}
+			not, err := m.subOp(i, l, make([]LogicOp, 0, 1))
+			if err != nil {
+				return nil, false, err
+			}
+			target = append(target, LogicOp{Type: Not, Sub: not})
+			return target, invalid, err
+		case "$where":
+			where, ok := value.(func(any) (bool, error))
+			if !ok {
+				return target, false, ErrCompArgType{Comp: "$where", Want: "func(any) (bool, error)", Actual: value}
+			}
+			target = append(target, LogicOp{Type: Where, Where: &where})
+			return target, invalid, nil
+		default:
+			if !root {
+				return target, false, ErrUnknownComparison{Comparison: key}
+			}
+
+			target = make([]LogicOp, 1)
+			target[0].Rules = make([]FieldRule, 1)
+			target[0].Rules[0].Addr = []string{"needAKey"}
+			target[0].Rules[0].Conds = make([]Cond, 0, len(mapping))
+
+			var cond Cond
+			var err error
+			for k, v := range mapping {
+				cond, found, err = m.makeCond(k, v)
+				if !found {
+					return target, false, ErrUnknownOperator{Operator: k}
+				}
+				if err != nil {
+					return target, false, err
+				}
+				target[0].Rules[0].Conds = append(target[0].Rules[0].Conds, cond)
+			}
+			return target, true, nil
+		}
+	}
+	return target, invalid, err
+}
+
+func (m *Matcher) equalCond(mapping map[string]any) (lo LogicOp, err error) {
+	lo.Rules = make([]FieldRule, 0, len(mapping))
+
+	var fr FieldRule
+	for key, value := range mapping {
+		fr, err = m.makeFieldRule(key, value)
+		if err != nil {
+			return lo, err
+		}
+
+		lo.Rules = append(lo.Rules, fr)
+	}
+
+	return lo, nil
+}
+
+func (m *Matcher) makeFieldRule(field string, obj any) (fr FieldRule, err error) {
 	addr, err := m.fieldNavigator.GetAddress(field)
 	if err != nil {
-		return false, err
+		return fr, err
 	}
 
-	valueDoc, ok := value.(domain.Document)
-	if !ok {
-		return m.eq(obj, addr, value)
-	}
-
-	qryMap, hasOps, err := m.mapQuery(valueDoc)
-	if err != nil {
-		return false, err
-	}
-
-	if !hasOps {
-		return m.eq(obj, addr, value)
-	}
-
-	for op := range qryMap {
-		_, ok := m.compFuncs[op]
-		if !ok {
-			return false, ErrUnknownComparison{Comparison: op}
-		}
-	}
-
-	for op, arg := range qryMap {
-		matches, err := m.compFuncs[op](obj, addr, arg)
-		if err != nil || !matches {
-			return false, err
-		}
-	}
-
-	return true, nil
-}
-
-func (m *Matcher) mapQuery(qry domain.Document) (map[string]any, bool, error) {
-	queryMap := make(map[string]any, qry.Len())
-	totalFields := 0
-	dollarFields := 0
-	for field, value := range qry.Iter() {
-		totalFields++
-		if strings.HasPrefix(field, "$") {
-			dollarFields++
-		}
-		if dollarFields > 0 && totalFields != dollarFields {
-			return nil, false, ErrMixedOperators
-		}
-		// We are saving the values to a map. There is no way to know
-		// how costly it is to iterate over the query fields, and match
-		// should check the commands before executing them.
-		queryMap[field] = value
-	}
-	return queryMap, dollarFields != 0, nil
-}
-
-func (m *Matcher) and(obj domain.Document, value any) (bool, error) {
-	value, _ = m.getValue(value)
-	arr, ok := value.([]any)
-	if !ok {
-		return false, ErrCompArgType{
-			Comp:   "$and",
-			Want:   "array",
-			Actual: value,
-		}
-	}
-	for _, item := range arr {
-		matches, err := m.Match(obj, item)
-		if err != nil || !matches {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-func (m *Matcher) not(obj domain.Document, value any) (bool, error) {
-	matches, err := m.Match(obj, value)
-	if err != nil {
-		return false, err
-	}
-	return !matches, nil
-}
-
-func (m *Matcher) or(obj domain.Document, value any) (bool, error) {
-	value, _ = m.getValue(value)
-	arr, ok := value.([]any)
-	if !ok {
-		return false, ErrCompArgType{
-			Comp:   "$or",
-			Want:   "array",
-			Actual: value,
-		}
-	}
-	for _, item := range arr {
-		matches, err := m.Match(obj, item)
-		if err != nil || matches {
-			return matches, err
-		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) where(obj domain.Document, value any) (bool, error) {
-	value, _ = m.getValue(value)
-
-	switch where := value.(type) {
-	case func(domain.Document) bool:
-		return where(obj), nil
-
-	case func(domain.Document) (bool, error):
-		return where(obj)
-
+	switch t := obj.(type) {
+	case *regexp.Regexp:
+		return FieldRule{Addr: addr, Conds: []Cond{{Op: Regex, Val: t}}}, nil
+	case time.Time:
+		return FieldRule{Addr: addr, Conds: []Cond{{Val: t}}}, nil
 	default:
-		// original code would check the return type but we are not
-		// doing that because it is not worth the cost
-		return false, ErrCompArgType{
-			Comp:   "$where",
-			Want:   "either `func(domain.Document) bool` or `func(domain.Document) (bool, error)`",
-			Actual: value}
 	}
 
-}
-
-func (m *Matcher) matchList(obj domain.Document, addr []string, value any, fn matchFn) (bool, error) {
-	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	i, l, err := structure.Seq2(obj)
 	if err != nil {
-		return false, err
+		return FieldRule{Addr: addr, Conds: []Cond{{Val: obj}}}, nil
 	}
 
-	for _, field := range fields {
-		matches, err := m.matchGetter(field, value, fn)
-		if err != nil || matches {
-			return matches, err
-		}
+	if l == 0 {
+		return fr, nil
 	}
 
-	return false, nil
-}
-
-func (m *Matcher) matchGetter(field domain.Getter, value any, fn matchFn) (bool, error) {
-	fieldVal, _ := field.Get()
-	arr, ok := fieldVal.([]any)
-	if !ok {
-		arr = []any{field}
-	}
-	for _, item := range arr {
-		matches, err := fn(item, value)
-		if err != nil || matches {
-			return matches, err
-		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) eq(obj domain.Document, addr []string, value any) (bool, error) {
-	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
+	mapping, dollar, err := m.ensureNotMixed(i, l)
 	if err != nil {
-		return false, err
+		return fr, err
 	}
-	var matches bool
-	for _, field := range fields {
-		matches, err = m.compare(field, value)
+
+	if dollar > 0 {
+		return m.makeDollarRule(addr, mapping)
+	}
+
+	doc, err := m.documentFactory(obj)
+	if err != nil {
+		return fr, err
+	}
+
+	return FieldRule{Addr: addr, Conds: []Cond{{Val: doc}}}, nil
+
+}
+
+func (m *Matcher) makeDollarRule(addr []string, mapping map[string]any) (fr FieldRule, err error) {
+	rule := FieldRule{
+		Addr:  addr,
+		Conds: make([]Cond, 0, len(mapping)),
+	}
+
+	var cond Cond
+	for key, value := range mapping {
+		if cond, _, err = m.makeCond(key, value); err != nil {
+			return fr, err
+		}
+		rule.Conds = append(rule.Conds, cond)
+	}
+
+	return rule, nil
+}
+
+func (m *Matcher) makeCond(k string, v any) (cond Cond, found bool, err error) {
+	switch k {
+	case "$regex":
+		if r, ok := v.(*regexp.Regexp); ok {
+			return Cond{Op: Regex, Val: r}, true, nil
+		}
+		return cond, true, ErrCompArgType{Comp: "$regex", Want: "regex", Actual: v}
+	case "$nin":
+		seq, l, err := structure.Seq(v)
 		if err != nil {
-			return false, err
+			return cond, true, ErrCompArgType{Comp: "$nin", Want: "list", Actual: v}
 		}
-		if matches {
-			break
-		}
-	}
-	return matches, nil
-}
-
-func (m *Matcher) compare(field domain.Getter, value any) (bool, error) {
-	if rgx, ok := value.(*regexp.Regexp); ok {
-		return m.regexValues(field, rgx)
-	}
-	fieldValue, _ := field.Get()
-	arr, ok := fieldValue.([]any)
-	if !ok {
-		c, err := m.comparer.Compare(field, value)
-		return c == 0, err
-	}
-
-	valueConcrete, _ := m.getValue(value)
-	if valueArr, ok := valueConcrete.([]any); ok {
-		c, err := m.comparer.Compare(arr, valueArr)
+		return Cond{Op: Nin, Val: seq, size: l}, true, nil
+	case "$lt":
+		return Cond{Op: Lt, Val: v}, true, nil
+	case "$gte":
+		return Cond{Op: Gte, Val: v}, true, nil
+	case "$lte":
+		return Cond{Op: Lte, Val: v}, true, nil
+	case "$gt":
+		return Cond{Op: Gt, Val: v}, true, nil
+	case "$ne":
+		return Cond{Op: Ne, Val: v}, true, nil
+	case "$in":
+		seq, l, err := structure.Seq(v)
 		if err != nil {
-			return false, err
+			return cond, true, ErrCompArgType{Comp: "$in", Want: "list", Actual: v}
 		}
-		return c == 0, nil
-	}
-
-	for _, item := range arr {
-		c, err := m.comparer.Compare(item, value)
-		if err != nil || c == 0 {
-			return c == 0, err
+		return Cond{Op: In, Val: seq, size: l}, true, nil
+	case "$exists":
+		value, _ := m.getConcrete(v)
+		if value == nil {
+			return Cond{Op: Exists, Val: false}, true, nil
 		}
-	}
-	return false, nil
-}
-
-func (m *Matcher) getValue(v any) (any, bool) {
-	if g, ok := v.(domain.Getter); ok {
-		return g.Get()
-	}
-	return v, true
-}
-
-func (m *Matcher) asInt(v any) (int, bool) {
-	r := 0.0
-	switch n := v.(type) {
-	case int:
-		return int(n), true
-	case int8:
-		return int(n), true
-	case int16:
-		return int(n), true
-	case int32:
-		return int(n), true
-	case int64:
-		return int(n), true
-	case uint:
-		return int(n), true
-	case uint8:
-		return int(n), true
-	case uint16:
-		return int(n), true
-	case uint32:
-		return int(n), true
-	case uint64:
-		return int(n), true
-	case float32:
-		r += float64(n)
-	case float64:
-		r += float64(n)
+		if exists, ok := value.(bool); ok {
+			return Cond{Op: Exists, Val: exists}, true, nil
+		}
+		if c, err := m.comparer.Compare(value, 0); err != nil || c == 0 {
+			return Cond{Op: Exists, Val: c != 0}, true, err
+		}
+		return Cond{Op: Exists, Val: true}, true, nil
+	case "$size":
+		i, ok := structure.AsInteger(v)
+		if !ok {
+			return cond, true, ErrCompArgType{Comp: "$size", Want: "integer", Actual: v}
+		}
+		return Cond{Op: Size, Val: i}, true, nil
+	case "$elemMatch":
+		qry, err := m.makeQuery(v)
+		if err != nil {
+			return cond, true, err
+		}
+		return Cond{Op: ElemMatch, Val: qry}, true, nil
 	default:
-		return 0, false
+		return cond, false, ErrUnknownComparison{Comparison: k}
 	}
-	if r != math.Floor(r) {
-		return 0, false
-	}
-	return int(r), true
 }
 
-func (m *Matcher) regex(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		rgx, ok := param.(*regexp.Regexp)
-		if !ok {
-			return false, ErrCompArgType{
-				Comp:   "$regex",
-				Want:   "*regexp.Regexp",
-				Actual: b,
-			}
-		}
-		return m.regexValues(value, rgx)
-	})
+// Match implements [domain.Matcher].
+func (m *Matcher) Match(value any) (matches bool, err error) {
+	return m.matchQuery(value, m.query)
 }
 
-func (m *Matcher) regexValues(a any, rgx *regexp.Regexp) (bool, error) {
-	val, defined := m.getValue(a)
-	if !defined {
-		return false, nil
-	}
-	if str, ok := val.(string); ok {
-		return rgx.MatchString(str), nil
-	}
-	return false, nil
-}
+func (m *Matcher) matchQuery(value any, query Query) (bool, error) {
+	doc, ok := value.(domain.Document)
 
-func (m *Matcher) nin(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		concrete, _ := m.getValue(param)
-		arr, ok := concrete.([]any)
-		if !ok {
-			return false, ErrCompArgType{
-				Comp:   "$nin",
-				Want:   "array",
-				Actual: b,
-			}
-		}
-		for _, item := range arr {
-			found, err := m.comparer.Compare(item, value)
-			if err != nil {
+	var err error
+	if !ok || m.query.Sub {
+		if m.doc == nil {
+			if m.doc, err = m.documentFactory(nil); err != nil {
 				return false, err
 			}
-			if found == 0 {
-				return false, nil
+		}
+		doc = m.doc
+		doc.Set("needAKey", value)
+	}
+
+	var matches bool
+	for _, lo := range query.Lo {
+		matches, err = m.matchLogicOp(doc, lo)
+		if err != nil || !matches {
+			return matches, err
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) matchLogicOp(doc domain.Document, lo LogicOp) (bool, error) {
+	var matches bool
+	var err error
+	switch lo.Type {
+	case And:
+		for _, sub := range lo.Sub {
+			matches, err = m.matchLogicOp(doc, sub)
+			if err != nil || !matches {
+				return matches, err
+			}
+		}
+		for _, rule := range lo.Rules {
+			matches, err = m.matchRule(doc, rule)
+			if err != nil || !matches {
+				return matches, err
 			}
 		}
 		return true, nil
-	})
-}
-
-func (m *Matcher) lt(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		if !m.comparer.Comparable(value, param) {
-			return false, nil
-		}
-		c, err := m.comparer.Compare(value, param)
-		if err != nil {
-			return false, err
-		}
-		return c < 0, nil
-	})
-}
-
-func (m *Matcher) gte(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		if !m.comparer.Comparable(value, param) {
-			return false, nil
-		}
-		c, err := m.comparer.Compare(value, param)
-		if err != nil {
-			return false, err
-		}
-		return c >= 0, nil
-	})
-}
-
-func (m *Matcher) lte(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		if !m.comparer.Comparable(value, param) {
-			return false, nil
-		}
-		c, err := m.comparer.Compare(value, param)
-		if err != nil {
-			return false, err
-		}
-		return c <= 0, nil
-	})
-}
-
-func (m *Matcher) gt(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		if !m.comparer.Comparable(value, param) {
-			return false, nil
-		}
-		c, err := m.comparer.Compare(value, param)
-		if err != nil {
-			return false, err
-		}
-		return c > 0, nil
-	})
-}
-
-func (m *Matcher) ne(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		if !m.comparer.Comparable(value, param) {
-			return false, nil
-		}
-		c, err := m.comparer.Compare(value, param)
-		if err != nil {
-			return false, err
-		}
-		return c != 0, nil
-	})
-}
-
-func (m *Matcher) in(obj domain.Document, addr []string, b any) (bool, error) {
-	return m.matchList(obj, addr, b, func(value, param any) (bool, error) {
-		concrete, _ := m.getValue(param)
-		arr, ok := concrete.([]any)
-		if !ok {
-			return false, ErrCompArgType{
-				Comp:   "$in",
-				Want:   "array",
-				Actual: b,
-			}
-		}
-		for _, item := range arr {
-			found, err := m.comparer.Compare(item, value)
-			if err != nil {
-				return false, err
-			}
-			if found == 0 {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-}
-
-func (m *Matcher) exists(obj domain.Document, addr []string, b any) (bool, error) {
-	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
-	if err != nil {
-		return false, err
-	}
-
-	wantExistent, err := m.isTruthy(b)
-	if err != nil {
-		return false, err
-	}
-
-	for _, field := range fields {
-		if _, defined := field.Get(); defined {
-			return wantExistent, nil
-		}
-	}
-	return !wantExistent, nil
-}
-
-func (m *Matcher) isTruthy(value any) (bool, error) {
-	value, _ = m.getValue(value)
-	if value == nil {
-		return false, nil
-	}
-
-	c, err := m.comparer.Compare(value, 0)
-	if err != nil || c == 0 {
-		return c != 0, err
-	}
-
-	c, err = m.comparer.Compare(value, false)
-
-	return c != 0, err
-}
-
-func (m *Matcher) size(obj domain.Document, addr []string, b any) (bool, error) {
-	fields, expanded, err := m.fieldNavigator.GetField(obj, addr...)
-	if err != nil {
-		return false, err
-	}
-
-	num, ok := m.asInt(b)
-	if !ok {
-		return false, ErrCompArgType{
-			Comp:   "$size",
-			Want:   "integer",
-			Actual: b,
-		}
-	}
-
-	if expanded {
-		return len(fields) == num, nil
-	}
-
-	value, _ := fields[0].Get()
-	if value == nil {
-		return false, nil
-	}
-
-	if arr, ok := value.([]any); ok {
-		return len(arr) == num, nil
-	}
-
-	return false, nil
-}
-
-func (m *Matcher) elemMatch(obj domain.Document, addr []string, b any) (bool, error) {
-	fields, _, err := m.fieldNavigator.GetField(obj, addr...)
-	if err != nil {
-		return false, err
-	}
-
-	for _, field := range fields {
-		value, _ := field.Get()
-		arr, ok := value.([]any)
-		if !ok {
-			continue
-		}
-		for _, item := range arr {
-			matches, err := m.Match(item, b)
+	case Or:
+		for _, sub := range lo.Sub {
+			matches, err = m.matchLogicOp(doc, sub)
 			if err != nil || matches {
 				return matches, err
 			}
 		}
+		for _, rule := range lo.Rules {
+			matches, err = m.matchRule(doc, rule)
+			if err != nil || matches {
+				return matches, err
+			}
+		}
+		return false, nil
+	case Not:
+		matches, err = m.matchLogicOp(doc, lo.Sub[0])
+		if err != nil {
+			return false, err
+		}
+		return !matches, nil
+	case Where:
+		return (*lo.Where)(doc)
+	default:
+		return false, nil
+	}
+}
+
+func (m *Matcher) matchRule(doc domain.Document, rule FieldRule) (bool, error) {
+	values, expanded, err := m.fieldNavigator.GetField(doc, rule.Addr...)
+	if err != nil {
+		return false, err
 	}
 
+	var matches bool
+	for _, cond := range rule.Conds {
+		matches, err = m.matchCond(values, expanded, &cond)
+		if err != nil || !matches {
+			return matches, err
+		}
+	}
+	return true, nil
+
+}
+
+func (m *Matcher) matchCond(values []domain.GetSetter, expanded bool, cond *Cond) (bool, error) {
+	switch cond.Op {
+	case Eq:
+		return m.eq(values, expanded, cond)
+	case Regex:
+		return m.regex(values, cond)
+	case Nin:
+		return m.nin(values, cond)
+	case Lt:
+		return m.lt(values, cond)
+	case Gte:
+		return m.gte(values, cond)
+	case Lte:
+		return m.lte(values, cond)
+	case Gt:
+		return m.gt(values, cond)
+	case Ne:
+		return m.ne(values, cond)
+	case In:
+		return m.in(values, cond)
+	case Exists:
+		return m.exists(values, cond)
+	case Size:
+		return m.size(values, expanded, cond)
+	case ElemMatch:
+		return m.elemMatch(values, cond)
+	default:
+		return false, nil
+	}
+}
+
+func (m *Matcher) eq(values []domain.GetSetter, expanded bool, cond *Cond) (bool, error) {
+	var actual any
+	var c int
+	var err error
+	var ok bool
+	var arr []any
+
+	if expanded {
+		for actual = range m.nestedLists(values) {
+			c, err = m.comparer.Compare(actual, cond.Val)
+			if err != nil {
+				return false, err
+			}
+			if c == 0 {
+				return true, nil
+			}
+		}
+	}
+
+	for _, value := range values {
+		if actual, ok = m.getConcrete(value); !ok {
+			return false, nil
+		}
+
+		if arr, ok = actual.([]any); ok {
+			ok, err = structure.Contains(arr, cond.Val, m.compare)
+			if err != nil || ok {
+				return ok, err
+			}
+		}
+
+		c, err = m.comparer.Compare(actual, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c == 0 {
+			return true, nil
+		}
+	}
 	return false, nil
+}
+
+func (m *Matcher) getConcrete(v any) (res any, ok bool) {
+	var g domain.Getter
+	res = v
+	for {
+		if g, ok = res.(domain.Getter); !ok {
+			return res, true
+		}
+		if res, ok = g.Get(); !ok {
+			return nil, false
+		}
+	}
+}
+
+func (m *Matcher) compare(a, b any) (bool, error) {
+	comp, err := m.comparer.Compare(a, b)
+	if err != nil {
+		return false, err
+	}
+	return comp == 0, nil
+}
+
+func (m *Matcher) regex(values []domain.GetSetter, cond *Cond) (bool, error) {
+	rgx := cond.Val.(*regexp.Regexp)
+	var actual any
+	var ok bool
+	var str string
+	for _, value := range values {
+		if actual, ok = m.getConcrete(value); !ok {
+			return false, nil
+		}
+		if str, ok = actual.(string); !ok {
+			return false, nil
+		}
+		if !rgx.MatchString(str) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) nin(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var arr []any
+	if !cond.Ok {
+		arr = make([]any, 0, cond.size)
+		arr = slices.AppendSeq(arr, cond.Val.(iter.Seq[any]))
+		cond.Val = arr
+		cond.Ok = true
+	}
+
+	var actual any
+	var ok bool
+	var err error
+	for _, value := range values {
+		if actual, ok = value.Get(); !ok {
+			continue
+		}
+		if ok, err = structure.Contains(arr, actual, m.compare); err != nil || ok {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) lt(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for value := range m.nestedLists(values) {
+		if !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c < 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *Matcher) gte(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for _, value := range values {
+		if !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c < 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) lte(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for _, value := range values {
+		if !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c > 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for _, value := range values {
+		if !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c <= 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) ne(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for _, value := range values {
+		if !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c == 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) in(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var arr []any
+	if !cond.Ok {
+		arr = make([]any, 0, cond.size)
+		arr = slices.AppendSeq(arr, cond.Val.(iter.Seq[any]))
+		cond.Val = arr
+		cond.Ok = true
+	}
+	var actual any
+	var ok bool
+	var err error
+	for _, value := range values {
+		if actual, ok = value.Get(); !ok {
+			continue
+		}
+		if ok, err = structure.Contains(arr, actual, m.compare); err != nil || !ok {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (m *Matcher) exists(values []domain.GetSetter, cond *Cond) (bool, error) {
+	exists := false
+	for _, value := range values {
+		if _, ok := value.Get(); ok {
+			exists = true
+			break
+		}
+	}
+	return exists == cond.Val.(bool), nil
+}
+
+func (m *Matcher) size(values []domain.GetSetter, expanded bool, cond *Cond) (bool, error) {
+	size := cond.Val.(int)
+	var actual any
+	var ok bool
+	var arr []any
+	if expanded {
+		return len(values) == size, nil
+	}
+
+	if actual, _ = values[0].Get(); actual == nil {
+		return false, nil
+	}
+
+	if arr, ok = actual.([]any); !ok {
+		return false, nil
+	}
+
+	return len(arr) == size, nil
+}
+
+func (m *Matcher) elemMatch(values []domain.GetSetter, cond *Cond) (bool, error) {
+	query := cond.Val.(Query)
+	var actual any
+	var ok bool
+	var arr []any
+	var err error
+
+	for _, value := range values {
+		if actual, ok = value.Get(); !ok {
+			continue
+		}
+		if arr, ok = actual.([]any); !ok {
+			return false, nil
+		}
+		for _, elem := range arr {
+			ok, err = m.matchQuery(elem, query)
+			if err != nil || ok {
+				return ok, err
+			}
+		}
+	}
+	return false, nil
+}
+
+func (m *Matcher) nestedLists(values []domain.GetSetter) iter.Seq[any] {
+	return func(yield func(any) bool) {
+		var concrete any
+		var ok bool
+		var err error
+		var sub iter.Seq[any]
+		for _, value := range values {
+			if concrete, ok = m.getConcrete(value); !ok {
+				if !yield(value) {
+					return
+				}
+				continue
+			}
+			if sub, _, err = structure.Seq(concrete); err != nil {
+				if !yield(value) {
+					return
+				}
+				continue
+			}
+			for i := range sub {
+				if !yield(i) {
+					return
+				}
+				continue
+			}
+		}
+	}
 }

@@ -50,9 +50,14 @@ type matcherMock struct {
 	mock.Mock
 }
 
+// SetQuery implements [domain.Matcher].
+func (g *matcherMock) SetQuery(query any) error {
+	return g.Called(query).Error(0)
+}
+
 // Match implements [domain.Matcher].
-func (g *matcherMock) Match(obj any, qry any) (bool, error) {
-	call := g.Called(obj, qry)
+func (g *matcherMock) Match(qry any) (bool, error) {
+	call := g.Called(qry)
 	return call.Bool(0), call.Error(1)
 }
 
@@ -971,7 +976,11 @@ func (s *ModifierTestSuite) TestPullFailedMatch() {
 	s.modifier.matcher = mtchr
 
 	errMatch := fmt.Errorf("match error")
-	mtchr.On("Match", mock.Anything, mock.Anything).
+
+	mtchr.On("SetQuery", mock.Anything).
+		Return(nil).
+		Once()
+	mtchr.On("Match", mock.Anything).
 		Return(false, errMatch).
 		Once()
 

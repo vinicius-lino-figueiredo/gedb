@@ -465,9 +465,12 @@ func (d *Datastore) find(ctx context.Context, query any, dontExpireStaleDocs boo
 		domain.WithQueryProjection(proj),
 	}
 
-	res, err := d.querier.Query(allData, cursorOptions...)
-	if err != nil {
-		return nil, fmt.Errorf("querying: %w", err)
+	var res []domain.Document
+	if len(allData) > 0 {
+		res, err = d.querier.Query(allData, cursorOptions...)
+		if err != nil {
+			return nil, fmt.Errorf("querying: %w", err)
+		}
 	}
 
 	res, err = d.cloneDocs(res...)

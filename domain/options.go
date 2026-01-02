@@ -180,7 +180,7 @@ type QueryOption func(*QueryOptions)
 // QueryOptions contains parameters for customizing query behavior.
 type QueryOptions struct {
 	// Query specifies the criteria for filtering documents.
-	Query Document
+	Query any
 	// Limit specifies the maximum number of documents to return.
 	Limit int64
 	// Skip specifies the number of documents to skip.

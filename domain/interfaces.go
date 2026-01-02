@@ -143,8 +143,9 @@ type Document interface {
 
 // Matcher evaluates whether values match query criteria.
 type Matcher interface {
+	SetQuery(query any) error
 	// Match returns true if the value matches the query.
-	Match(value any, query any) (bool, error)
+	Match(value any) (bool, error)
 }
 
 // Modifier applies update operations to documents.

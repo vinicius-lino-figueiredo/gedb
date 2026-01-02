@@ -59,9 +59,16 @@ func (q *Querier) Query(data []domain.Document, opts ...domain.QueryOption) ([]d
 
 	var skipped int64
 	res := make([]domain.Document, 0, len(data))
+
+	if options.Query != nil {
+		if err := q.mtchr.SetQuery(options.Query); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, doc := range data {
 		if options.Query != nil {
-			matches, err := q.mtchr.Match(doc, options.Query)
+			matches, err := q.mtchr.Match(doc)
 			if err != nil {
 				return nil, fmt.Errorf("matching document: %w", err)
 			}

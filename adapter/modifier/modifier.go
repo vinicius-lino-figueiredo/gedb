@@ -549,7 +549,10 @@ func (m *Modifier) pull(obj domain.Document, addr []string, v any) error {
 
 		res := make([]any, 0, len(l))
 		for _, item := range l {
-			matches, err := m.matcher.Match(item, v)
+			if err = m.matcher.SetQuery(v); err != nil {
+				return err
+			}
+			matches, err := m.matcher.Match(item)
 			if err != nil {
 				return err
 			}
