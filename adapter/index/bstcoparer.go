@@ -25,7 +25,7 @@ func (bc *bstComparer) CompareKeys(a any, b any) (int, error) {
 func (bc *bstComparer) CompareValues(a domain.Document, b domain.Document) (bool, error) {
 	c, err := bc.comparer.Compare(a, b)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	return c == 0, nil
 }

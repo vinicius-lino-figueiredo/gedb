@@ -2658,9 +2658,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.NoError(err)
 
 			allData := slices.Collect(s.d.getAllData())
-			s.Equal(allData[0], s1.Values[0])
-			s.Equal(allData[1], s2.Values[0])
-			s.Equal(allData[2], s3.Values[0])
+			s.Equal(allData[0], s1.Values()[0])
+			s.Equal(allData[1], s2.Values()[0])
+			s.Equal(allData[2], s3.Values()[0])
 		})
 
 		s.Run("InvalidIndex", func() {
@@ -2812,14 +2812,14 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s14, err := s.d.indexes["z"].(*index.Index).Tree.Search("14")
 			s.NoError(err)
 
-			s.Equal(matching[0], s1.Values[0])
+			s.Equal(matching[0], s1.Values()[0])
 			matching, err = listMatching(s.d.indexes["_id"].GetMatching(newDoc1[0]["_id"]))
 			s.NoError(err)
-			s.Equal(matching[0], s12.Values[0])
+			s.Equal(matching[0], s12.Values()[0])
 
 			matching, err = listMatching(s.d.indexes["_id"].GetMatching(newDoc2[0]["_id"]))
 			s.NoError(err)
-			s.Equal(matching[0], s14.Values[0])
+			s.Equal(matching[0], s14.Values()[0])
 
 			cur, err := s.d.Find(ctx, nil)
 			s.NoError(err)
@@ -2879,9 +2879,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
 			s.NoError(err)
 
-			s.Equal(doc1, s1.Values[0])
-			s.Equal(doc2, s2.Values[0])
-			s.Equal(doc3, s3.Values[0])
+			s.Equal(doc1, s1.Values()[0])
+			s.Equal(doc2, s2.Values()[0])
+			s.Equal(doc3, s3.Values()[0])
 		})
 
 		// Can initialize multiple indexes on a database load
@@ -2923,13 +2923,13 @@ func (s *DatastoreTestSuite) TestIndexes() {
 
 			s1, err := s.d.indexes["z"].(*index.Index).Tree.Search("1")
 			s.NoError(err)
-			s.Equal(doc1, s1.Values[0])
+			s.Equal(doc1, s1.Values()[0])
 			s2, err := s.d.indexes["z"].(*index.Index).Tree.Search("2")
 			s.NoError(err)
-			s.Equal(doc2, s2.Values[0])
+			s.Equal(doc2, s2.Values()[0])
 			s3, err := s.d.indexes["z"].(*index.Index).Tree.Search("3")
 			s.NoError(err)
-			s.Equal(doc3, s3.Values[0])
+			s.Equal(doc3, s3.Values()[0])
 
 			s.Equal(3, s.d.indexes["a"].GetNumberOfKeys())
 
@@ -2940,9 +2940,9 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			today, err := s.d.indexes["a"].(*index.Index).Tree.Search(data.M{"today": now})
 			s.NoError(err)
 
-			s.Equal(doc1, s2n.Values[0])
-			s.Equal(doc2, world.Values[0])
-			s.Equal(doc3, today.Values[0])
+			s.Equal(doc1, s2n.Values()[0])
+			s.Equal(doc2, world.Values()[0])
+			s.Equal(doc3, today.Values()[0])
 		})
 
 		// If a unique constraint is not respected, database loading will not work and no data will be inserted

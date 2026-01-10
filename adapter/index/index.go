@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	"github.com/vinicius-lino-figueiredo/bst"
-	"github.com/vinicius-lino-figueiredo/bst/adapter/unbalanced"
+	"github.com/vinicius-lino-figueiredo/bst/adapter/avl"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/fieldnavigator"
@@ -80,7 +80,7 @@ func NewIndex(options ...domain.IndexOption) (domain.Index, error) {
 		_fields:        fields,
 		unique:         opts.Unique,
 		sparse:         opts.Sparse,
-		Tree:           unbalanced.NewBST(opts.Unique, 8, bstComparer),
+		Tree:           avl.NewBST(opts.Unique, 8, bstComparer),
 		comparer:       opts.Comparer,
 		bstComparer:    bstComparer,
 		hasher:         opts.Hasher,
@@ -95,7 +95,7 @@ func (i *Index) Reset(ctx context.Context, newData ...domain.Document) error {
 		return ctx.Err()
 	default:
 	}
-	i.Tree = unbalanced.NewBST(i.unique, 8, i.bstComparer)
+	i.Tree = avl.NewBST(i.unique, 8, i.bstComparer)
 	return i.Insert(ctx, newData...)
 }
 
@@ -395,11 +395,14 @@ func (i *Index) GetMatching(value ...any) (iter.Seq2[domain.Document, error], er
 		if err != nil {
 			return nil, err
 		}
-		if found == nil || len(found.Values) == 0 {
+		if found == nil {
 			continue
 		}
-		foundDocs := slices.Clone(found.Values)
-		if err := _res.Set(found.Key, foundDocs); err != nil {
+		foundDocs := slices.Clone(found.Values())
+		if len(foundDocs) == 0 {
+			continue
+		}
+		if err := _res.Set(found.Key(), foundDocs); err != nil {
 			return nil, err
 		}
 	}
