@@ -87,11 +87,6 @@ func NewPersistence(options ...Option) (domain.Persistence, error) {
 	return &p, nil
 }
 
-// SetCorruptAlertThreshold implements [domain.Persistence].
-func (p *Persistence) SetCorruptAlertThreshold(v float64) {
-	p.corruptAlertThreshold = v
-}
-
 // PersistNewState implements [domain.Persistence].
 func (p *Persistence) PersistNewState(ctx context.Context, newDocs ...domain.Document) error {
 	select {
@@ -247,15 +242,7 @@ func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document,
 		return nil, nil, err
 	}
 
-	// This would be server side, but there is no browser option in go and
-	// TreatRawData (bytes version) was removed
-	fileStream, err := p.storage.ReadFileStream(p.filename, p.fileMode)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer fileStream.Close()
-
-	docs, indexes, err = p.treatRawStream(ctx, fileStream)
+	docs, indexes, err = p.readAndTreat(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -285,6 +272,18 @@ func (p *Persistence) LoadDatabase(ctx context.Context) (docs []domain.Document,
 	}
 
 	return docs, indexes, nil
+}
+
+func (p *Persistence) readAndTreat(ctx context.Context) ([]domain.Document, map[string]domain.IndexDTO, error) {
+	// This would be server side, but there is no browser option in go and
+	// TreatRawData (bytes version) was removed
+	fileStream, err := p.storage.ReadFileStream(p.filename, p.fileMode)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer fileStream.Close()
+
+	return p.treatRawStream(ctx, fileStream)
 }
 
 // DropDatabase implements [domain.Persistence].

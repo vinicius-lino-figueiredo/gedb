@@ -166,7 +166,7 @@ func (s *SerializerTestSuite) TestContext() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 
-	time.Sleep(2 * time.Nanosecond)
+	<-ctx.Done()
 	b, err = s.s.Serialize(ctx, nil)
 	s.ErrorIs(err, context.DeadlineExceeded)
 	s.Nil(b)

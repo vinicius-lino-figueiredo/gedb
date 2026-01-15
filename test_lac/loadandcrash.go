@@ -146,28 +146,27 @@ func (fs fakeStorage) Exists(filename string) (bool, error) {
 	return true, nil
 }
 
-func (fs fakeStorage) flushToStorage(filename string, isDir bool, mode os.FileMode) error {
+func (fs *fakeStorage) flushToStorage(fileName string, isDir bool, mode os.FileMode) error {
 	flags := os.O_RDWR
 	if isDir {
 		flags = os.O_RDONLY
 	}
 
-	fileHandle, err := os.OpenFile(filename, flags, mode)
+	fileHandle, err := os.OpenFile(fileName, flags, mode)
 	if err != nil {
 		return fmt.Errorf("fake error: %w", err)
 	}
 
-	if err := fileHandle.Sync(); err != nil {
-		return fmt.Errorf("fake error: %w", err)
-	}
+	defer fileHandle.Close()
 
-	if err := fileHandle.Close(); err != nil {
-		return fmt.Errorf("fake error: %w", err)
+	if !isDir && runtime.GOOS != "windows" {
+		if err = fileHandle.Sync(); err != nil {
+			return fmt.Errorf("fake error: %w", err)
+		}
 	}
 
 	return nil
 }
-
 func (fs fakeStorage) ReadFileStream(filename string, mode os.FileMode) (io.ReadCloser, error) {
 	return os.OpenFile(filename, os.O_RDONLY, mode)
 }

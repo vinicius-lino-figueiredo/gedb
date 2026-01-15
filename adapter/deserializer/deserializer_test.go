@@ -144,7 +144,7 @@ func (s *DeserializerTestSuite) TestContext() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 
-	time.Sleep(2 * time.Nanosecond)
+	<-ctx.Done()
 
 	var v3 any
 

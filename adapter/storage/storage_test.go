@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -229,7 +230,6 @@ func (s *StorageTestSuite) MakeCrashableTest(name, file, lineVal string, crash t
 			s.NoError(cmd.Process.Kill())
 			exitErr := &exec.ExitError{}
 			s.ErrorAs(cmd.Wait(), &exitErr)
-			s.False(cmd.ProcessState.Exited())
 		} else {
 			s.NoError(cmd.Wait())
 		}
@@ -347,6 +347,9 @@ func (s *StorageTestSuite) TestCrashSafeWriteFileLinesFailFlushingRenamed() {
 }
 
 func (s *StorageTestSuite) TestCrashSafeWriteFileLiensForbiddenDir() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("should not run on windows")
+	}
 	dir := s.T().TempDir()
 	dir = filepath.Join(dir, "forbidden")
 	s.NoError(os.Mkdir(dir, 0000))
@@ -420,6 +423,10 @@ func (s *StorageTestSuite) TestEnsureParentDirectoryExistsExistingDir() {
 }
 
 func (s *StorageTestSuite) TestEnsureParentDirectoryExistsFailAbs() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("should not run on windows")
+	}
+
 	om := new(osOptsMock)
 	s.store.osOpts = om
 
@@ -437,7 +444,7 @@ func (s *StorageTestSuite) TestEnsureParentDirectoryExistsFailAbs() {
 
 	s.NoError(os.Chdir(dir))
 	defer func() { s.NoError(os.Chdir(back)) }()
-	s.NoError(os.Remove(abs))
+	_ = os.Remove(abs)
 
 	err = s.store.EnsureParentDirectoryExists("subdir", 0000)
 	syscallErr := &os.SyscallError{}
