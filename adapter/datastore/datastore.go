@@ -553,7 +553,11 @@ func (d *Datastore) getCandidates(ctx context.Context, query domain.Document, do
 	expiredDocsIDs := make([]any, 0, estimate)
 	return func(yield func(domain.Document, error) bool) {
 	DocLoop:
-		for doc := range docs {
+		for doc, err := range docs {
+			if err != nil {
+				yield(doc, err)
+				break DocLoop
+			}
 			for i, ttl := range d.ttlIndexes {
 				v := doc.Get(i)
 				if v == nil {
