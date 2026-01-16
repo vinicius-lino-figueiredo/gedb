@@ -19,6 +19,14 @@ func (s *DecoderTestSuite) SetupTest() {
 	s.d = NewDecoder().(*Decoder)
 }
 
+func (s *DecoderTestSuite) TestNilTarget() {
+	s.ErrorIs(s.d.Decode(nil, nil), domain.ErrTargetNil)
+}
+
+func (s *DecoderTestSuite) TestNonAddressable() {
+	s.Error(s.d.Decode(nil, 1))
+}
+
 func (s *DecoderTestSuite) TestSimpleStruct() {
 	type SimpleStruct struct {
 		Name  string
@@ -151,7 +159,7 @@ func (s *DecoderTestSuite) TestInvalidPointer() {
 
 	var tgt InvalidPointerStruct
 	err := s.d.Decode(M{}, tgt)
-	s.ErrorIs(err, domain.ErrNonPointer)
+	s.Error(err)
 }
 
 func TestDecoderTestSuite(t *testing.T) {

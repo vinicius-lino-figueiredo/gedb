@@ -3,6 +3,7 @@ package datastore
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/bst"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/cursor"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/decoder"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/deserializer"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/fieldnavigator"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/hasher"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/idgenerator"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/index"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/matcher"
@@ -30,12 +36,16 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/persistence"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/projector"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/serializer"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/storage"
+	"github.com/vinicius-lino-figueiredo/gedb/adapter/timegetter"
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
 var ctx = context.Background()
 
 type M = map[string]any
+
+type A = []any
 
 type timeGetterMock struct{ mock.Mock }
 
@@ -129,7 +139,11 @@ func (i *indexMock) GetAll() iter.Seq[domain.Document] {
 // GetBetweenBounds implements [domain.Index].
 func (i *indexMock) GetBetweenBounds(ctx context.Context, query domain.Document) (iter.Seq2[domain.Document, error], error) {
 	call := i.Called(ctx, query)
-	return call.Get(0).(iter.Seq2[domain.Document, error]), call.Error(1)
+	r, err := call.Get(0), call.Error(1)
+	if r != nil {
+		return r.(iter.Seq2[domain.Document, error]), err
+	}
+	return nil, err
 }
 
 // GetMatching implements [domain.Index].
@@ -217,6 +231,19 @@ func (s *serializerMock) Serialize(ctx context.Context, value any) ([]byte, erro
 	return []byte(call.String(0)), call.Error(1)
 }
 
+type matcherMock struct{ mock.Mock }
+
+// Match implements [domain.Matcher].
+func (m *matcherMock) Match(value any) (bool, error) {
+	call := m.Called(value)
+	return call.Bool(0), call.Error(1)
+}
+
+// SetQuery implements [domain.Matcher].
+func (m *matcherMock) SetQuery(query any) error {
+	return m.Called(query).Error(0)
+}
+
 type DatastoreTestSuite struct {
 	suite.Suite
 	d         *Datastore
@@ -227,7 +254,58 @@ type DatastoreTestSuite struct {
 func (s *DatastoreTestSuite) SetupTest() {
 	s.testDbDir = s.T().TempDir()
 	s.testDb = filepath.Join(s.testDbDir, "test.db")
-	d, err := NewDatastore(WithFilename(s.testDb))
+
+	c := comparer.NewComparer()
+	dec := decoder.NewDecoder()
+	ser := serializer.NewSerializer(c, data.NewDocument)
+	des := deserializer.NewDeserializer(dec)
+	h := hasher.NewHasher()
+	st := storage.NewStorage()
+
+	per, err := persistence.NewPersistence(
+		persistence.WithFilename(s.testDb),
+		persistence.WithInMemoryOnly(false),
+		persistence.WithCorruptAlertThreshold(0.1),
+		persistence.WithFileMode(DefaultDirMode),
+		persistence.WithDirMode(DefaultDirMode),
+		persistence.WithSerializer(ser),
+		persistence.WithDeserializer(des),
+		persistence.WithStorage(st),
+		persistence.WithDecoder(dec),
+		persistence.WithComparer(c),
+		persistence.WithDocFactory(data.NewDocument),
+		persistence.WithHasher(h),
+	)
+	if !s.NoError(err) {
+		return
+	}
+
+	fn := fieldnavigator.NewFieldNavigator(data.NewDocument)
+	mtchr := matcher.NewMatcher()
+
+	d, err := NewDatastore(
+		WithFilename(s.testDb),
+		WithTimestamps(false),
+		WithInMemoryOnly(false),
+		WithSerializer(ser),
+		WithDeserializer(des),
+		WithCorruptionThreshold(0.1),
+		WithComparer(c),
+		WithFileMode(DefaultFileMode),
+		WithDirMode(DefaultDirMode),
+		WithPersistence(per),
+		WithStorage(st),
+		WithDocumentFactory(data.NewDocument),
+		WithDecoder(dec),
+		WithMatcher(mtchr),
+		WithCursorFactory(cursor.NewCursor),
+		WithModifier(modifier.NewModifier(data.NewDocument, c, fn, mtchr)),
+		WithTimeGetter(timegetter.NewTimeGetter()),
+		WithHasher(h),
+		WithFieldNavigator(fn),
+		WithIDGenerator(idgenerator.NewIDGenerator()),
+		WithRandomReader(rand.Reader),
+	)
 	s.NoError(err)
 	s.d = d.(*Datastore)
 	s.NoError(s.d.persistence.(*persistence.Persistence).EnsureParentDirectoryExists(ctx, s.testDb, DefaultDirMode))
@@ -1251,6 +1329,68 @@ func (s *DatastoreTestSuite) TestGetCandidates() {
 		s.Len(dt, 4) // using no index
 	})
 
+	s.Run("CompCandidateFailedBounds", func() {
+		im := new(indexMock)
+		s.d.indexFactory = func(...domain.IndexOption) (domain.Index, error) {
+			return im, nil
+		}
+
+		errGBB := fmt.Errorf("get between bounds error")
+		im.On("Insert", mock.Anything, mock.Anything).Return(nil)
+		im.On("GetBetweenBounds", mock.Anything, mock.Anything).Return(nil, errGBB)
+
+		if !s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a"))) {
+			return
+		}
+
+		_, err := s.d.Insert(ctx, M{"a": 1})
+		if !s.NoError(err) {
+			return
+		}
+
+		cur, err := s.d.Find(ctx, M{"a": M{"$gt": 1}})
+		s.ErrorIs(err, errGBB)
+		s.Nil(cur)
+	})
+
+	s.Run("ComposeFailedGetMatching", func() {
+		comp := new(comparerMock)
+		s.d.comparer = comp
+		errComp := fmt.Errorf("compare error")
+		comp.On("Compare", mock.Anything, mock.Anything).
+			Return(0, errComp).Once()
+
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("tf", "tg")))
+		_ = s.insert(s.d.Insert(ctx, M{"tf": 4, "tg": 0, "j": 1}))
+		dt, err := listCandidates(s.d.getCandidates(
+			ctx, data.M{"tf": 4, "tg": 0}, false,
+		))
+		s.ErrorIs(err, errComp)
+		s.Nil(dt)
+	})
+
+	s.Run("EnumCandidates", func() {
+		comp := s.d.comparer
+
+		errCmp := fmt.Errorf("compare error")
+		c := new(comparerMock)
+		s.d.comparer = c
+		c.On("Compare", 1, 1).Return(0, errCmp).Twice()
+
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+		s.insert(s.d.Insert(ctx, M{"a": 1}))
+
+		s.d.comparer = comp
+
+		cur, err := s.d.Find(ctx, M{"a": M{"$in": A{1}}})
+		s.ErrorIs(err, errCmp)
+		s.Nil(cur)
+
+		cur, err = s.d.Find(ctx, M{"a": M{"$in": 1}})
+		s.ErrorIs(err, errCmp)
+		s.Nil(cur)
+	})
+
 } // ==== End of 'GetCandidates' ==== //
 
 func (s *DatastoreTestSuite) TestFind() {
@@ -1750,6 +1890,67 @@ func (s *DatastoreTestSuite) TestCount() {
 		_ = s.insert(s.d.Insert(ctx, M{"hello": "world"}))
 		_, err := s.d.Count(ctx, M{"$or": M{"hello": "world"}})
 		s.ErrorAs(err, &matcher.ErrCompArgType{})
+	})
+
+	s.Run("InvalidQuery", func() {
+		c, err := s.d.Count(ctx, 1)
+		s.Error(err)
+		s.Zero(c)
+	})
+
+	s.Run("FailedGetCandidates", func() {
+		comp := new(comparerMock)
+		s.d.comparer = comp
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("test")))
+
+		cur, err := s.d.Insert(ctx, M{"test": 123})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		errComp := fmt.Errorf("compare error")
+		comp.On("Compare", 123, 123).Return(0, errComp).Once()
+
+		c, err := s.d.Count(ctx, M{"test": 123})
+		s.ErrorIs(err, errComp)
+		s.Zero(c)
+	})
+
+	s.Run("FailedIteration", func() {
+		comp := new(comparerMock)
+		s.d.comparer = comp
+		s.NoError(s.d.EnsureIndex(ctx, domain.WithFields("a")))
+
+		comp.On("Compare", 1, 2).Return(-1, nil).Once()
+		comp.On("Compare", 3, 2).Return(1, nil).Once()
+
+		cur, err := s.d.Insert(ctx, M{"a": 2}, M{"a": 1}, M{"a": 3})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		errComp := fmt.Errorf("compare error")
+		comp.On("Compare", 2, 1).Return(0, errComp).Once()
+
+		c, err := s.d.Count(ctx, M{"a": M{"$gt": 1}})
+		s.ErrorIs(err, errComp)
+		s.Zero(c)
+	})
+
+	s.Run("FailedMatch", func() {
+		m := new(matcherMock)
+		s.d.matcher = m
+
+		cur, err := s.d.Insert(ctx, M{"a": 2}, M{"a": 1}, M{"a": 3})
+		s.NoError(err)
+		s.NotNil(cur)
+
+		errMatch := fmt.Errorf("match error")
+
+		m.On("SetQuery", nil).Return(nil).Once()
+		m.On("Match", mock.Anything).Return(false, errMatch).Once()
+
+		c, err := s.d.Count(ctx, nil)
+		s.ErrorIs(err, errMatch)
+		s.Zero(c)
 	})
 
 } // ==== End of 'Count' ==== //
@@ -4144,7 +4345,9 @@ func (s *DatastoreTestSuite) EqualDoc(expected M, actual domain.Document) bool {
 }
 
 func (s *DatastoreTestSuite) insert(in domain.Cursor, err error) []M {
-	s.NoError(err)
+	if !s.NoError(err) {
+		return nil
+	}
 	var res []M
 	for in.Next() {
 		var m M

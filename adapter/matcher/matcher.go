@@ -199,7 +199,7 @@ func (m *Matcher) dollarCond(mapping map[string]any, root bool, target []LogicOp
 	for key, value := range mapping {
 		switch key {
 		case "$and":
-			or, err := m.makeLogicOp(And, "$or", value)
+			or, err := m.makeLogicOp(And, "$and", value)
 			if err != nil {
 				return nil, false, err
 			}
@@ -444,12 +444,6 @@ func (m *Matcher) matchLogicOp(doc domain.Document, lo LogicOp) (bool, error) {
 				return matches, err
 			}
 		}
-		for _, rule := range lo.Rules {
-			matches, err = m.matchRule(doc, rule)
-			if err != nil || matches {
-				return matches, err
-			}
-		}
 		return false, nil
 	case Not:
 		matches, err = m.matchLogicOp(doc, lo.Sub[0])
@@ -620,8 +614,8 @@ func (m *Matcher) nin(values []domain.GetSetter, cond *Cond) (bool, error) {
 func (m *Matcher) lt(values []domain.GetSetter, cond *Cond) (bool, error) {
 	var c int
 	var err error
-	for value := range m.nestedLists(values) {
-		if !m.comparer.Comparable(value, cond.Val) {
+	for value, valid := range m.nestedLists(values) {
+		if valid && !m.comparer.Comparable(value, cond.Val) {
 			return false, nil
 		}
 		c, err = m.comparer.Compare(value, cond.Val)
@@ -638,44 +632,26 @@ func (m *Matcher) lt(values []domain.GetSetter, cond *Cond) (bool, error) {
 func (m *Matcher) gte(values []domain.GetSetter, cond *Cond) (bool, error) {
 	var c int
 	var err error
-	for _, value := range values {
-		if !m.comparer.Comparable(value, cond.Val) {
+	for value, valid := range m.nestedLists(values) {
+		if valid && !m.comparer.Comparable(value, cond.Val) {
 			return false, nil
 		}
 		c, err = m.comparer.Compare(value, cond.Val)
 		if err != nil {
 			return false, err
 		}
-		if c < 0 {
-			return false, nil
+		if c >= 0 {
+			return true, nil
 		}
 	}
-	return true, nil
+	return false, nil
 }
 
 func (m *Matcher) lte(values []domain.GetSetter, cond *Cond) (bool, error) {
 	var c int
 	var err error
-	for _, value := range values {
-		if !m.comparer.Comparable(value, cond.Val) {
-			return false, nil
-		}
-		c, err = m.comparer.Compare(value, cond.Val)
-		if err != nil {
-			return false, err
-		}
-		if c > 0 {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
-	var c int
-	var err error
-	for _, value := range values {
-		if !m.comparer.Comparable(value, cond.Val) {
+	for value, valid := range m.nestedLists(values) {
+		if valid && !m.comparer.Comparable(value, cond.Val) {
 			return false, nil
 		}
 		c, err = m.comparer.Compare(value, cond.Val)
@@ -683,16 +659,34 @@ func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
 			return false, err
 		}
 		if c <= 0 {
-			return false, nil
+			return true, nil
 		}
 	}
-	return true, nil
+	return false, nil
+}
+
+func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
+	var c int
+	var err error
+	for value, valid := range m.nestedLists(values) {
+		if valid && !m.comparer.Comparable(value, cond.Val) {
+			return false, nil
+		}
+		c, err = m.comparer.Compare(value, cond.Val)
+		if err != nil {
+			return false, err
+		}
+		if c > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (m *Matcher) ne(values []domain.GetSetter, cond *Cond) (bool, error) {
 	var c int
 	var err error
-	for _, value := range values {
+	for value := range m.nestedLists(values) {
 		if !m.comparer.Comparable(value, cond.Val) {
 			return false, nil
 		}
@@ -700,11 +694,11 @@ func (m *Matcher) ne(values []domain.GetSetter, cond *Cond) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		if c == 0 {
-			return false, nil
+		if c != 0 {
+			return true, nil
 		}
 	}
-	return true, nil
+	return false, nil
 }
 
 func (m *Matcher) in(values []domain.GetSetter, cond *Cond) (bool, error) {
@@ -772,7 +766,8 @@ func (m *Matcher) elemMatch(values []domain.GetSetter, cond *Cond) (bool, error)
 			continue
 		}
 		if arr, ok = actual.([]any); !ok {
-			return false, nil
+			arr = arr[:0]
+			arr = append(arr, actual)
 		}
 		for _, elem := range arr {
 			ok, err = m.matchQuery(elem, query)
@@ -784,30 +779,29 @@ func (m *Matcher) elemMatch(values []domain.GetSetter, cond *Cond) (bool, error)
 	return false, nil
 }
 
-func (m *Matcher) nestedLists(values []domain.GetSetter) iter.Seq[any] {
-	return func(yield func(any) bool) {
+func (m *Matcher) nestedLists(values []domain.GetSetter) iter.Seq2[any, bool] {
+	return func(yield func(any, bool) bool) {
 		var concrete any
 		var ok bool
 		var err error
 		var sub iter.Seq[any]
 		for _, value := range values {
 			if concrete, ok = m.getConcrete(value); !ok {
-				if !yield(value) {
+				if !yield(nil, false) {
 					return
 				}
 				continue
 			}
 			if sub, _, err = structure.Seq(concrete); err != nil {
-				if !yield(value) {
+				if !yield(value, true) {
 					return
 				}
 				continue
 			}
 			for i := range sub {
-				if !yield(i) {
+				if !yield(i, true) {
 					return
 				}
-				continue
 			}
 		}
 	}

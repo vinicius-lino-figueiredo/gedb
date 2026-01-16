@@ -53,17 +53,6 @@ func (e ErrModArgType) Error() string {
 	return fmt.Sprintf("%s expects %s arg, got %T", e.Mod, e.Want, e.Actual)
 }
 
-// ErrModQuery is returned when provided modification query does not match the
-// general expected mongo-like structure.
-type ErrModQuery struct {
-	Reason string
-}
-
-// Error implements [error].
-func (e ErrModQuery) Error() string {
-	return fmt.Sprintf("invalid modification query: %s", e.Reason)
-}
-
 // ErrUnknownModifier is returned when the user specifies a modification query
 // with a modification procedure that is not known by the current implementation
 // of [Modifier].

@@ -399,9 +399,6 @@ func (i *Index) GetMatching(value ...any) (iter.Seq2[domain.Document, error], er
 			continue
 		}
 		foundDocs := slices.Clone(found.Values())
-		if len(foundDocs) == 0 {
-			continue
-		}
 		if err := _res.Set(found.Key(), foundDocs); err != nil {
 			return nil, err
 		}

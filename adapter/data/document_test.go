@@ -295,6 +295,13 @@ func (s *MTestSuite) TestArray() {
 	s.Equal(M{"names": []any{"Huguinho", "Zezinho", "Luisinho"}}, doc)
 }
 
+func (s *MTestSuite) TestInvalidArrayItem() {
+	obj := map[string]any{"arr": []any{1, 2, map[int]any{1: 10}}}
+	doc, err := NewDocument(obj)
+	s.ErrorIs(err, ErrMapKeyType)
+	s.Nil(doc)
+}
+
 func (s *MTestSuite) TestKeepFunction() {
 	ptr := &struct{}{}
 	fn := func() any { return ptr }

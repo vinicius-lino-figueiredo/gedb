@@ -147,6 +147,12 @@ func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 	m, err := s.mtchr.Match(M{"a": []string{}})
 	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.False(m)
+
+	s.NoError(s.mtchr.SetQuery(M{"a.b": make(chan int)}))
+	m, err = s.mtchr.Match(M{"a": A{M{"b": A{[]string{}}}}})
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
+	s.False(m)
+
 }
 
 // Will return error if matching two invalid types nested in arrays.
@@ -323,6 +329,35 @@ func (s *MatcherTestSuite) TestLowerThanDates() {
 
 	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": date1001}}))
 	s.Matches(s.mtchr.Match(M{"a": date1000}))
+}
+
+func (s *MatcherTestSuite) TestUndefinedItem() {
+	s.NoError(s.mtchr.SetQuery(M{"a.c": M{"$lt": 2}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"b": 1}, M{"c": 1}}}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a.c": M{"$lte": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"b": 1}, M{"c": 1}}}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a.c": M{"$gt": 0}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"b": 1}, M{"c": 1}}}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a.c": M{"$gte": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"b": 1}, M{"c": 1}}}))
+
+}
+
+func (s *MatcherTestSuite) TestNonComparable() {
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 2}}))
+	s.NotMatches(s.mtchr.Match(M{"a": "oops"}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": "oops"}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 0}}))
+	s.NotMatches(s.mtchr.Match(M{"a": "oops"}))
+
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": "oops"}))
 }
 
 // $lte.
@@ -878,19 +913,33 @@ func (s *MatcherTestSuite) TestElemMatch() {
 	s.NotMatches(s.mtchr.Match(
 		M{"children": 123},
 	))
+
+	s.ErrorIs(
+		s.mtchr.SetQuery(M{"a": M{"$elemMatch": M{"$and": A{}, "b": "nop"}}}),
+		ErrMixedOperators,
+	)
+
 }
 
 // $elemMatch operator works with empty arrays.
 func (s *MatcherTestSuite) TestElemMatchEmptyArray() {
 	s.NoError(s.mtchr.SetQuery(M{"children": M{"$elemMatch": M{"name": "Mitsos"}}}))
 	s.NotMatches(s.mtchr.Match(
-		M{"children": A{}},
-	))
-
+		M{"children": A{}}))
 	s.NoError(s.mtchr.SetQuery(M{"children": M{"$elemMatch": M{}}}))
 	s.NotMatches(s.mtchr.Match(
 		M{"children": A{}},
 	))
+}
+
+func (s *MatcherTestSuite) TestElemMatchUndefinedItem() {
+	s.NoError(s.mtchr.SetQuery(M{"a.b": M{"$elemMatch": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"c": 1}, M{"b": 1}}}))
+}
+
+func (s *MatcherTestSuite) TestInUndefinedItem() {
+	s.NoError(s.mtchr.SetQuery(M{"a.b": M{"$in": A{1}}}))
+	s.Matches(s.mtchr.Match(M{"a": A{M{"c": 1}, M{"b": 1}}}))
 }
 
 // Will return error if FieldNavigator fails getting field value.
@@ -996,6 +1045,14 @@ func (s *MatcherTestSuite) TestAnd() {
 
 	s.NoError(s.mtchr.SetQuery(M{"$and": A{M{"hello": "pluton"}, M{"age": M{"$lt": 20}}}}))
 	s.NotMatches(s.mtchr.Match(M{"hello": "world", "age": 15}))
+
+	s.NoError(s.mtchr.SetQuery(M{"$and": A{}}))
+	s.Matches(s.mtchr.Match(M{"hello": "world", "age": 15}))
+
+	s.Error(s.mtchr.SetQuery(M{"$and": A{A{}}}))
+
+	s.Error(s.mtchr.SetQuery(M{"$and": A{M{"$and": A{}, "nope": "nah"}}}))
+
 }
 
 // Subquery should not match for a $not to match.
@@ -1008,6 +1065,44 @@ func (s *MatcherTestSuite) TestNot() {
 	s.NotMatches(s.mtchr.Match(M{"a": 5, "b": 10}))
 
 	s.ErrorAs(s.mtchr.SetQuery(M{"$not": M{"a": M{"$in": 5}}}), &ErrCompArgType{})
+
+	s.Error(s.mtchr.SetQuery(M{"$not": 1}))
+}
+
+func (s *MatcherTestSuite) TestNotSubError() {
+	s.NoError(s.mtchr.SetQuery(M{"$not": M{"a": 1}}))
+	cm := new(comparerMock)
+	s.mtchr.comparer = cm
+
+	errComp := fmt.Errorf("compare error")
+	cm.On("Compare", 1, 1).Return(0, errComp).Once()
+
+	matches, err := s.mtchr.Match(M{"a": 1})
+	s.ErrorIs(err, errComp)
+	s.False(matches)
+
+	cm.AssertExpectations(s.T())
+
+}
+
+func (s *MatcherTestSuite) TestUnknownComp() {
+	s.Error(s.mtchr.SetQuery(M{"$or": A{M{"$unknown": 1}}}))
+}
+
+func (s *MatcherTestSuite) TestUnreachable() {
+	// these are not reachable lines, but they mess up test coverage
+	lo, invalid, err := s.mtchr.dollarCond(nil, false, nil)
+	s.NoError(err)
+	s.False(invalid)
+	s.Nil(lo)
+
+	matches, err := s.mtchr.matchLogicOp(nil, LogicOp{Type: 255})
+	s.NoError(err)
+	s.False(matches)
+
+	matches, err = s.mtchr.matchCond(nil, false, &Cond{Op: 255})
+	s.NoError(err)
+	s.False(matches)
 }
 
 // Logical operators are all top-level, only other logical operators can be
@@ -1326,6 +1421,28 @@ func (s *MatcherTestSuite) TestMatchArrayOnIndex() {
 			M{"name": "Louie", "age": 12},
 		}},
 	))
+}
+
+func (s *MatcherTestSuite) TestMatchTime() {
+	now := time.Now()
+	s.NoError(s.mtchr.SetQuery(M{"now": now}))
+	s.Matches(s.mtchr.Match(M{"now": now}))
+	s.NotMatches(s.mtchr.Match(M{"now": now.Add(time.Second)}))
+}
+
+func (s *MatcherTestSuite) TestMatchEmptyObj() {
+	s.NoError(s.mtchr.SetQuery(M{"now": M{}}))
+	s.Matches(s.mtchr.Match(M{"now": M{}}))
+}
+
+func (s *MatcherTestSuite) TestEqualObjFailedDocumentFactory() {
+	errDocFac := fmt.Errorf("document factory error")
+	s.mtchr.documentFactory = func(any) (domain.Document, error) {
+		return nil, errDocFac
+	}
+
+	s.ErrorIs(s.mtchr.SetQuery(M{"a": M{"b": "c"}}), errDocFac)
+
 }
 
 // A single array-specific operator and the query is treated as array specific.

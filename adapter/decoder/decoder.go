@@ -26,12 +26,10 @@ func (d *Decoder) Decode(source any, target any) error {
 	}
 
 	value := reflect.ValueNoEscapeOf(target)
-	if value.Kind() != reflect.Ptr {
-		return domain.ErrNonPointer
-	}
-
-	if !value.Type().Elem().Implements(docReflectType) {
-		source = d.adjustDoc(source)
+	if value.Kind() == reflect.Ptr {
+		if !value.Type().Elem().Implements(docReflectType) {
+			source = d.adjustDoc(source)
+		}
 	}
 
 	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{

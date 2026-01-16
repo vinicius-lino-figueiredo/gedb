@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -510,6 +511,7 @@ var validCases = []testCase{
 	{CaseName: "all_pointer_values_indented", in: pallValueIndent, out: pallValueIndentMap},
 	{CaseName: "all_values_compact", in: allValueCompact, out: allValueIndentMap},
 	{CaseName: "all_pointer_values_compact", in: pallValueCompact, out: pallValueIndentMap},
+	{CaseName: "date", in: `{"$$date": 1000.0}`, out: time.UnixMilli(1000)},
 }
 
 var invalidCases = []testCase{

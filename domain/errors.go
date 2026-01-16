@@ -24,9 +24,6 @@ var (
 	// ErrTargetNil is returned when user provides a nil value as a target
 	// to decode data, for example, calling [GEDB.FindOne].
 	ErrTargetNil = errors.New("target interface is nil")
-	// ErrNonPointer is returned by [Decoder.Decode] when user provides a
-	// non-pointer value as a target.
-	ErrNonPointer = errors.New("target must be a pointer")
 	// ErrCannotModifyID is returned by [Modifier.Modify] when the user
 	// performs some action that would modify a document _id.
 	ErrCannotModifyID = errors.New("cannot modify document _id")

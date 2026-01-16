@@ -991,6 +991,14 @@ func (s *ModifierTestSuite) TestPullFailedMatch() {
 	mtchr.AssertExpectations(s.T())
 }
 
+func (s *ModifierTestSuite) TestPullInvalidQuery() {
+	obj := M{"a": A{1}}
+	updateQuery := M{"$pull": M{"a": M{"$size": "a"}}}
+	t, err := s.modifier.Modify(obj, updateQuery)
+	s.ErrorAs(err, &matcher.ErrCompArgType{})
+	s.Nil(t)
+}
+
 // Will set the field to the updated value if value is greater than current one,
 // without modifying the original object.
 func (s *ModifierTestSuite) TestMax() {
@@ -1158,6 +1166,17 @@ func (s *ModifierTestSuite) TestCopyFailDocFactory() {
 	docCopy, err := s.modifier.copyDoc(obj)
 	s.ErrorIs(err, errDocFac)
 	s.Nil(docCopy)
+}
+
+func (s *ModifierTestSuite) TestErrorMessages() {
+	var err error = ErrModFieldType{Mod: "$inc", Want: "number", Actual: "example"}
+	s.Equal("$inc expects number field, got string", err.Error())
+
+	err = ErrModArgType{Mod: "$inc", Want: "number", Actual: "example"}
+	s.Equal("$inc expects number arg, got string", err.Error())
+
+	err = ErrUnknownModifier{Name: "$unknown"}
+	s.Equal("unknown modifier \"$unknown\"", err.Error())
 }
 
 func TestModifierTestSuite(t *testing.T) {

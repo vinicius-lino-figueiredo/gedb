@@ -655,6 +655,37 @@ func (s *IndexesTestSuite) TestInsertion() {
 
 	})
 
+	s.Run("FailedDeletion", func() {
+		c := new(comparerMock)
+		i, err := NewIndex(
+			domain.WithIndexFieldName("a"),
+			domain.WithIndexUnique(true),
+			domain.WithIndexComparer(c),
+		)
+		if !s.NoError(err) {
+			return
+		}
+
+		ctx := context.Background()
+		s.NoError(i.Insert(ctx, data.M{"a": 1}))
+
+		// successfully adding a doc
+		c.On("Compare", 2, 1).Return(1, nil).Once()
+
+		// failing to add non-unique document
+		c.On("Compare", 1, 1).Return(0, nil).Once()
+
+		errCmp := fmt.Errorf("compare error")
+		//failing to check previous doc while deleting
+		c.On("Compare", 2, 1).Return(0, errCmp).Once()
+
+		err = i.Insert(ctx, data.M{"a": 2}, data.M{"a": 1})
+
+		s.ErrorAs(err, &bst.ErrUniqueViolated{})
+		s.ErrorIs(err, errCmp)
+
+	})
+
 } // ==== End of 'Insertion' ==== //
 
 func (s *IndexesTestSuite) TestRemoval() {
@@ -781,24 +812,6 @@ func (s *IndexesTestSuite) TestRemoval() {
 		s.Nil(bloup)
 	})
 
-	// Can remove from multi field
-	// s.Run("ArrayOfDocuments", func() {
-	// 	idx := NewIndex(domain.WithIndexFieldName("tf,a")).(*Index)
-	// 	doc1 := document.Document{"a": 5, "tf": "hello"}
-	// 	doc2 := document.Document{"a": 8, "tf": "world"}
-	// 	doc3 := document.Document{"a": 2, "tf": "bloup"}
-	//
-	// 	ctx := context.Background()
-	//
-	// 	s.NoError(idx.Insert(ctx, doc1, doc2, doc3))
-	// 	s.Equal(3, idx.tree.GetNumberOfKeys())
-	// 	s.NoError(idx.Remove(ctx, doc1, doc3))
-	// 	s.Equal(1, idx.tree.GetNumberOfKeys())
-	// 	s.Equal([]any{}, idx.tree.Search("hello"))
-	// 	s.Equal([]any{doc2}, idx.tree.Search("world"))
-	// 	s.Equal([]any{}, idx.tree.Search("bloup"))
-	// })
-
 	s.Run("SparseNoValid", func() {
 		i, err := NewIndex(
 			domain.WithIndexSparse(true),
@@ -809,6 +822,23 @@ func (s *IndexesTestSuite) TestRemoval() {
 
 		s.NoError(i.Insert(context.Background(), data.M{"tg": 1}))
 		s.NoError(i.Remove(context.Background(), data.M{"tf": 1}))
+
+	})
+
+	s.Run("FailedRemoveOne", func() {
+		i, err := NewIndex(domain.WithIndexFieldName("a"))
+		s.NoError(err)
+		s.NoError(i.Insert(context.Background(), data.M{"a": 1}))
+		c := new(comparerMock)
+		i.(*Index).bstComparer.(*bstComparer).comparer = c
+
+		errComp := fmt.Errorf("compare error")
+		c.On("Compare", 1, 1).Return(0, nil).Once()
+
+		c.On("Compare", mock.Anything, mock.Anything).
+			Return(0, errComp).Twice()
+
+		i.Remove(context.Background(), data.M{"a": 1})
 
 	})
 
@@ -1445,6 +1475,62 @@ func (s *IndexesTestSuite) TestGetMatchingDocuments() {
 		s.NoError(err)
 		s.Equal([]domain.Document{doc3, doc5}, d)
 	})
+
+	s.Run("FailedSet", func() {
+		h := new(hasherMock)
+		i, err := NewIndex(domain.WithIndexFieldName("a"))
+		if !s.NoError(err) {
+			return
+		}
+		if !s.NoError(i.Insert(context.Background(), data.M{"a": 1})) {
+			return
+		}
+		i.(*Index).hasher = h
+
+		errHash := fmt.Errorf("hash error")
+		h.On("Hash", mock.Anything).Return(0, errHash).Once()
+
+		seq, err := i.GetMatching(1)
+		s.ErrorIs(err, errHash)
+		s.Nil(seq)
+	})
+
+	s.Run("IncompleteLoop", func() {
+		i, err := NewIndex(domain.WithIndexFieldName("a"))
+		if !s.NoError(err) {
+			return
+		}
+
+		docs := []domain.Document{
+			data.M{"a": 1},
+			data.M{"a": 2},
+			data.M{"a": 3},
+			data.M{"a": 4},
+			data.M{"a": 5},
+		}
+
+		if !s.NoError(i.Insert(context.Background(), docs...)) {
+			return
+		}
+
+		seq, err := i.GetMatching(1)
+		s.NoError(err)
+
+		for doc, err := range seq {
+			s.NoError(err)
+			s.Equal(data.M{"a": 1}, doc)
+			break
+		}
+
+		n := 0
+		for doc, err := range seq {
+			s.NoError(err)
+			s.Equal(docs[n], doc)
+			n++
+		}
+
+	})
+
 } // ==== End of 'Get matching documents' ==== //
 
 func (s *IndexesTestSuite) TestGetMatchingInvalidParameter() {

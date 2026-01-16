@@ -57,6 +57,18 @@ func (f *fieldNavigatorMock) SplitFields(field string) ([]string, error) {
 	return call.Get(0).([]string), call.Error(1)
 }
 
+type projectorMock struct{ mock.Mock }
+
+// Project implements [domain.Projector].
+func (p *projectorMock) Project(docs []domain.Document, proj map[string]uint8) ([]domain.Document, error) {
+	call := p.Called(docs, proj)
+	res, err := call.Get(0), call.Error(1)
+	if res != nil {
+		return res.([]domain.Document), err
+	}
+	return nil, err
+}
+
 type QuerierTestSuite struct {
 	suite.Suite
 	q     *Querier
@@ -658,6 +670,51 @@ func (s *QuerierTestSuite) TestFailSorting() {
 	docs, err := s.q.Query(s.Values(data), domain.WithQuerySort(S{{Key: "error", Order: 1}}))
 	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.Nil(docs)
+}
+
+func (s *QuerierTestSuite) TestFailSettingQuery() {
+	values := func(func(domain.Document, error) bool) {}
+	docs, err := s.q.Query(values, domain.WithQuery(M{"v": M{"$in": 1}}))
+	s.ErrorAs(err, &matcher.ErrCompArgType{})
+	s.Nil(docs)
+}
+
+func (s *QuerierTestSuite) TestInvalidDoc() {
+	errYield := fmt.Errorf("yield error")
+	values := func(yield func(domain.Document, error) bool) {
+		yield(nil, errYield)
+	}
+	docs, err := s.q.Query(values, domain.WithQuery(nil))
+	s.ErrorIs(err, errYield)
+	s.Nil(docs)
+}
+
+func (s *QuerierTestSuite) TestFailedProjection() {
+	p := new(projectorMock)
+	s.q.proj = p
+
+	seq := func(yield func(domain.Document, error) bool) {
+		for range 2 {
+			if !yield(M{}, nil) {
+				return
+			}
+		}
+	}
+
+	errPrj := fmt.Errorf("projection error")
+	p.On("Project", mock.Anything, mock.Anything).Return(nil, errPrj).Once()
+
+	docs, err := s.q.Query(seq)
+	s.ErrorIs(err, errPrj)
+	s.Nil(docs)
+
+	p.On("Project", mock.Anything, mock.Anything).Return(nil, errPrj).Once()
+
+	docs, err = s.q.Query(seq, domain.WithQueryLimit(1))
+	s.ErrorIs(err, errPrj)
+	s.Nil(docs)
+
+	p.AssertExpectations(s.T())
 }
 
 func (s *QuerierTestSuite) Values(docs []domain.Document) iter.Seq2[domain.Document, error] {
