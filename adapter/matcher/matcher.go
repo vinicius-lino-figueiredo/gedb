@@ -335,16 +335,9 @@ func (m *Matcher) makeDollarRule(addr []string, mapping map[string]any) (fr Fiel
 func (m *Matcher) makeCond(k string, v any) (cond Cond, found bool, err error) {
 	switch k {
 	case "$regex":
-		if r, ok := v.(*regexp.Regexp); ok {
-			return Cond{Op: Regex, Val: r}, true, nil
-		}
-		return cond, true, ErrCompArgType{Comp: "$regex", Want: "regex", Actual: v}
+		return m.makeRegex(v)
 	case "$nin":
-		seq, l, err := structure.Seq(v)
-		if err != nil {
-			return cond, true, ErrCompArgType{Comp: "$nin", Want: "list", Actual: v}
-		}
-		return Cond{Op: Nin, Val: seq, size: l}, true, nil
+		return m.makeNin(v)
 	case "$lt":
 		return Cond{Op: Lt, Val: v}, true, nil
 	case "$gte":
@@ -356,38 +349,69 @@ func (m *Matcher) makeCond(k string, v any) (cond Cond, found bool, err error) {
 	case "$ne":
 		return Cond{Op: Ne, Val: v}, true, nil
 	case "$in":
-		seq, l, err := structure.Seq(v)
-		if err != nil {
-			return cond, true, ErrCompArgType{Comp: "$in", Want: "list", Actual: v}
-		}
-		return Cond{Op: In, Val: seq, size: l}, true, nil
+		return m.makeIn(v)
 	case "$exists":
-		value, _ := m.getConcrete(v)
-		if value == nil {
-			return Cond{Op: Exists, Val: false}, true, nil
-		}
-		if exists, ok := value.(bool); ok {
-			return Cond{Op: Exists, Val: exists}, true, nil
-		}
-		if c, err := m.comparer.Compare(value, 0); err != nil || c == 0 {
-			return Cond{Op: Exists, Val: c != 0}, true, err
-		}
-		return Cond{Op: Exists, Val: true}, true, nil
+		return m.makeExists(v)
 	case "$size":
-		i, ok := structure.AsInteger(v)
-		if !ok {
-			return cond, true, ErrCompArgType{Comp: "$size", Want: "integer", Actual: v}
-		}
-		return Cond{Op: Size, Val: i}, true, nil
+		return m.makeSize(v)
 	case "$elemMatch":
-		qry, err := m.makeQuery(v)
-		if err != nil {
-			return cond, true, err
-		}
-		return Cond{Op: ElemMatch, Val: qry}, true, nil
+		return m.makeElemMatch(v)
 	default:
 		return cond, false, ErrUnknownComparison{Comparison: k}
 	}
+}
+
+func (m *Matcher) makeRegex(v any) (cond Cond, found bool, err error) {
+	if r, ok := v.(*regexp.Regexp); ok {
+		return Cond{Op: Regex, Val: r}, true, nil
+	}
+	return cond, true, ErrCompArgType{Comp: "$regex", Want: "regex", Actual: v}
+}
+
+func (m *Matcher) makeNin(v any) (cond Cond, found bool, err error) {
+	seq, l, err := structure.Seq(v)
+	if err != nil {
+		return cond, true, ErrCompArgType{Comp: "$nin", Want: "list", Actual: v}
+	}
+	return Cond{Op: Nin, Val: seq, size: l}, true, nil
+}
+
+func (m *Matcher) makeIn(v any) (cond Cond, found bool, err error) {
+	seq, l, err := structure.Seq(v)
+	if err != nil {
+		return cond, true, ErrCompArgType{Comp: "$in", Want: "list", Actual: v}
+	}
+	return Cond{Op: In, Val: seq, size: l}, true, nil
+}
+
+func (m *Matcher) makeExists(v any) (Cond, bool, error) {
+	value, _ := m.getConcrete(v)
+	if value == nil {
+		return Cond{Op: Exists, Val: false}, true, nil
+	}
+	if exists, ok := value.(bool); ok {
+		return Cond{Op: Exists, Val: exists}, true, nil
+	}
+	if c, err := m.comparer.Compare(value, 0); err != nil || c == 0 {
+		return Cond{Op: Exists, Val: c != 0}, true, err
+	}
+	return Cond{Op: Exists, Val: true}, true, nil
+}
+
+func (m *Matcher) makeSize(v any) (cond Cond, found bool, err error) {
+	i, ok := structure.AsInteger(v)
+	if !ok {
+		return cond, true, ErrCompArgType{Comp: "$size", Want: "integer", Actual: v}
+	}
+	return Cond{Op: Size, Val: i}, true, nil
+}
+
+func (m *Matcher) makeElemMatch(v any) (cond Cond, found bool, err error) {
+	qry, err := m.makeQuery(v)
+	if err != nil {
+		return cond, true, err
+	}
+	return Cond{Op: ElemMatch, Val: qry}, true, nil
 }
 
 // Match implements [domain.Matcher].

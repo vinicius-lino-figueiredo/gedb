@@ -62,42 +62,13 @@ func (q *Querier) Query(data iter.Seq2[domain.Document, error], opts ...domain.Q
 		opt(&options)
 	}
 
-	var skipped int64
-	res := make([]domain.Document, 0, options.Cap)
-
-	if options.Query != nil {
-		if err := q.mtchr.SetQuery(options.Query); err != nil {
-			return nil, err
-		}
+	res, finished, err := q.filter(data, options)
+	if err != nil {
+		return nil, err
 	}
 
-	for doc, err := range data {
-		if err != nil {
-			return nil, err
-		}
-		if options.Query != nil {
-			matches, err := q.mtchr.Match(doc)
-			if err != nil {
-				return nil, fmt.Errorf("matching document: %w", err)
-			}
-			if !matches {
-				continue
-			}
-		}
-		if options.Sort == nil {
-			if skipped < options.Skip {
-				skipped++
-				continue
-			}
-			if options.Limit > 0 && int64(len(res)) == options.Limit {
-				res, err := q.proj.Project(res, options.Projection)
-				if err != nil {
-					return nil, fmt.Errorf("projecting: %w", err)
-				}
-				return res, nil
-			}
-		}
-		res = append(res, doc)
+	if finished {
+		return res, nil
 	}
 
 	if options.Sort != nil {
@@ -108,11 +79,52 @@ func (q *Querier) Query(data iter.Seq2[domain.Document, error], opts ...domain.Q
 		res = q.skipAndLimit(sorted, options.Skip, options.Limit)
 	}
 
-	res, err := q.proj.Project(res, options.Projection)
+	res, err = q.proj.Project(res, options.Projection)
 	if err != nil {
 		return nil, fmt.Errorf("projecting: %w", err)
 	}
 	return res, nil
+}
+
+func (q *Querier) filter(data iter.Seq2[domain.Document, error], opts domain.QueryOptions) ([]domain.Document, bool, error) {
+	var skipped int64
+	res := make([]domain.Document, 0, opts.Cap)
+
+	if opts.Query != nil {
+		if err := q.mtchr.SetQuery(opts.Query); err != nil {
+			return nil, false, err
+		}
+	}
+
+	for doc, err := range data {
+		if err != nil {
+			return nil, false, err
+		}
+		if opts.Query != nil {
+			matches, err := q.mtchr.Match(doc)
+			if err != nil {
+				return nil, false, fmt.Errorf("matching document: %w", err)
+			}
+			if !matches {
+				continue
+			}
+		}
+		if opts.Sort == nil {
+			if skipped < opts.Skip {
+				skipped++
+				continue
+			}
+			if opts.Limit > 0 && int64(len(res)) == opts.Limit {
+				res, err := q.proj.Project(res, opts.Projection)
+				if err != nil {
+					return nil, false, fmt.Errorf("projecting: %w", err)
+				}
+				return res, true, nil
+			}
+		}
+		res = append(res, doc)
+	}
+	return res, false, nil
 }
 
 func (q *Querier) sort(data []domain.Document, sort domain.Sort) ([]domain.Document, error) {

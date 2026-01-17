@@ -174,7 +174,7 @@ func WithQueryProjection(p map[string]uint8) QueryOption {
 	}
 }
 
-// WithQueryCap TODO
+// WithQueryCap specifies the capacity of the slice that holds the query result.
 func WithQueryCap(c int) QueryOption {
 	return func(qo *QueryOptions) {
 		qo.Cap = c

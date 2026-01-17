@@ -37,10 +37,10 @@ import (
 
 const (
 	// DefaultDirMode is used by [Datastore] if no mode for directories is
-	// provided
+	// provided.
 	DefaultDirMode os.FileMode = 0o755
 	// DefaultFileMode is used by [Datastore] if no mode for files is
-	// provided
+	// provided.
 	DefaultFileMode os.FileMode = 0o644
 )
 

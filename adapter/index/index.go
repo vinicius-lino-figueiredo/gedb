@@ -256,8 +256,11 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 	default:
 	}
 
+	errs := make([]error, 0, len(docs))
+
 	for _, d := range docs {
 		var keys []any
+		var hasAnyField bool
 		noValidField := false
 		for _, field := range i._fields {
 			addr, err := i.fieldNavigator.GetAddress(field)
@@ -269,18 +272,7 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 				return err
 			}
 
-			hasAnyField := false
-			for _, k := range key {
-				value, isSet := k.Get()
-				if isSet {
-					hasAnyField = true
-				}
-				if kl, ok := value.([]any); ok {
-					keys = append(keys, kl...)
-				} else {
-					keys = append(keys, value)
-				}
-			}
+			keys, hasAnyField = i.readKeys(key, keys)
 
 			noValidField = noValidField || hasAnyField
 		}
@@ -293,13 +285,36 @@ func (i *Index) Remove(ctx context.Context, docs ...domain.Document) error {
 		slices.SortFunc(uniq, i.compareThings)
 		uniq = slices.Compact(uniq)
 		for _, _key := range uniq {
-			i.Tree.Delete(_key, &d)
+			if err := i.Tree.Delete(_key, &d); err != nil {
+				errs = append(errs, err)
+			}
 		}
 
-		i.Tree.Delete(keys, &d)
+		if err := i.Tree.Delete(keys, &d); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
+}
+
+func (i *Index) readKeys(key []domain.GetSetter, keys []any) ([]any, bool) {
+	hasAnyField := false
+	for _, k := range key {
+		value, isSet := k.Get()
+		if isSet {
+			hasAnyField = true
+		}
+		if kl, ok := value.([]any); ok {
+			keys = append(keys, kl...)
+		} else {
+			keys = append(keys, value)
+		}
+	}
+	return keys, hasAnyField
 }
 
 // Update implements [domain.Index].

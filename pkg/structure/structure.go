@@ -1,4 +1,5 @@
-// Package structure TODO
+// Package structure contains type-related operations, such as iterating over a
+// value of type any and converting numbers.
 package structure
 
 import (
@@ -10,15 +11,17 @@ import (
 	"time"
 
 	"github.com/goccy/go-reflect"
-	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
+	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
 var (
-	// ErrNilObj TODO
+	// ErrNilObj may be returned by [Seq] or [Seq2] when a nil value is
+	// passed as argument.
 	ErrNilObj = errors.New("nil object")
 )
 
-// ErrorNonObject TODO
+// ErrorNonObject is returned by [Seq2] when a value that is neither a struct,
+// map nor a [domain.Document] is passed as argument.
 type ErrorNonObject struct {
 	Type reflect.Type
 }
@@ -27,7 +30,8 @@ func (e ErrorNonObject) Error() string {
 	return ""
 }
 
-// ErrorNonList TODO
+// ErrorNonList is returned by [Seq] when a value that is neither a slice
+// nor a array is passed as argument.
 type ErrorNonList struct {
 	Type reflect.Type
 }
@@ -36,7 +40,8 @@ func (e ErrorNonList) Error() string {
 	return ""
 }
 
-// Seq2 TODO
+// Seq2 returns an iterator over the passed type. This method works for maps
+// and implementations of [domain.Document].
 func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 	if obj == nil {
 		return nil, 0, ErrNilObj
@@ -48,17 +53,27 @@ func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 }
 
 func fastPathStruct(obj any) (iter.Seq2[string, any], int, error) {
-	switch t := obj.(type) {
+	if err := checkPrimitive(obj); err != nil {
+		return nil, 0, err
+	}
+	return checkMaps(obj)
+}
+
+func checkPrimitive(obj any) error {
+	switch obj.(type) {
 	case string, bool,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64,
 		float32, float64,
 		time.Time, *regexp.Regexp, []byte:
-		return nil, 0, ErrorNonObject{Type: reflect.TypeOf(obj)}
-	case data.M:
-		return iterMap(t), len(t), nil
-	case map[string]any:
-		return iterMap(t), len(t), nil
+		return ErrorNonObject{Type: reflect.TypeOf(obj)}
+	default:
+		return nil
+	}
+}
+
+func checkMaps(obj any) (iter.Seq2[string, any], int, error) {
+	switch t := obj.(type) {
 	case map[string]string:
 		return iterMap(t), len(t), nil
 	case map[string]bool:
@@ -87,15 +102,24 @@ func fastPathStruct(obj any) (iter.Seq2[string, any], int, error) {
 		return iterMap(t), len(t), nil
 	case map[string]float64:
 		return iterMap(t), len(t), nil
+	}
+	return checkComplexMaps(obj)
+}
+
+func checkComplexMaps(obj any) (iter.Seq2[string, any], int, error) {
+	switch t := obj.(type) {
+	case domain.Document:
+		return t.Iter(), t.Len(), nil
+	case map[string]any:
+		return iterMap(t), len(t), nil
 	case map[string]time.Time:
 		return iterMap(t), len(t), nil
 	case map[string]*regexp.Regexp:
 		return iterMap(t), len(t), nil
 	case map[string][]byte:
 		return iterMap(t), len(t), nil
-	default:
-		return nil, 0, nil
 	}
+	return nil, 0, nil
 }
 
 func iterMap[T any](m map[string]T) iter.Seq2[string, any] {
@@ -108,7 +132,7 @@ func iterMap[T any](m map[string]T) iter.Seq2[string, any] {
 	}
 }
 
-// Seq TODO
+// Seq returns an iterator over a slice or array of any type.
 func Seq(obj any) (iter.Seq[any], int, error) {
 	if obj == nil {
 		return nil, 0, ErrNilObj
@@ -120,15 +144,14 @@ func Seq(obj any) (iter.Seq[any], int, error) {
 }
 
 func fastPathList(obj any) (iter.Seq[any], int, error) {
+	if err := checkPrimitive(obj); err != nil {
+		return nil, 0, err
+	}
+	return checkLists(obj)
+}
+
+func checkLists(obj any) (iter.Seq[any], int, error) {
 	switch t := obj.(type) {
-	case string, bool,
-		int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64,
-		float32, float64,
-		time.Time, *regexp.Regexp:
-		return nil, 0, ErrorNonList{Type: reflect.TypeOf(obj)}
-	case []any:
-		return iterSlice(t), len(t), nil
 	case []string:
 		return iterSlice(t), len(t), nil
 	case []bool:
@@ -157,15 +180,22 @@ func fastPathList(obj any) (iter.Seq[any], int, error) {
 		return iterSlice(t), len(t), nil
 	case []float64:
 		return iterSlice(t), len(t), nil
+	}
+	return checkComplexLists(obj)
+}
+
+func checkComplexLists(obj any) (iter.Seq[any], int, error) {
+	switch t := obj.(type) {
+	case []any:
+		return iterSlice(t), len(t), nil
 	case []time.Time:
 		return iterSlice(t), len(t), nil
 	case []*regexp.Regexp:
 		return iterSlice(t), len(t), nil
 	case [][]byte:
 		return iterSlice(t), len(t), nil
-	default:
-		return nil, 0, nil
 	}
+	return nil, 0, nil
 }
 
 func iterSlice[T any](m []T) iter.Seq[any] {
@@ -178,7 +208,8 @@ func iterSlice[T any](m []T) iter.Seq[any] {
 	}
 }
 
-// AsInteger TODO
+// AsInteger converts any built-in number to int and returns a flag that informs
+// if the argument is a valid integer.
 func AsInteger(v any) (int, bool) {
 	switch t := v.(type) {
 	case int:
@@ -216,7 +247,7 @@ func AsInteger(v any) (int, bool) {
 	}
 }
 
-// Contains TODO
+// Contains checks if the given value is present in the slice.
 func Contains[T any, S ~[]T](s S, t T, fn func(a T, b T) (bool, error)) (bool, error) {
 	var ok bool
 	var err error

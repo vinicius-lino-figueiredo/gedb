@@ -1,6 +1,6 @@
 package matcher
 
-// TODO
+// Numeric representations of supported logic operators.
 const (
 	And uint8 = iota
 	Or
@@ -8,7 +8,7 @@ const (
 	Where
 )
 
-// TODO
+// Numeric representations of supported operators.
 const (
 	Eq uint8 = iota
 	Ne
@@ -24,13 +24,14 @@ const (
 	Regex
 )
 
-// Query TODO
+// Query stores a database query in a typed and easier to iterate struct.
 type Query struct {
 	Sub bool
 	Lo  []LogicOp
 }
 
-// LogicOp TODO
+// LogicOp stores a logic operator (and, or, not) and its children, which can be
+// either a set of rules or a nested set of LogicOps.
 type LogicOp struct {
 	Type  uint8
 	Rules []FieldRule
@@ -38,13 +39,13 @@ type LogicOp struct {
 	Where *func(v any) (bool, error)
 }
 
-// FieldRule TODO
+// FieldRule stores a set of conditions used to match a given object field.
 type FieldRule struct {
 	Addr  []string
 	Conds []Cond
 }
 
-// Cond TODO
+// Cond stores a single operation on a document field (such as $gt, $size).
 type Cond struct {
 	Op   uint8
 	Val  any

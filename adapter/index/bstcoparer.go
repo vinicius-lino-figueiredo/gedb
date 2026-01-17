@@ -9,19 +9,19 @@ type bstComparer struct {
 	comparer domain.Comparer
 }
 
-// NewBSTComparer TODO
+// NewBSTComparer returns a new implementation of [bst.Comparer].
 func NewBSTComparer(comparer domain.Comparer) bst.Comparer[any, domain.Document] {
 	return &bstComparer{
 		comparer: comparer,
 	}
 }
 
-// CompareKeys implements bst.Comparer.
+// CompareKeys implements [bst.Comparer].
 func (bc *bstComparer) CompareKeys(a any, b any) (int, error) {
 	return bc.comparer.Compare(a, b)
 }
 
-// CompareValues implements bst.Comparer.
+// CompareValues implements [bst.Comparer].
 func (bc *bstComparer) CompareValues(a domain.Document, b domain.Document) (bool, error) {
 	c, err := bc.comparer.Compare(a, b)
 	if err != nil {

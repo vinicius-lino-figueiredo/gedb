@@ -373,8 +373,6 @@ func (s *PersistenceTestSuite) TestCompactOnLoad() {
 // 'Calling loadDatabase after the datafile was modified loads the new data'
 
 // Calling loadDatabase after the datafile was removed will reset the database.
-//
-// TODO: Reimplement with datastore (not testable as original version).
 func (s *PersistenceTestSuite) TestCallAfterRemovingDatafile() {
 	d1 := data.M{"_id": uuid.New().String(), "a": 1}
 	d2 := data.M{"_id": uuid.New().String(), "a": 2}

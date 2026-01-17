@@ -76,28 +76,6 @@ func (c *contextMock) Value(key any) any {
 	return c.Called(key).Get(0)
 }
 
-type cursorMock struct{ mock.Mock }
-
-// Close implements [domain.Cursor].
-func (c *cursorMock) Close() error {
-	return c.Called().Error(0)
-}
-
-// Err implements [domain.Cursor].
-func (c *cursorMock) Err() error {
-	return c.Called().Error(0)
-}
-
-// Next implements [domain.Cursor].
-func (c *cursorMock) Next() bool {
-	return c.Called().Bool(0)
-}
-
-// Scan implements [domain.Cursor].
-func (c *cursorMock) Scan(ctx context.Context, target any) error {
-	return c.Called(ctx, target).Error(0)
-}
-
 type fieldNavigatorMock struct{ mock.Mock }
 
 // EnsureField implements [domain.FieldNavigator].
@@ -3331,7 +3309,7 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			s.ErrorAs(err, &e)
 			s.Nil(newDoc2)
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
-			// TODO: assert violated key
+			s.Equal("yes", e.Key)
 
 			s.Equal(1, s.d.indexes["z"].GetNumberOfKeys())
 			matching, err = listMatching(s.d.indexes["z"].GetMatching("yes"))
@@ -3397,7 +3375,6 @@ func (s *DatastoreTestSuite) TestIndexes() {
 			_, err = s.d.Insert(ctx, M{"a": 5, "z": "other"})
 			e := bst.ErrUniqueViolated{}
 			s.ErrorAs(err, &e)
-			// TODO: assert violated key
 
 			s.NoError(s.d.EnsureIndex(ctx,
 				domain.WithFields("yyy"),

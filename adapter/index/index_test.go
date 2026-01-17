@@ -607,6 +607,7 @@ func (s *IndexesTestSuite) TestInsertion() {
 			s.Equal(doc2, hello6.Values()[0])
 
 			bloup3, err := idx.Tree.Search(data.M{"tf": "bloup", "tf2": int64(3)})
+			s.NoError(err)
 			bloup3.Values()[0].Set("a", 42)
 			s.Equal(42, doc3.Get("a"))
 		})
@@ -838,7 +839,7 @@ func (s *IndexesTestSuite) TestRemoval() {
 		c.On("Compare", mock.Anything, mock.Anything).
 			Return(0, errComp).Twice()
 
-		i.Remove(context.Background(), data.M{"a": 1})
+		s.ErrorIs(i.Remove(context.Background(), data.M{"a": 1}), errComp)
 
 	})
 
