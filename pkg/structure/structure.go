@@ -33,18 +33,18 @@ func (e ErrorNonObject) Error() string {
 	return ""
 }
 
-// ErrorNonList is returned by [Seq] when a value that is neither a slice
-// nor a array is passed as argument.
-type ErrorNonList struct {
+// ErrNonList is returned by [Seq] when a value that is neither a slice nor an
+// array is passed as argument.
+type ErrNonList struct {
 	Type reflect.Type
 }
 
-func (e ErrorNonList) Error() string {
+func (e ErrNonList) Error() string {
 	return ""
 }
 
-// Seq2 returns an iterator over the passed type. This method works for maps
-// and implementations of [domain.Document].
+// Seq2 returns an iterator over the passed type. This method works for maps and
+// implementations of [domain.Document].
 func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 	if obj == nil {
 		return nil, 0, ErrNilObj
@@ -56,22 +56,22 @@ func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 }
 
 func fastPathStruct(obj any) (iter.Seq2[string, any], int, error) {
-	if err := checkPrimitive(obj); err != nil {
-		return nil, 0, err
+	if typ, isPrim := checkPrimitive(obj); isPrim {
+		return nil, 0, ErrorNonObject{Type: typ}
 	}
 	return checkMaps(obj)
 }
 
-func checkPrimitive(obj any) error {
+func checkPrimitive(obj any) (typ reflect.Type, isPrim bool) {
 	switch obj.(type) {
 	case string, bool,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64,
 		float32, float64,
 		time.Time, *regexp.Regexp, []byte:
-		return ErrorNonObject{Type: reflect.TypeOf(obj)}
+		return reflect.TypeOf(obj), true
 	default:
-		return nil
+		return typ, false
 	}
 }
 
@@ -247,8 +247,8 @@ func Seq(obj any) (iter.Seq[any], int, error) {
 }
 
 func fastPathList(obj any) (iter.Seq[any], int, error) {
-	if err := checkPrimitive(obj); err != nil {
-		return nil, 0, err
+	if typ, isPrim := checkPrimitive(obj); isPrim {
+		return nil, 0, ErrNonList{Type: typ}
 	}
 	return checkLists(obj)
 }
