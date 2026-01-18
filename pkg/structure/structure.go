@@ -8,6 +8,7 @@ import (
 	"iter"
 	"math"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-reflect"
@@ -19,6 +20,8 @@ var (
 	// passed as argument.
 	ErrNilObj = errors.New("nil object")
 )
+
+var docReflectType = reflect.TypeOf((*domain.Document)(nil)).Elem()
 
 // ErrorNonObject is returned by [Seq2] when a value that is neither a struct,
 // map nor a [domain.Document] is passed as argument.
@@ -49,7 +52,7 @@ func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 	if i, length, err := fastPathStruct(obj); err != nil || i != nil {
 		return i, length, err
 	}
-	return nil, 0, fmt.Errorf("%w: cannot read with reflect yet", errors.ErrUnsupported)
+	return iterReflect(obj)
 }
 
 func fastPathStruct(obj any) (iter.Seq2[string, any], int, error) {
@@ -120,6 +123,106 @@ func checkComplexMaps(obj any) (iter.Seq2[string, any], int, error) {
 		return iterMap(t), len(t), nil
 	}
 	return nil, 0, nil
+}
+
+func iterReflect(obj any) (iter.Seq2[string, any], int, error) {
+	v := reflect.ValueNoEscapeOf(obj)
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, 0, ErrNilObj
+		}
+		v = v.Elem()
+	}
+
+	if v.Type().Implements(docReflectType) {
+		doc := v.Interface().(domain.Document)
+		return doc.Iter(), doc.Len(), nil
+	}
+
+	switch v.Kind() {
+	case reflect.Map:
+	case reflect.Struct:
+		i, l := iterReflectStruct(v)
+		return i, l, nil
+	}
+	return nil, 0, ErrorNonObject{Type: v.Type()}
+}
+
+func iterReflectStruct(v reflect.Value) (iter.Seq2[string, any], int) {
+	fields := make([]struct {
+		Key   string
+		Value any
+	}, 0, v.NumField())
+	for k, v := range listStructFields(v) {
+		fields = append(fields, struct {
+			Key   string
+			Value any
+		}{Key: k, Value: v})
+	}
+	return func(yield func(string, any) bool) {
+		for _, field := range fields {
+			if !yield(field.Key, field.Value) {
+				return
+			}
+		}
+	}, len(fields)
+}
+
+func listStructFields(v reflect.Value) iter.Seq2[string, any] {
+	var tag string
+	var ok bool
+	var field reflect.StructField
+	var omitEmpty bool
+	var omitZero bool
+	return func(yield func(string, any) bool) {
+		typ := v.Type()
+		for n := range typ.NumField() {
+			omitEmpty, omitZero = false, false
+			field = typ.Field(n)
+
+			if field.PkgPath != "" {
+				continue
+			}
+
+			if tag, ok = field.Tag.Lookup("gedb"); ok {
+				found := strings.IndexRune(tag, ',')
+				if found >= 0 {
+					for sub := range strings.SplitSeq(tag[found:], ",") {
+						switch sub {
+						case "omitEmpty":
+							omitEmpty = true
+						case "omitZero":
+							omitZero = true
+						}
+					}
+					if tag = tag[:found]; tag == "" {
+						tag = field.Name
+					}
+				}
+
+			} else {
+				tag = field.Name
+			}
+			switch {
+			case omitZero:
+				if v.Field(n).IsZero() {
+					continue
+				}
+			case omitEmpty:
+				switch field.Type.Kind() {
+				case reflect.Chan, reflect.Func, reflect.Map,
+					reflect.Ptr, reflect.UnsafePointer,
+					reflect.Interface, reflect.Slice:
+					if v.Field(n).IsNil() {
+						continue
+					}
+				}
+			}
+			if !yield(tag, v.Field(n).Interface()) {
+				return
+			}
+		}
+	}
 }
 
 func iterMap[T any](m map[string]T) iter.Seq2[string, any] {
