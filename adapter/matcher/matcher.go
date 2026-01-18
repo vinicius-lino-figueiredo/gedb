@@ -280,12 +280,22 @@ func (m *Matcher) makeFieldRule(field string, obj any) (fr FieldRule, err error)
 		return fr, err
 	}
 
-	switch t := obj.(type) {
-	case *regexp.Regexp:
-		return FieldRule{Addr: addr, Conds: []Cond{{Op: Regex, Val: t}}}, nil
-	case time.Time:
-		return FieldRule{Addr: addr, Conds: []Cond{{Val: t}}}, nil
-	default:
+Loop:
+	for {
+		switch t := obj.(type) {
+		case *regexp.Regexp:
+			return FieldRule{Addr: addr, Conds: []Cond{{Op: Regex, Val: t}}}, nil
+		case time.Time:
+			return FieldRule{Addr: addr, Conds: []Cond{{Val: t}}}, nil
+		case domain.Getter:
+			if actual, ok := t.Get(); ok {
+				obj = actual
+				continue
+			}
+			return FieldRule{Addr: addr, Conds: []Cond{{Val: t}}}, nil
+		default:
+			break Loop
+		}
 	}
 
 	i, l, err := structure.Seq2(obj)
