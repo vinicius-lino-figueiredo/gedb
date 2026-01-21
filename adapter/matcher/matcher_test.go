@@ -23,6 +23,10 @@ type Undefined struct{}
 
 func (u Undefined) Get() (any, bool) { return nil, false }
 
+type GetterImpl [1]any
+
+func (gi GetterImpl) Get() (any, bool) { return gi[0], true }
+
 type fieldNavigatorMock struct{ mock.Mock }
 
 // EnsureField implements [domain.FieldNavigator].
@@ -1626,6 +1630,10 @@ func (s *MatcherTestSuite) TestNilQuery() {
 	s.Matches(s.mtchr.Match("anything"))
 	s.Matches(s.mtchr.Match([]string{"is"}))
 	s.Matches(s.mtchr.Match(func() string { return "valid" }))
+}
+
+func (s *MatcherTestSuite) TestGetter() {
+	s.NoError(s.mtchr.SetQuery(M{"a": GetterImpl{"value"}}))
 }
 
 func (s *MatcherTestSuite) TestErrorMessages() {
