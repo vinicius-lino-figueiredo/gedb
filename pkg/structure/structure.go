@@ -183,11 +183,40 @@ func iterReflectStruct(v reflect.Value) (iter.Seq2[string, any], int) {
 		Key   string
 		Value any
 	}, 0, v.NumField())
-	for k, v := range listStructFields(v) {
+
+	typ := v.Type()
+	var tag string
+	var field reflect.StructField
+	var omitEmpty bool
+	var omitZero bool
+	for n := range typ.NumField() {
+		field = typ.Field(n)
+
+		if field.PkgPath != "" {
+			continue
+		}
+
+		tag, omitZero, omitEmpty = readField(field)
+
+		switch {
+		case omitZero:
+			if v.Field(n).IsZero() {
+				continue
+			}
+		case omitEmpty:
+			switch field.Type.Kind() {
+			case reflect.Chan, reflect.Func, reflect.Map,
+				reflect.Ptr, reflect.UnsafePointer,
+				reflect.Interface, reflect.Slice:
+				if v.Field(n).IsNil() {
+					continue
+				}
+			}
+		}
 		fields = append(fields, struct {
 			Key   string
 			Value any
-		}{Key: k, Value: v})
+		}{Key: tag, Value: v.Field(n).Interface()})
 	}
 	return func(yield func(string, any) bool) {
 		for _, field := range fields {
@@ -198,61 +227,30 @@ func iterReflectStruct(v reflect.Value) (iter.Seq2[string, any], int) {
 	}, len(fields)
 }
 
-func listStructFields(v reflect.Value) iter.Seq2[string, any] {
-	var tag string
+func readField(f reflect.StructField) (name string, omitZero, omitEmpty bool) {
 	var ok bool
-	var field reflect.StructField
-	var omitEmpty bool
-	var omitZero bool
-	return func(yield func(string, any) bool) {
-		typ := v.Type()
-		for n := range typ.NumField() {
-			omitEmpty, omitZero = false, false
-			field = typ.Field(n)
-
-			if field.PkgPath != "" {
-				continue
-			}
-
-			if tag, ok = field.Tag.Lookup("gedb"); ok {
-				found := strings.IndexRune(tag, ',')
-				if found >= 0 {
-					for sub := range strings.SplitSeq(tag[found:], ",") {
-						switch sub {
-						case "omitEmpty":
-							omitEmpty = true
-						case "omitZero":
-							omitZero = true
-						}
-					}
-					if tag = tag[:found]; tag == "" {
-						tag = field.Name
-					}
-				}
-
-			} else {
-				tag = field.Name
-			}
-			switch {
-			case omitZero:
-				if v.Field(n).IsZero() {
-					continue
-				}
-			case omitEmpty:
-				switch field.Type.Kind() {
-				case reflect.Chan, reflect.Func, reflect.Map,
-					reflect.Ptr, reflect.UnsafePointer,
-					reflect.Interface, reflect.Slice:
-					if v.Field(n).IsNil() {
-						continue
-					}
-				}
-			}
-			if !yield(tag, v.Field(n).Interface()) {
-				return
-			}
+	if name, ok = f.Tag.Lookup("gedb"); !ok {
+		return f.Name, false, false
+	}
+	found := strings.IndexRune(name, ',')
+	if found < 0 {
+		return name, false, false
+	}
+	for sub := range strings.SplitSeq(name[found:], ",") {
+		switch sub {
+		case "omitEmpty":
+			omitEmpty = true
+		case "omitZero":
+			omitZero = true
 		}
 	}
+	name = name[:found]
+
+	if name == "" {
+		name = f.Name
+	}
+
+	return name, omitZero, omitEmpty
 }
 
 func iterMap[T any](m map[string]T) iter.Seq2[string, any] {
