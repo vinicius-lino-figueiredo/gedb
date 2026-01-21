@@ -26,14 +26,14 @@ var (
 	stringReflectType = reflect.TypeOf(*new(string))
 )
 
-// ErrorNonObject is returned by [Seq2] when a value that is neither a struct,
+// ErrNonObject is returned by [Seq2] when a value that is neither a struct,
 // map nor a [domain.Document] is passed as argument.
-type ErrorNonObject struct {
+type ErrNonObject struct {
 	Type reflect.Type
 }
 
-func (e ErrorNonObject) Error() string {
-	return ""
+func (e ErrNonObject) Error() string {
+	return fmt.Sprintf("type %s is not a valid object", e.Type.String())
 }
 
 // ErrNonList is returned by [Seq] when a value that is neither a slice nor an
@@ -43,7 +43,7 @@ type ErrNonList struct {
 }
 
 func (e ErrNonList) Error() string {
-	return ""
+	return fmt.Sprintf("type %s is not a valid list", e.Type.String())
 }
 
 // Seq2 returns an iterator over the passed type. This method works for maps and
@@ -55,12 +55,12 @@ func Seq2(obj any) (iter.Seq2[string, any], int, error) {
 	if i, length, err := fastPathStruct(obj); err != nil || i != nil {
 		return i, length, err
 	}
-	return iterReflect(obj)
+	return iter2Reflect(obj)
 }
 
 func fastPathStruct(obj any) (iter.Seq2[string, any], int, error) {
 	if typ, isPrim := checkPrimitive(obj); isPrim {
-		return nil, 0, ErrorNonObject{Type: typ}
+		return nil, 0, ErrNonObject{Type: typ}
 	}
 	return checkMaps(obj)
 }
@@ -141,7 +141,7 @@ func checkComplexMaps(obj any) (iter.Seq2[string, any], int, error) {
 	return nil, 0, nil
 }
 
-func iterReflect(obj any) (iter.Seq2[string, any], int, error) {
+func iter2Reflect(obj any) (iter.Seq2[string, any], int, error) {
 	v := reflect.ValueNoEscapeOf(obj)
 	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
@@ -162,12 +162,12 @@ func iterReflect(obj any) (iter.Seq2[string, any], int, error) {
 		i, l := iterReflectStruct(v)
 		return i, l, nil
 	}
-	return nil, 0, ErrorNonObject{Type: v.Type()}
+	return nil, 0, ErrNonObject{Type: v.Type()}
 }
 
 func iterReflectMap(v reflect.Value) (iter.Seq2[string, any], int, error) {
 	if v.Type().Key() != stringReflectType {
-		return nil, 0, ErrorNonObject{Type: v.Type()}
+		return nil, 0, ErrNonObject{Type: v.Type()}
 	}
 	return func(yield func(string, any) bool) {
 		for _, key := range v.MapKeys() {
@@ -273,7 +273,7 @@ func Seq(obj any) (iter.Seq[any], int, error) {
 	if i, length, err := fastPathList(obj); err != nil || i != nil {
 		return i, length, err
 	}
-	return nil, 0, fmt.Errorf("%w: cannot read with reflect yet", errors.ErrUnsupported)
+	return iterReflect(obj)
 }
 
 func fastPathList(obj any) (iter.Seq[any], int, error) {
@@ -339,6 +339,31 @@ func iterSlice[T any](m []T) iter.Seq[any] {
 			}
 		}
 	}
+}
+
+func iterReflect(obj any) (iter.Seq[any], int, error) {
+	v := reflect.ValueNoEscapeOf(obj)
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, 0, ErrNilObj
+		}
+		v = v.Elem()
+	}
+
+	switch v.Kind() {
+	case reflect.Slice, reflect.Array:
+	default:
+		return nil, 0, ErrNonList{Type: v.Type()}
+	}
+
+	return func(yield func(any) bool) {
+		for n := range v.Len() {
+			if !yield(v.Index(n).Interface()) {
+				return
+			}
+		}
+	}, v.Len(), nil
+
 }
 
 // AsInteger converts any built-in number to int and returns a flag that informs
