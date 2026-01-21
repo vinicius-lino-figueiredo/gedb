@@ -21,7 +21,10 @@ var (
 	ErrNilObj = errors.New("nil object")
 )
 
-var docReflectType = reflect.TypeOf((*domain.Document)(nil)).Elem()
+var (
+	docReflectType    = reflect.TypeOf((*domain.Document)(nil)).Elem()
+	stringReflectType = reflect.TypeOf(*new(string))
+)
 
 // ErrorNonObject is returned by [Seq2] when a value that is neither a struct,
 // map nor a [domain.Document] is passed as argument.
@@ -69,6 +72,19 @@ func checkPrimitive(obj any) (typ reflect.Type, isPrim bool) {
 		uint, uint8, uint16, uint32, uint64,
 		float32, float64,
 		time.Time, *regexp.Regexp, []byte:
+		return reflect.TypeOf(obj), true
+	default:
+		return typ, false
+	}
+}
+
+func checkListPrimitive(obj any) (typ reflect.Type, isPrim bool) {
+	switch obj.(type) {
+	case string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64,
+		time.Time, *regexp.Regexp:
 		return reflect.TypeOf(obj), true
 	default:
 		return typ, false
@@ -141,11 +157,25 @@ func iterReflect(obj any) (iter.Seq2[string, any], int, error) {
 
 	switch v.Kind() {
 	case reflect.Map:
+		return iterReflectMap(v)
 	case reflect.Struct:
 		i, l := iterReflectStruct(v)
 		return i, l, nil
 	}
 	return nil, 0, ErrorNonObject{Type: v.Type()}
+}
+
+func iterReflectMap(v reflect.Value) (iter.Seq2[string, any], int, error) {
+	if v.Type().Key() != stringReflectType {
+		return nil, 0, ErrorNonObject{Type: v.Type()}
+	}
+	return func(yield func(string, any) bool) {
+		for _, key := range v.MapKeys() {
+			if !yield(key.String(), v.MapIndex(key).Interface()) {
+				return
+			}
+		}
+	}, v.Len(), nil
 }
 
 func iterReflectStruct(v reflect.Value) (iter.Seq2[string, any], int) {
@@ -247,7 +277,7 @@ func Seq(obj any) (iter.Seq[any], int, error) {
 }
 
 func fastPathList(obj any) (iter.Seq[any], int, error) {
-	if typ, isPrim := checkPrimitive(obj); isPrim {
+	if typ, isPrim := checkListPrimitive(obj); isPrim {
 		return nil, 0, ErrNonList{Type: typ}
 	}
 	return checkLists(obj)
