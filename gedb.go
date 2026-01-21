@@ -17,6 +17,56 @@ import (
 	"github.com/vinicius-lino-figueiredo/gedb/domain"
 )
 
+var (
+	// ErrConstraintViolated is returned by [Index] when an action cannot be
+	// performed because it is being blocked by an index constraint.
+	ErrConstraintViolated = domain.ErrConstraintViolated
+	// ErrCursorClosed is returned when trying to perform operations on a
+	// closed [Cursor].
+	ErrCursorClosed = domain.ErrCursorClosed
+	// ErrScanBeforeNext is returned when calling [Cursor.Scan] before
+	// calling [Cursor.Next].
+	ErrScanBeforeNext = domain.ErrScanBeforeNext
+	// ErrNoFieldName is returned if no field name is provided when creating
+	// a new [Index].
+	ErrNoFieldName = domain.ErrNoFieldName
+	// ErrNotFound is returned when [GEDB.FindOne] cannot find any matching
+	// result for the given query.
+	ErrNotFound = domain.ErrNotFound
+	// ErrTargetNil is returned when user provides a nil value as a target
+	// to decode data, for example, calling [GEDB.FindOne].
+	ErrTargetNil = domain.ErrTargetNil
+	// ErrCannotModifyID is returned by [Modifier.Modify] when the user
+	// performs some action that would modify a document _id.
+	ErrCannotModifyID = domain.ErrCannotModifyID
+)
+
+// ErrFieldName represents an invalid field name, usually for when a document is
+// created with a reserved prefix or forbidden character.
+type ErrFieldName = domain.ErrFieldName
+
+// ErrDatafileName is returned when the user specifies an invalid name for data
+// file. That usually happens if a file with the suffix reserved for the crash
+// backup file is passed as a file name.
+type ErrDatafileName = domain.ErrDatafileName
+
+// ErrDocumentType is returned when an user passes a value that is invalid or
+// contains an invalid sub value for creating a document.
+type ErrDocumentType = domain.ErrDocumentType
+
+// ErrCannotCompare is returned when [Comparer.Compare] is called with two
+// values that cannot be compared by the current [Comparer] interface.
+type ErrCannotCompare = domain.ErrCannotCompare
+
+// ErrCorruptFiles is returned by methods [GEDB.LoadDatabase] and
+// [Persistence.LoadDatabase] when the db is unable to correctly load more data
+// in the datafile than the minimum threshold set by the user.
+type ErrCorruptFiles = domain.ErrCorruptFiles
+
+// ErrDecode is returned by [Decoder.Decode] to easily wrap third party decoding
+// errors.
+type ErrDecode = domain.ErrDecode
+
 // NewDB creates a new GEDB instance with the provided configuration options:
 //
 // - [WithFilename]: sets the database filename for the datastore.
