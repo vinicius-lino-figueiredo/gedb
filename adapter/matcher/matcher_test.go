@@ -390,8 +390,8 @@ func (s *MatcherTestSuite) TestGreaterThan() {
 	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 4}}))
 	s.Matches(s.mtchr.Match(M{"a": 5}))
 
-	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": []int{}}}))
-	s.NotMatches(s.mtchr.Match(M{"a": []int{}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": []any{}}}))
+	s.NotMatches(s.mtchr.Match(M{"a": []any{}}))
 }
 
 // $gte.
