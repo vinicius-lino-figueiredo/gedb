@@ -1205,6 +1205,36 @@ func (s *IndexesTestSuite) TestUpdate() {
 		s.ErrorIs(i.Update(ctx, nil, nil), context.Canceled)
 	})
 
+	s.Run("InvalidRemoveArrayOfDocs", func() {
+
+		i, err := NewIndex(
+			domain.WithIndexFieldName("tf"),
+			domain.WithIndexUnique(true),
+		)
+		s.Equal("tf", i.FieldName())
+		s.True(i.Unique())
+		s.NoError(err)
+
+		fnm := new(fieldNavigatorMock)
+
+		fn := i.(*Index).fieldNavigator
+		i.(*Index).fieldNavigator = fnm
+
+		errGetAddr := fmt.Errorf("get address error")
+		fnm.On("GetAddress", mock.Anything, mock.Anything).
+			Run(func(mock.Arguments) {
+				i.(*Index).fieldNavigator = fn
+			}).
+			Return([]string{}, errGetAddr).
+			Once()
+
+		ctx := context.Background()
+		up := domain.Update{OldDoc: nil, NewDoc: nil}
+		err = i.UpdateMultipleDocs(ctx, up)
+
+		s.ErrorIs(err, errGetAddr)
+	})
+
 } // ==== End of 'Update' ==== //
 
 func (s *IndexesTestSuite) TestGetMatchingDocuments() {
