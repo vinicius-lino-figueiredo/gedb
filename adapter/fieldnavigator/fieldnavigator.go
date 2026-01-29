@@ -67,6 +67,15 @@ func (fn *FieldNavigator) getField(value any, addr []string, ensure bool) ([]dom
 		return []domain.GetSetter{NewReadOnlyGetSetter(value)}, false, nil
 	}
 
+	if len(addr) == 1 {
+		if t, ok := value.(domain.Document); ok {
+			if ensure && !t.Has(addr[0]) {
+				t.Set(addr[0], nil)
+			}
+			return []domain.GetSetter{NewGetSetterWithDoc(t, addr[0])}, false, nil
+		}
+	}
+
 	ctx := &navCtx{
 		curr:   []field{{v: value, expandable: true}},
 		addr:   addr,
