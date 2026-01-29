@@ -634,28 +634,6 @@ func (s *IndexesTestSuite) TestInsertion() {
 		fn.AssertExpectations(s.T())
 	})
 
-	s.Run("FailedHasing", func() {
-
-		h := new(hasherMock)
-
-		i, err := NewIndex(
-			domain.WithIndexFieldName("tf"),
-			domain.WithIndexHasher(h),
-		)
-		s.Equal("tf", i.FieldName())
-		s.NoError(err)
-
-		doc := data.M{"tf": 1}
-
-		e := fmt.Errorf("error")
-
-		h.On("Hash", 1).Return(0, e).Once()
-
-		s.ErrorIs(i.Insert(context.Background(), doc), e)
-		s.Zero(i.GetNumberOfKeys())
-
-	})
-
 	s.Run("FailedDeletion", func() {
 		c := new(comparerMock)
 		i, err := NewIndex(

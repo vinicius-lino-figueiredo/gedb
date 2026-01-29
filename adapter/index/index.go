@@ -191,11 +191,11 @@ func (i *Index) Insert(ctx context.Context, docs ...domain.Document) error {
 	}
 
 	type kv struct {
-		key  any
-		docs []domain.Document
+		key any
+		doc domain.Document
 	}
 
-	keys := uncomparable.New[kv](i.hasher, i.comparer)
+	keys := make([]kv, 0, len(docs))
 
 	var err error
 DocInsertion:
@@ -217,26 +217,15 @@ DocInsertion:
 				break DocInsertion
 			}
 
-			cur, _, err := keys.Get(k)
-			if err != nil {
-				return err
-			}
-			cur.key = k
-			cur.docs = append(cur.docs, d)
-
-			if err = keys.Set(k, cur); err != nil {
-				return err
-			}
+			keys = append(keys, kv{key: k, doc: d})
 		}
 	}
 	if err != nil {
-		nErrs := make([]error, 1, keys.Len()+1)
+		nErrs := make([]error, 1, len(keys)+1)
 		nErrs[0] = err
-		for v := range keys.Values() {
-			for _, d := range v.docs {
-				if err := i.Tree.Delete(v.key, &d); err != nil {
-					nErrs = append(nErrs, err)
-				}
+		for _, v := range keys {
+			if err := i.Tree.Delete(v.key, &v.doc); err != nil {
+				nErrs = append(nErrs, err)
 			}
 		}
 		if len(nErrs) > 1 {
