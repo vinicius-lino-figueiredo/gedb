@@ -350,22 +350,26 @@ func (i *Index) UpdateMultipleDocs(ctx context.Context, pairs ...domain.Update) 
 
 	subCtx := context.WithoutCancel(ctx)
 	for _, pair := range pairs {
-		_ = i.Remove(subCtx, pair.OldDoc)
+		if err = i.Remove(subCtx, pair.OldDoc); err != nil {
+			break
+		}
 	}
 
-Loop:
-	for n, pair := range pairs {
-		select {
-		case <-ctx.Done():
-			err = ctx.Err()
-			failingIndex = n
-			break Loop
-		default:
-		}
+	if err == nil {
+	Loop:
+		for n, pair := range pairs {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				failingIndex = n
+				break Loop
+			default:
+			}
 
-		if err = i.Insert(ctx, pair.NewDoc); err != nil {
-			failingIndex = n
-			break
+			if err = i.Insert(ctx, pair.NewDoc); err != nil {
+				failingIndex = n
+				break
+			}
 		}
 	}
 
