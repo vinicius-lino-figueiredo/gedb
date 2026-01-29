@@ -195,13 +195,9 @@ func (i *Index) Insert(ctx context.Context, docs ...domain.Document) error {
 		docs []domain.Document
 	}
 
-	keys := make(map[uint64]kv, len(docs))
+	keys := uncomparable.New[kv](i.hasher, i.comparer)
 
-	var (
-		err error
-		h   uint64
-		ds  []domain.Document
-	)
+	var err error
 DocInsertion:
 	for _, d := range docs {
 		var l []any
@@ -214,11 +210,6 @@ DocInsertion:
 		l = slices.CompactFunc(l, func(a, b any) bool { return i.compareThings(a, b) == 0 })
 
 		for _, k := range l {
-			h, err = i.hasher.Hash(k)
-			if err != nil {
-				break DocInsertion
-			}
-
 			if err = i.Tree.Insert(k, d); err != nil {
 				if e := new(bst.ErrUniqueViolated); errors.As(err, e) {
 					err = fmt.Errorf("%w: %w", domain.ErrConstraintViolated, err)
@@ -226,14 +217,22 @@ DocInsertion:
 				break DocInsertion
 			}
 
-			ds = append(keys[h].docs, d)
-			keys[h] = kv{key: k, docs: ds}
+			cur, _, err := keys.Get(k)
+			if err != nil {
+				return err
+			}
+			cur.key = k
+			cur.docs = append(cur.docs, d)
+
+			if err = keys.Set(k, cur); err != nil {
+				return err
+			}
 		}
 	}
 	if err != nil {
-		nErrs := make([]error, 1, len(keys)+1)
+		nErrs := make([]error, 1, keys.Len()+1)
 		nErrs[0] = err
-		for _, v := range keys {
+		for v := range keys.Values() {
 			for _, d := range v.docs {
 				if err := i.Tree.Delete(v.key, &d); err != nil {
 					nErrs = append(nErrs, err)

@@ -15,6 +15,7 @@ type Map[T any] struct {
 	buckets  [][]kv[T]
 	hasher   domain.Hasher
 	comparer domain.Comparer
+	length   int
 }
 
 // New returns a new instance of [Map] with the given [domain.Hasher] and
@@ -43,6 +44,7 @@ func (m *Map[T]) Delete(key any) error {
 			return err
 		}
 		if c == 0 {
+			m.length--
 			m.buckets[bucketIndex] = slices.Delete(bucket, n, n+1)
 			return nil
 		}
@@ -93,6 +95,11 @@ func (m *Map[T]) Keys() iter.Seq[any] {
 	}
 }
 
+// Len returns the amount of stored values.
+func (m *Map[T]) Len() int {
+	return m.length
+}
+
 // Iter returns an unordered [iter.Seq2] containing all the key+value pairs.
 func (m *Map[T]) Iter() iter.Seq2[any, T] {
 	return func(yield func(any, T) bool) {
@@ -121,6 +128,7 @@ func (m *Map[T]) Set(key any, value T) error {
 			return err
 		}
 		if c == 0 {
+			m.length++
 			m.buckets[bucketIndex][n] = kv[T]{
 				key:   key,
 				value: value,
