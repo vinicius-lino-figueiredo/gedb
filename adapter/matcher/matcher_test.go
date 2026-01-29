@@ -145,7 +145,7 @@ func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn.AssertExpectations(s.T())
 }
 
-// Will return error if matching two invalid types.
+// Will not compare invalid types
 func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 	s.NoError(s.mtchr.SetQuery(M{"a": make(chan int)}))
 	m, err := s.mtchr.Match(M{"a": []string{}})
@@ -154,7 +154,7 @@ func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 
 	s.NoError(s.mtchr.SetQuery(M{"a.b": make(chan int)}))
 	m, err = s.mtchr.Match(M{"a": A{M{"b": A{[]string{}}}}})
-	s.ErrorAs(err, &domain.ErrCannotCompare{})
+	s.NoError(err)
 	s.False(m)
 
 }

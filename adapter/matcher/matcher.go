@@ -546,10 +546,36 @@ func (m *Matcher) eq(values []domain.GetSetter, expanded bool, cond *Cond) (bool
 	var err error
 	var ok bool
 	var arr []any
+	var concrete any
 
 	if expanded {
-		for actual = range m.nestedLists(values) {
-			c, err = m.comparer.Compare(actual, cond.Val)
+		for _, value := range values {
+			if concrete, ok = m.getConcrete(value); !ok {
+				continue
+			}
+			if arr, ok = concrete.([]any); ok {
+				var item any
+				for _, item = range arr {
+					item, ok = m.getConcrete(item)
+					if !ok {
+						continue
+					}
+					if !m.comparer.Comparable(item, cond.Val) {
+						return false, nil
+					}
+					c, err = m.comparer.Compare(item, cond.Val)
+					if err != nil {
+						return false, err
+					}
+					if c < 0 {
+						return true, nil
+					}
+				}
+			}
+			if !m.comparer.Comparable(concrete, cond.Val) {
+				return false, nil
+			}
+			c, err = m.comparer.Compare(concrete, cond.Val)
 			if err != nil {
 				return false, err
 			}
@@ -674,10 +700,10 @@ func (m *Matcher) lt(values []domain.GetSetter, cond *Cond) (bool, error) {
 				}
 			}
 		}
-		if !m.comparer.Comparable(value, cond.Val) {
+		if !m.comparer.Comparable(concrete, cond.Val) {
 			return false, nil
 		}
-		c, err = m.comparer.Compare(value, cond.Val)
+		c, err = m.comparer.Compare(concrete, cond.Val)
 		if err != nil {
 			return false, err
 		}
@@ -705,10 +731,10 @@ func (m *Matcher) gte(values []domain.GetSetter, cond *Cond) (bool, error) {
 				if !ok {
 					continue
 				}
-				if !m.comparer.Comparable(value, cond.Val) {
+				if !m.comparer.Comparable(item, cond.Val) {
 					return false, nil
 				}
-				c, err = m.comparer.Compare(value, cond.Val)
+				c, err = m.comparer.Compare(item, cond.Val)
 				if err != nil {
 					return false, err
 				}
@@ -717,10 +743,10 @@ func (m *Matcher) gte(values []domain.GetSetter, cond *Cond) (bool, error) {
 				}
 			}
 		}
-		if !m.comparer.Comparable(value, cond.Val) {
+		if !m.comparer.Comparable(concrete, cond.Val) {
 			return false, nil
 		}
-		c, err = m.comparer.Compare(value, cond.Val)
+		c, err = m.comparer.Compare(concrete, cond.Val)
 		if err != nil {
 			return false, err
 		}
@@ -748,10 +774,10 @@ func (m *Matcher) lte(values []domain.GetSetter, cond *Cond) (bool, error) {
 				if !ok {
 					continue
 				}
-				if !m.comparer.Comparable(value, cond.Val) {
+				if !m.comparer.Comparable(item, cond.Val) {
 					return false, nil
 				}
-				c, err = m.comparer.Compare(value, cond.Val)
+				c, err = m.comparer.Compare(item, cond.Val)
 				if err != nil {
 					return false, err
 				}
@@ -760,10 +786,10 @@ func (m *Matcher) lte(values []domain.GetSetter, cond *Cond) (bool, error) {
 				}
 			}
 		}
-		if !m.comparer.Comparable(value, cond.Val) {
+		if !m.comparer.Comparable(concrete, cond.Val) {
 			return false, nil
 		}
-		c, err = m.comparer.Compare(value, cond.Val)
+		c, err = m.comparer.Compare(concrete, cond.Val)
 		if err != nil {
 			return false, err
 		}
@@ -791,10 +817,10 @@ func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
 				if !ok {
 					continue
 				}
-				if !m.comparer.Comparable(value, cond.Val) {
+				if !m.comparer.Comparable(item, cond.Val) {
 					return false, nil
 				}
-				c, err = m.comparer.Compare(value, cond.Val)
+				c, err = m.comparer.Compare(item, cond.Val)
 				if err != nil {
 					return false, err
 				}
@@ -803,10 +829,10 @@ func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
 				}
 			}
 		}
-		if !m.comparer.Comparable(value, cond.Val) {
+		if !m.comparer.Comparable(concrete, cond.Val) {
 			return false, nil
 		}
-		c, err = m.comparer.Compare(value, cond.Val)
+		c, err = m.comparer.Compare(concrete, cond.Val)
 		if err != nil {
 			return false, err
 		}
@@ -819,12 +845,37 @@ func (m *Matcher) gt(values []domain.GetSetter, cond *Cond) (bool, error) {
 
 func (m *Matcher) ne(values []domain.GetSetter, cond *Cond) (bool, error) {
 	var c int
+	var concrete any
 	var err error
-	for value := range m.nestedLists(values) {
-		if !m.comparer.Comparable(value, cond.Val) {
+	var ok bool
+	var arr []any
+	for _, value := range values {
+		if concrete, ok = m.getConcrete(value); !ok {
+			continue
+		}
+		if arr, ok = concrete.([]any); ok {
+			var item any
+			for _, item = range arr {
+				item, ok = m.getConcrete(item)
+				if !ok {
+					continue
+				}
+				if !m.comparer.Comparable(item, cond.Val) {
+					return false, nil
+				}
+				c, err = m.comparer.Compare(item, cond.Val)
+				if err != nil {
+					return false, err
+				}
+				if c != 0 {
+					return true, nil
+				}
+			}
+		}
+		if !m.comparer.Comparable(concrete, cond.Val) {
 			return false, nil
 		}
-		c, err = m.comparer.Compare(value, cond.Val)
+		c, err = m.comparer.Compare(concrete, cond.Val)
 		if err != nil {
 			return false, err
 		}
@@ -911,32 +962,4 @@ func (m *Matcher) elemMatch(values []domain.GetSetter, cond *Cond) (bool, error)
 		}
 	}
 	return false, nil
-}
-
-func (m *Matcher) nestedLists(values []domain.GetSetter) iter.Seq2[any, bool] {
-	return func(yield func(any, bool) bool) {
-		var concrete any
-		var ok bool
-		var err error
-		var sub iter.Seq[any]
-		for _, value := range values {
-			if concrete, ok = m.getConcrete(value); !ok {
-				if !yield(nil, false) {
-					return
-				}
-				continue
-			}
-			if sub, _, err = structure.Seq(concrete); err != nil {
-				if !yield(value, true) {
-					return
-				}
-				continue
-			}
-			for i := range sub {
-				if !yield(i, true) {
-					return
-				}
-			}
-		}
-	}
 }
