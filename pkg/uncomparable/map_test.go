@@ -230,6 +230,21 @@ func (s *MapTestSuite) TestBreakIterations() {
 
 }
 
+func (s *MapTestSuite) TestLen() {
+	for n := range 100 {
+		s.NoError(s.m.Set(n, n))
+		s.Equal(n+1, s.m.Len())
+	}
+	for n := range 100 {
+		s.NoError(s.m.Set(n, n))
+		s.Equal(100, s.m.Len())
+	}
+	for n := range 100 {
+		s.NoError(s.m.Delete(n))
+		s.Equal(99-n, s.m.Len())
+	}
+}
+
 func TestMapTestSuite(t *testing.T) {
 	suite.Run(t, new(MapTestSuite))
 }
