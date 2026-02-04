@@ -145,7 +145,6 @@ func (s *MatcherTestSuite) TestFailedGetAddress() {
 	fn.AssertExpectations(s.T())
 }
 
-// Will not compare invalid types
 func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 	s.NoError(s.mtchr.SetQuery(M{"a": make(chan int)}))
 	m, err := s.mtchr.Match(M{"a": []string{}})
@@ -154,9 +153,52 @@ func (s *MatcherTestSuite) TestEqualInvalidTypes() {
 
 	s.NoError(s.mtchr.SetQuery(M{"a.b": make(chan int)}))
 	m, err = s.mtchr.Match(M{"a": A{M{"b": A{[]string{}}}}})
-	s.NoError(err)
+	s.ErrorAs(err, &domain.ErrCannotCompare{})
 	s.False(m)
 
+}
+
+func (s *MatcherTestSuite) TestEqualExpanded() {
+	doc := M{"a": A{
+		M{}, M{"b": A{undefined, 1}}, M{"b": 0}, M{"b": "c"},
+		M{"b": 1},
+	}}
+
+	s.NoError(s.mtchr.SetQuery(M{"a.b": 1}))
+	m, err := s.mtchr.Match(doc)
+	s.NoError(err)
+	s.True(m)
+}
+
+func (s *MatcherTestSuite) TestEqualExpandedCompareError() {
+	doc1 := M{"a": A{M{"b": A{1}}}}
+	doc2 := M{"a": A{M{"b": 1}}}
+
+	s.NoError(s.mtchr.SetQuery(M{"a.b": 1}))
+
+	cm := new(comparerMock)
+
+	s.mtchr.comparer = cm
+
+	errCompare := fmt.Errorf("compare error")
+
+	cm.On("Comparable", mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	cm.On("Compare", mock.Anything, mock.Anything).
+		Return(0, errCompare).Once()
+
+	m, err := s.mtchr.Match(doc1)
+	s.ErrorIs(err, errCompare)
+	s.False(m)
+
+	cm.On("Comparable", mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	cm.On("Compare", mock.Anything, mock.Anything).
+		Return(0, errCompare).Once()
+
+	m, err = s.mtchr.Match(doc2)
+	s.ErrorIs(err, errCompare)
+	s.False(m)
 }
 
 // Will return error if matching two invalid types nested in arrays.
@@ -1634,6 +1676,86 @@ func (s *MatcherTestSuite) TestNilQuery() {
 
 func (s *MatcherTestSuite) TestGetter() {
 	s.NoError(s.mtchr.SetQuery(M{"a": GetterImpl{"value"}}))
+}
+
+func (s *MatcherTestSuite) TestExpandedQueries() {
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{0}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{1}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{1}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{2}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$ne": 1}}))
+	s.Matches(s.mtchr.Match(M{"a": A{2}}))
+}
+
+func (s *MatcherTestSuite) TestExpandedQueriesNonComparable() {
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{"a"}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{"a"}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{"a"}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{"a"}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$ne": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{"a"}}))
+}
+
+func (s *MatcherTestSuite) TestExpandedQueriesUndefinedItem() {
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{undefined}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{undefined}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{undefined}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{undefined}}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$ne": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": A{undefined}}))
+}
+
+func (s *MatcherTestSuite) TestExpandedQueriesUndefinedField() {
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": undefined}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": undefined}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": undefined}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": undefined}))
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$ne": 1}}))
+	s.NotMatches(s.mtchr.Match(M{"a": undefined}))
+}
+
+func (s *MatcherTestSuite) TestExpandedQueriesCompareError() {
+
+	cm := new(comparerMock)
+	s.mtchr.comparer = cm
+
+	errCompare := fmt.Errorf("compare error")
+	cm.On("Comparable", mock.Anything, mock.Anything).
+		Return(true, nil)
+	cm.On("Compare", mock.Anything, mock.Anything).
+		Return(0, errCompare)
+
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lt": 1}}))
+	_, err := s.mtchr.Match(M{"a": A{0}})
+	s.ErrorIs(err, errCompare)
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gte": 1}}))
+	_, err = s.mtchr.Match(M{"a": A{1}})
+	s.ErrorIs(err, errCompare)
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$lte": 1}}))
+	_, err = s.mtchr.Match(M{"a": A{1}})
+	s.ErrorIs(err, errCompare)
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$gt": 1}}))
+	_, err = s.mtchr.Match(M{"a": A{2}})
+	s.ErrorIs(err, errCompare)
+	s.NoError(s.mtchr.SetQuery(M{"a": M{"$ne": 1}}))
+	_, err = s.mtchr.Match(M{"a": A{2}})
+	s.ErrorIs(err, errCompare)
 }
 
 func (s *MatcherTestSuite) TestErrorMessages() {
