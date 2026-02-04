@@ -62,20 +62,22 @@ func (fn *FieldNavigator) getField(value any, addr []string, ensure bool) ([]dom
 	if value == nil {
 		return invalid, false, nil
 	}
-
-	if len(addr) == 0 {
+	switch len(addr) {
+	case 0:
 		return []domain.GetSetter{NewReadOnlyGetSetter(value)}, false, nil
-	}
-
-	if len(addr) == 1 {
+	case 1:
 		if t, ok := value.(domain.Document); ok {
 			if ensure && !t.Has(addr[0]) {
 				t.Set(addr[0], nil)
 			}
 			return []domain.GetSetter{NewGetSetterWithDoc(t, addr[0])}, false, nil
 		}
+	default:
 	}
+	return fn.getFieldMulti(value, addr, ensure)
+}
 
+func (fn *FieldNavigator) getFieldMulti(value any, addr []string, ensure bool) ([]domain.GetSetter, bool, error) {
 	ctx := &navCtx{
 		curr:   []field{{v: value, expandable: true}},
 		addr:   addr,

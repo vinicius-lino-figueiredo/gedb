@@ -546,57 +546,27 @@ func (m *Matcher) eq(values []domain.GetSetter, expanded bool, cond *Cond) (bool
 	var err error
 	var ok bool
 	var arr []any
-	var concrete any
+	var end bool
 
 	if expanded {
-		for _, value := range values {
-			if concrete, ok = m.getConcrete(value); !ok {
-				continue
-			}
-			if arr, ok = concrete.([]any); ok {
-				var item any
-				for _, item = range arr {
-					item, ok = m.getConcrete(item)
-					if !ok {
-						continue
-					}
-					if !m.comparer.Comparable(item, cond.Val) {
-						return false, nil
-					}
-					c, err = m.comparer.Compare(item, cond.Val)
-					if err != nil {
-						return false, err
-					}
-					if c < 0 {
-						return true, nil
-					}
-				}
-			}
-			if !m.comparer.Comparable(concrete, cond.Val) {
-				return false, nil
-			}
-			c, err = m.comparer.Compare(concrete, cond.Val)
-			if err != nil {
-				return false, err
-			}
-			if c == 0 {
-				return true, nil
-			}
+		ok, end, err = m.eqExpanded(values, cond)
+		if end {
+			return ok, err
 		}
 	}
 
 	for _, value := range values {
 		if actual, ok = m.getConcrete(value); !ok {
-			return false, nil
+			continue
 		}
 
 		if arr, ok = actual.([]any); ok {
-			ok, err = structure.Contains(arr, cond.Val, m.compare)
+			concrete, _ := m.getConcrete(cond.Val)
+			ok, err = structure.Contains(arr, concrete, m.compare)
 			if err != nil || ok {
 				return ok, err
 			}
 		}
-
 		c, err = m.comparer.Compare(actual, cond.Val)
 		if err != nil {
 			return false, err
@@ -606,6 +576,49 @@ func (m *Matcher) eq(values []domain.GetSetter, expanded bool, cond *Cond) (bool
 		}
 	}
 	return false, nil
+}
+
+func (m *Matcher) eqExpanded(values []domain.GetSetter, cond *Cond) (bool, bool, error) {
+	var concrete any
+	var ok bool
+	var arr []any
+	var c int
+	var err error
+	for _, value := range values {
+		if concrete, ok = m.getConcrete(value); !ok {
+			continue
+		}
+		if arr, ok = concrete.([]any); ok {
+			var item any
+			for _, item = range arr {
+				item, ok = m.getConcrete(item)
+				if !ok {
+					continue
+				}
+				if !m.comparer.Comparable(item, cond.Val) {
+					continue
+				}
+				c, err = m.comparer.Compare(item, cond.Val)
+				if err != nil {
+					return false, true, err
+				}
+				if c == 0 {
+					return true, true, nil
+				}
+			}
+		}
+		if !m.comparer.Comparable(concrete, cond.Val) {
+			continue
+		}
+		c, err = m.comparer.Compare(concrete, cond.Val)
+		if err != nil {
+			return false, true, err
+		}
+		if c == 0 {
+			return true, true, nil
+		}
+	}
+	return false, false, nil
 }
 
 func (m *Matcher) getConcrete(v any) (res any, ok bool) {
