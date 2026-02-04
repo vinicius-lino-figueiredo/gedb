@@ -128,7 +128,6 @@ func (m *Map[T]) Set(key any, value T) error {
 			return err
 		}
 		if c == 0 {
-			m.length++
 			m.buckets[bucketIndex][n] = kv[T]{
 				key:   key,
 				value: value,
@@ -137,6 +136,7 @@ func (m *Map[T]) Set(key any, value T) error {
 		}
 	}
 
+	m.length++
 	m.buckets[bucketIndex] = append(bucket, kv[T]{
 		key:   key,
 		value: value,
