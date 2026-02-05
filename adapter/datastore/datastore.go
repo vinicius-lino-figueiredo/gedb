@@ -162,6 +162,12 @@ func NewDatastore(options ...Option) (domain.GEDB, error) {
 	IDIdx, err := d.indexFactory(
 		domain.WithIndexFieldName("_id"),
 		domain.WithIndexUnique(true),
+		domain.WithIndexSparse(false),
+		domain.WithIndexExpireAfter(0),
+		domain.WithIndexDocumentFactory(d.documentFactory),
+		domain.WithIndexComparer(d.comparer),
+		domain.WithIndexHasher(d.hasher),
+		domain.WithIndexFieldNavigator(d.fieldNavigator),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating _id index: %w", err)
@@ -348,7 +354,16 @@ func (d *Datastore) DropDatabase(ctx context.Context) error {
 	defer d.executor.Unlock()
 	ctx = context.WithoutCancel(ctx) // should complete this task
 	// d.StopAutocompaction not added for now.
-	IDIdx, err := d.indexFactory(domain.WithIndexFieldName("_id"))
+	IDIdx, err := d.indexFactory(
+		domain.WithIndexFieldName("_id"),
+		domain.WithIndexUnique(true),
+		domain.WithIndexSparse(false),
+		domain.WithIndexExpireAfter(0),
+		domain.WithIndexDocumentFactory(d.documentFactory),
+		domain.WithIndexComparer(d.comparer),
+		domain.WithIndexHasher(d.hasher),
+		domain.WithIndexFieldNavigator(d.fieldNavigator),
+	)
 	if err != nil {
 		return fmt.Errorf("creating index for field \"_id\": %w", err)
 	}
