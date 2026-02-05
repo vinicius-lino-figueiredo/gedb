@@ -1,6 +1,6 @@
 module github.com/vinicius-lino-figueiredo/gedb
 
-go 1.24.3
+go 1.24
 
 require (
 	github.com/dolmen-go/contextio v1.0.0
@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.10.0
-	github.com/vinicius-lino-figueiredo/bst v0.3.9
+	github.com/vinicius-lino-figueiredo/bst v0.3.10
 )
 
 require (
