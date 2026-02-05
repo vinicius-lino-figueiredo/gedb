@@ -2,7 +2,8 @@ package fieldnavigator
 
 import "github.com/vinicius-lino-figueiredo/gedb/domain"
 
-// ListGetSetter TODO
+// ListGetSetter is a [domain.GetSetter] than can read an write a specific index
+// in a slice of [any].
 type ListGetSetter struct {
 	List  []any
 	Index int
@@ -36,7 +37,8 @@ func (l *ListGetSetter) Unset() {
 	}
 }
 
-// DocGetSetter TODO
+// DocGetSetter is a [domain.GetSetter] than can read an write a specific key in
+// a [domain.Document].
 type DocGetSetter struct {
 	Doc domain.Document
 	Key string
@@ -63,7 +65,8 @@ func (d *DocGetSetter) Unset() {
 	d.Doc.Unset(d.Key)
 }
 
-// ReadOnlyGetSetter TODO
+// ReadOnlyGetSetter is a [domain.GetSetter] that can only read.
+// [domain.GetSetter.Set] and [domain.GetSetter.Unset] are no-op.
 type ReadOnlyGetSetter struct {
 	V any
 }

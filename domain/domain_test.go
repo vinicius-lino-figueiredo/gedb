@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/comparer"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/data"
-	"github.com/vinicius-lino-figueiredo/gedb/adapter/datastore"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/decoder"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/fieldnavigator"
 	"github.com/vinicius-lino-figueiredo/gedb/adapter/hasher"
@@ -15,10 +14,6 @@ import (
 
 type DomainTestSuite struct {
 	suite.Suite
-}
-
-func (s *DomainTestSuite) TestPropagation() {
-	datastore.NewDatastore()
 }
 
 func (s *DomainTestSuite) TestOptions() {

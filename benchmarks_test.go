@@ -16,14 +16,14 @@ type M = map[string]any
 func BenchmarkCreateInMemory(b *testing.B) {
 	b.Run("InMemory=true", func(b *testing.B) {
 		for b.Loop() {
-			gedb.NewDB()
+			_, _ = gedb.NewDB()
 		}
 	})
 
 	b.Run("InMemory=false", func(b *testing.B) {
 		file := filepath.Join(b.TempDir(), "file.db")
 		for b.Loop() {
-			gedb.NewDB(gedb.WithFilename(file))
+			_, _ = gedb.NewDB(gedb.WithFilename(file))
 		}
 	})
 }
@@ -37,7 +37,7 @@ func BenchmarkInsert(b *testing.B) {
 		db, _ := gedb.NewDB()
 
 		for b.Loop() {
-			db.Insert(ctx, m)
+			_, _ = db.Insert(ctx, m)
 		}
 	})
 
@@ -46,7 +46,7 @@ func BenchmarkInsert(b *testing.B) {
 		db, _ := gedb.NewDB(gedb.WithFilename(file))
 
 		for b.Loop() {
-			db.Insert(ctx, m)
+			_, _ = db.Insert(ctx, m)
 		}
 	})
 }
@@ -91,7 +91,7 @@ func BenchmarkFind(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
@@ -128,7 +128,7 @@ func BenchmarkFindWithIndex(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"_id": n})
+				_, _ = db.Insert(ctx, M{"_id": n})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
@@ -170,7 +170,7 @@ func BenchmarkFindOne(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
@@ -209,7 +209,7 @@ func BenchmarkCount(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"phantom": n})
+				_, _ = db.Insert(ctx, M{"phantom": n})
 			}
 
 			b.Run("amount=100%", func(b *testing.B) {
@@ -224,7 +224,7 @@ func BenchmarkCount(b *testing.B) {
 
 			db, _ = gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"tendency": n, "value": n % 2})
+				_, _ = db.Insert(ctx, M{"tendency": n, "value": n % 2})
 			}
 
 			b.Run("amount=50%", func(b *testing.B) {
@@ -240,7 +240,7 @@ func BenchmarkCount(b *testing.B) {
 
 			db, _ = gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"stardust": n, "value": n % 3})
+				_, _ = db.Insert(ctx, M{"stardust": n, "value": n % 3})
 			}
 
 			b.Run("amount=33%", func(b *testing.B) {
@@ -256,7 +256,7 @@ func BenchmarkCount(b *testing.B) {
 
 			db, _ = gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"diamond": n, "value": n % 4})
+				_, _ = db.Insert(ctx, M{"diamond": n, "value": n % 4})
 			}
 
 			b.Run("amount=25%", func(b *testing.B) {
@@ -281,9 +281,9 @@ func BenchmarkCountWithIndex(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
-			db.EnsureIndex(ctx, gedb.WithFields("wind"))
+			_ = db.EnsureIndex(ctx, gedb.WithFields("wind"))
 			for n := range size {
-				db.Insert(ctx, M{"wind": n})
+				_, _ = db.Insert(ctx, M{"wind": n})
 			}
 
 			b.Run("amount=100%", func(b *testing.B) {
@@ -297,9 +297,9 @@ func BenchmarkCountWithIndex(b *testing.B) {
 			})
 
 			db, _ = gedb.NewDB()
-			db.EnsureIndex(ctx, gedb.WithFields("value"))
+			_ = db.EnsureIndex(ctx, gedb.WithFields("value"))
 			for n := range size {
-				db.Insert(ctx, M{"ocean": n, "value": n % 2})
+				_, _ = db.Insert(ctx, M{"ocean": n, "value": n % 2})
 			}
 
 			b.Run("amount=50%", func(b *testing.B) {
@@ -314,9 +314,9 @@ func BenchmarkCountWithIndex(b *testing.B) {
 			})
 
 			db, _ = gedb.NewDB()
-			db.EnsureIndex(ctx, gedb.WithFields("value"))
+			_ = db.EnsureIndex(ctx, gedb.WithFields("value"))
 			for n := range size {
-				db.Insert(ctx, M{"steel": n, "value": n % 3})
+				_, _ = db.Insert(ctx, M{"steel": n, "value": n % 3})
 			}
 
 			b.Run("amount=33%", func(b *testing.B) {
@@ -331,9 +331,9 @@ func BenchmarkCountWithIndex(b *testing.B) {
 			})
 
 			db, _ = gedb.NewDB()
-			db.EnsureIndex(ctx, gedb.WithFields("value"))
+			_ = db.EnsureIndex(ctx, gedb.WithFields("value"))
 			for n := range size {
-				db.Insert(ctx, M{"lion": n, "value": n % 4})
+				_, _ = db.Insert(ctx, M{"lion": n, "value": n % 4})
 			}
 
 			b.Run("amount=25%", func(b *testing.B) {
@@ -361,7 +361,7 @@ func BenchmarkUpdate(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
@@ -401,7 +401,7 @@ func BenchmarkRemove(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
@@ -441,12 +441,12 @@ func BenchmarkEnsureIndex(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n, "data": n + 1})
+				_, _ = db.Insert(ctx, M{"code": n, "data": n + 1})
 			}
 
 			b.Run("Existing", func(b *testing.B) {
 				for b.Loop() {
-					db.EnsureIndex(ctx,
+					_ = db.EnsureIndex(ctx,
 						domain.WithFields("code"),
 					)
 				}
@@ -455,9 +455,9 @@ func BenchmarkEnsureIndex(b *testing.B) {
 			b.Run("NonExisting", func(b *testing.B) {
 				for b.Loop() {
 					b.StopTimer()
-					db.RemoveIndex(ctx, "nope")
+					_ = db.RemoveIndex(ctx, "nope")
 					b.StartTimer()
-					db.EnsureIndex(ctx,
+					_ = db.EnsureIndex(ctx,
 						domain.WithFields("nope"),
 					)
 				}
@@ -466,9 +466,9 @@ func BenchmarkEnsureIndex(b *testing.B) {
 			b.Run("ExistingCompose", func(b *testing.B) {
 				for b.Loop() {
 					b.StopTimer()
-					db.RemoveIndex(ctx, "code", "data")
+					_ = db.RemoveIndex(ctx, "code", "data")
 					b.StartTimer()
-					db.EnsureIndex(ctx,
+					_ = db.EnsureIndex(ctx,
 						domain.WithFields("code", "data"),
 					)
 				}
@@ -477,9 +477,9 @@ func BenchmarkEnsureIndex(b *testing.B) {
 			b.Run("PartiallyExistingCompose", func(b *testing.B) {
 				for b.Loop() {
 					b.StopTimer()
-					db.RemoveIndex(ctx, "code", "nope")
+					_ = db.RemoveIndex(ctx, "code", "nope")
 					b.StartTimer()
-					db.EnsureIndex(ctx,
+					_ = db.EnsureIndex(ctx,
 						domain.WithFields("code", "nope"),
 					)
 				}
@@ -488,9 +488,9 @@ func BenchmarkEnsureIndex(b *testing.B) {
 			b.Run("NonExistingCompose", func(b *testing.B) {
 				for b.Loop() {
 					b.StopTimer()
-					db.RemoveIndex(ctx, "nope", "nah")
+					_ = db.RemoveIndex(ctx, "nope", "nah")
 					b.StartTimer()
-					db.EnsureIndex(ctx,
+					_ = db.EnsureIndex(ctx,
 						domain.WithFields("nope", "nah"),
 					)
 				}
@@ -509,7 +509,7 @@ func BenchmarkGetAllData(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			cur, err := db.GetAllData(ctx)
@@ -561,7 +561,7 @@ func BenchmarkCompactDatafile(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": n})
+				_, _ = db.Insert(ctx, M{"code": n})
 			}
 
 			for b.Loop() {
@@ -594,7 +594,7 @@ func BenchmarkFindWithSort(b *testing.B) {
 		b.Run(fmt.Sprintf("db=%d", size), func(b *testing.B) {
 			db, _ := gedb.NewDB()
 			for n := range size {
-				db.Insert(ctx, M{"code": values[n]})
+				_, _ = db.Insert(ctx, M{"code": values[n]})
 			}
 
 			for b.Loop() {
