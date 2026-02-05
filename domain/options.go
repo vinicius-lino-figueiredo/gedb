@@ -196,13 +196,7 @@ type QueryOptions struct {
 	Sort Sort
 	// Projection specifies which fields to include or exclude.
 	Projection map[string]uint8
-	// Matcher provides query evaluation logic.
-	Matcher Matcher
-	// Comparer provides sorting operations.
-	Comparer Comparer
-	// FieldNavigator provides field access operations.
-	FieldNavigator FieldNavigator
-	Cap            int
+	Cap        int
 }
 
 // WithCursorDecoder sets the decoder for converting cursor results.
