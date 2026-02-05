@@ -139,7 +139,7 @@ type EnsureIndexOptions struct {
 }
 
 // WithQuery sets the query criteria for a [Querier.Query] call.
-func WithQuery(q Document) QueryOption {
+func WithQuery(q any) QueryOption {
 	return func(qo *QueryOptions) {
 		qo.Query = q
 	}
