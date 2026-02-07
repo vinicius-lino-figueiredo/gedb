@@ -7,6 +7,7 @@ require (
 	github.com/goccy/go-reflect v1.2.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.11.1
+	github.com/vinicius-lino-figueiredo/bst v0.3.10
 )
 
 require (
