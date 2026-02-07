@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/goccy/go-reflect v1.2.0
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.11.1
 )
 
